@@ -270,15 +270,19 @@ export default function AdminDashboard() {
               <Switch checked={autoRefresh} onCheckedChange={setAutoRefresh} aria-label="Atualização automática" />
               <span className="text-sm text-muted-foreground">Auto-refresh</span>
             </div>
-            <Button variant="outline" size="sm" onClick={refreshDashboard} className="gap-2" disabled={fetchingCount > 0}>
+            <Button
+              size="sm"
+              onClick={refreshDashboard}
+              className="gap-2 bg-green-600 text-white hover:bg-green-700 border border-green-700"
+              disabled={fetchingCount > 0}
+            >
               <RefreshCw className={`h-4 w-4 ${fetchingCount > 0 ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
             <Button
-              variant="outline"
               size="sm"
               onClick={() => navigate('/feed')}
-              className="gap-2"
+              className="gap-2 bg-yellow-400 text-black hover:bg-yellow-300 border border-yellow-500"
             >
               <ExternalLink className="h-4 w-4" />
               Acessar Feed
