@@ -641,7 +641,7 @@ export function OcultoPlayLinkPlayer({
       // install URL é obtido on-demand no fallback discreto abaixo
       const openInVlc = () => {
         const url = parsed.embedSrc;
-        const { platform, uris } = buildVlcHandoffUrls(url);
+        const platform = getVlcPlatform();
         let opened = false;
         let cleaned = false;
 
@@ -668,13 +668,29 @@ export function OcultoPlayLinkPlayer({
         window.addEventListener('pagehide', markOpened);
         document.addEventListener('visibilitychange', markVisibilityOpened);
 
+        // ---------- Desktop: baixar .m3u8 com opções VLC embutidas -------
+        if (platform === 'desktop') {
+          const ok = launchVlcDesktop(url, 'OCULTO PLAY');
+          // O download não perde foco da janela; considere "aberto" após 1.2s
+          // para atualizar o estado visual e evitar prompt de instalação.
+          if (ok) {
+            window.setTimeout(() => {
+              writeVlcDetected();
+              setVlcKnownInstalled(true);
+              setVlcLaunchState('opened');
+              cleanup();
+            }, 1200);
+          } else {
+            cleanup();
+            setVlcLaunchState('fallback');
+          }
+          return;
+        }
+
+        // ---------- Mobile: intents / custom schemes ---------------------
+        const { uris } = buildVlcHandoffUrls(url);
         try {
           launchExternalAppUri(uris[0], platform, 'primary');
-          if (platform === 'desktop' && uris[1]) {
-            window.setTimeout(() => {
-              if (!opened && !document.hidden) launchExternalAppUri(uris[1], platform, 'fallback');
-            }, 650);
-          }
           if (platform === 'android' && uris[1]) {
             window.setTimeout(() => {
               if (!opened && !document.hidden) launchExternalAppUri(uris[1], platform, 'fallback');
@@ -688,12 +704,7 @@ export function OcultoPlayLinkPlayer({
 
         window.setTimeout(() => {
           cleanup();
-          if (!opened && !document.hidden) {
-            // O browser não oferece API real para consultar apps instalados.
-            // Portanto: se perdeu foco/visibilidade, tratamos como instalado;
-            // se permaneceu na página, exibimos fallback sem redirecionar à força.
-            setVlcLaunchState('fallback');
-          }
+          if (!opened && !document.hidden) setVlcLaunchState('fallback');
         }, platform === 'android' ? 4200 : 3200);
       };
 
