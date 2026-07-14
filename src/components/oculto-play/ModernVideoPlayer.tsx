@@ -158,6 +158,12 @@ export function ModernVideoPlayer({
     try {
       const AC: typeof AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
       if (!AC) return null;
+      // CORS: para roteamento via Web Audio, o media element precisa de
+      // crossOrigin definido. Sem isso, alguns browsers (Safari/Chrome)
+      // silenciam a saída ao criar o MediaElementAudioSourceNode.
+      if (!el.crossOrigin) {
+        try { el.crossOrigin = 'anonymous'; } catch { /* noop */ }
+      }
       const ctx = new AC();
       const source = ctx.createMediaElementSource(el);
       const gain = ctx.createGain();
@@ -175,17 +181,26 @@ export function ModernVideoPlayer({
     if (level === 0 && !gainRef.current) return;
     const gain = ensureBoostChain();
     if (!gain) return;
-    try { audioCtxRef.current?.resume?.(); } catch { /* noop */ }
     const ctx = audioCtxRef.current;
+    // Resume síncrono dentro do gesto do usuário — sem isso, o AudioContext
+    // permanece "suspended" e o áudio some (todo o som fica silenciado pelo
+    // grafo). Precisamos garantir que o contexto está "running" ANTES de
+    // ajustar o gain, senão o usuário ouve silêncio até tocar em algo.
     try {
-      // rampa curta evita "pulo" perceptível ao alternar/retomar
-      const target = BOOST_LEVELS[level];
+      if (ctx && ctx.state !== 'running') {
+        ctx.resume().catch(() => { /* noop */ });
+      }
+    } catch { /* noop */ }
+    const target = BOOST_LEVELS[level];
+    try {
       if (ctx && typeof gain.gain.setTargetAtTime === 'function') {
         gain.gain.setTargetAtTime(target, ctx.currentTime, 0.03);
       } else {
         gain.gain.value = target;
       }
-    } catch { /* noop */ }
+    } catch {
+      try { gain.gain.value = target; } catch { /* noop */ }
+    }
   }, [ensureBoostChain]);
 
   const cycleBoost = useCallback(() => {
