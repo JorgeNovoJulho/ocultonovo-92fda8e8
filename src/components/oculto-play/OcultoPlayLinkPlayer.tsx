@@ -778,8 +778,22 @@ export function OcultoPlayLinkPlayer({
           poster={thumbUrl ?? undefined}
           ext={ext}
           autoPlay={autoPlay}
-          muted={autoPlay}
+          muted={false}
           videoRefCallback={(el) => { videoRef.current = el; }}
+          onReady={(v) => {
+            // Se o browser bloquear o autoplay com som, cai para muted e
+            // tenta novamente — mantendo a reprodução iniciada. O usuário
+            // reativa o som pelos controles nativos (não fica silenciado
+            // "escondido"). Sem esse fallback, autoplay pode falhar em
+            // páginas sem gesto direto (deep-link / suggestions).
+            if (!autoPlay) return;
+            const tryPlay = async () => {
+              try { await v.play(); } catch {
+                try { v.muted = true; await v.play(); } catch { /* noop */ }
+              }
+            };
+            tryPlay();
+          }}
           onLoadedMetadata={(v) => {
             const saved = hasTrimWindow ? 0 : readSavedTime(itemId);
             const startAt = trimStart > 0 ? trimStart : saved;
