@@ -84,88 +84,62 @@ function writeVlcDetected() {
 const VLC_AUDIO_LANG = 'pt,por,pob';
 const VLC_SUB_LANG = 'pt,por,pob';
 
+/**
+ * Gera um playlist .m3u8 com diretivas EXTVLCOPT para forçar o VLC a:
+ *  - Selecionar faixa de áudio em português (pt/por/pob) quando existir;
+ *  - Selecionar legenda em português quando o áudio escolhido NÃO for PT
+ *    (comportamento nativo do VLC 3.x quando `sub-language` está definido e
+ *    a faixa de áudio ativa não bate com `audio-language`);
+ *  - Manter legendas desligadas quando existir áudio PT (padrão do VLC).
+ * Também tenta autodetectar arquivos de legenda externos co-localizados.
+ */
+function buildVlcM3uPlaylist(mediaUrl: string, title = 'OCULTO PLAY'): string {
+  return [
+    '#EXTM3U',
+    `#EXTVLCOPT:audio-language=${VLC_AUDIO_LANG}`,
+    `#EXTVLCOPT:sub-language=${VLC_SUB_LANG}`,
+    '#EXTVLCOPT:sub-autodetect-file=1',
+    `#EXTINF:-1,${title}`,
+    mediaUrl,
+    '',
+  ].join('\n');
+}
+
 function buildVlcHandoffUrls(mediaUrl: string): { platform: VlcPlatform; uris: string[] } {
   const platform = getVlcPlatform();
 
   if (platform === 'ios') {
-    // vlc-x-callback aceita filename/sub; sem parâmetro nativo de idioma de
-    // áudio, mas o VLC iOS respeita a preferência global "Audio Language".
-    return {
-      platform,
-      uris: [
-        `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(mediaUrl)}`,
-        `vlc://${mediaUrl}`,
-      ],
-    };
+...
+    } catch { /* noop */ }
   }
-
-  if (platform === 'android') {
-    // Extras suportados pelo VLC-Android: title, subtitles_location,
-    // from_start, position (segundos). Para trilha de áudio/legenda usamos
-    // extras adicionais reconhecidos pelo player (audio_track_language e
-    // subtitle_track_language quando presentes; caso o filme só tenha faixa
-    // não-PT, o próprio VLC ativará a legenda PT automaticamente).
-    const extras = [
-      'S.title=OCULTO%20PLAY',
-      `S.audio_language=${encodeURIComponent(VLC_AUDIO_LANG)}`,
-      `S.subtitle_language=${encodeURIComponent(VLC_SUB_LANG)}`,
-    ].join(';');
-    try {
-      const parsedUrl = new URL(mediaUrl);
-      const scheme = parsedUrl.protocol.replace(':', '');
-      const rest = mediaUrl.replace(/^[a-z][a-z\d+.-]*:\/\//i, '');
-      return {
-        platform,
-        uris: [
-          `intent://${rest}#Intent;scheme=${scheme};action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;package=org.videolan.vlc;type=video/*;${extras};end`,
-          `vlc://${mediaUrl}`,
-        ],
-      };
-    } catch {
-      return {
-        platform,
-        uris: [
-          `intent://${mediaUrl.replace(/^[a-z][a-z\d+.-]*:\/\//i, '')}#Intent;scheme=http;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;package=org.videolan.vlc;type=video/*;${extras};end`,
-          `vlc://${mediaUrl}`,
-        ],
-      };
-    }
-  }
-
-  // Desktop — anexa hints como fragmento para VLC (>=3.0) via `://` scheme.
-  const hint = `#audio-language=${VLC_AUDIO_LANG}&sub-language=${VLC_SUB_LANG}&sub-autodetect=1`;
-  return {
-    platform,
-    uris: [
-      `vlc://${mediaUrl}${hint}`,
-      `vlc://open?url=${encodeURIComponent(mediaUrl)}&audio-language=${VLC_AUDIO_LANG}&sub-language=${VLC_SUB_LANG}`,
-      `vlc://${mediaUrl.replace(/^[a-z][a-z\d+.-]*:\/\//i, '')}${hint}`,
-    ],
-  };
 }
 
-function launchExternalAppUri(uri: string, platform: VlcPlatform, mode: 'primary' | 'fallback' = 'primary') {
-  if (platform === 'android' || platform === 'ios') {
-    window.location.href = uri;
-    return;
-  }
-
-  const a = document.createElement('a');
-  a.href = uri;
-  a.rel = 'noreferrer';
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  window.setTimeout(() => a.remove(), 0);
-
-  if (mode === 'primary') {
-    try {
-      const f = document.createElement('iframe');
-      f.style.display = 'none';
-      f.src = uri;
-      document.body.appendChild(f);
-      window.setTimeout(() => f.remove(), 2500);
-    } catch { /* noop */ }
+/**
+ * Desktop: dispara download de um .m3u8 (com opções VLC embutidas). O SO abre
+ * no VLC se ele for o handler padrão para .m3u8 (padrão após instalação).
+ * Fallback: tenta esquema `vlc://` (funciona só se o usuário registrou o
+ * handler manualmente). Retorna true se o download foi disparado.
+ */
+function launchVlcDesktop(mediaUrl: string, title = 'OCULTO PLAY'): boolean {
+  try {
+    const playlist = buildVlcM3uPlaylist(mediaUrl, title);
+    const blob = new Blob([playlist], { type: 'application/vnd.apple.mpegurl' });
+    const blobUrl = URL.createObjectURL(blob);
+    const safeName = (title || 'oculto-play').replace(/[^\w\-]+/g, '_').slice(0, 40) || 'oculto-play';
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = `${safeName}.m3u8`;
+    a.rel = 'noreferrer';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    window.setTimeout(() => {
+      a.remove();
+      URL.revokeObjectURL(blobUrl);
+    }, 4000);
+    return true;
+  } catch {
+    return false;
   }
 }
 
