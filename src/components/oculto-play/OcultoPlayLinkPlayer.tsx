@@ -136,9 +136,9 @@ function buildVlcHandoffUrls(mediaUrl: string): { platform: VlcPlatform; uris: s
     }
   }
 
-  // Desktop — o esquema vlc:// não é registrado por instalações padrão do
-  // VLC (Win/macOS/Linux). A rota real é o download de .m3u8 (função
-  // launchVlcDesktop). Mantemos aqui apenas fallbacks best-effort.
+  // Desktop — só usamos protocolos externos. Download de playlist foi removido
+  // porque o browser expõe a janela "salvar arquivo" e não permite deletar
+  // esse arquivo local em segundo plano.
   return {
     platform,
     uris: [
@@ -668,7 +668,7 @@ export function OcultoPlayLinkPlayer({
         window.addEventListener('pagehide', markOpened);
         document.addEventListener('visibilitychange', markVisibilityOpened);
 
-        // ---------- Desktop: vlc:// direto + fallback .m3u8 --------------
+        // ---------- Desktop: vlc:// direto, sem download de arquivo --------
         if (platform === 'desktop') {
           launchVlcDesktop(url, () => {
             writeVlcDetected();
