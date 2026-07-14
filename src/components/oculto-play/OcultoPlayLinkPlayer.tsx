@@ -181,12 +181,14 @@ function launchExternalAppUri(uri: string, platform: VlcPlatform, mode: 'primary
 }
 
 /**
- * Desktop: dispara download de um .m3u8 (com opções VLC embutidas). O SO abre
- * no VLC se ele for o handler padrão para .m3u8 (padrão após instalação).
- * Fallback: tenta esquema `vlc://` (funciona só se o usuário registrou o
- * handler manualmente). Retorna true se o download foi disparado.
+ * Desktop: tenta abrir o VLC diretamente via esquema `vlc://` (registrado
+ * pelo instalador oficial no Windows e no macOS). Se o browser não perder
+ * o foco em ~1.4s (indicativo de que o handler não está registrado), cai
+ * para o download de um .m3u8 com opções embutidas — o SO abre no VLC
+ * ao usuário confirmar o arquivo baixado.
+ * Retorna sempre true (algum caminho foi tentado).
  */
-function launchVlcDesktop(mediaUrl: string, title = 'OCULTO PLAY'): boolean {
+function triggerM3uDownload(mediaUrl: string, title: string): boolean {
   try {
     const playlist = buildVlcM3uPlaylist(mediaUrl, title);
     const blob = new Blob([playlist], { type: 'application/vnd.apple.mpegurl' });
@@ -207,6 +209,47 @@ function launchVlcDesktop(mediaUrl: string, title = 'OCULTO PLAY'): boolean {
   } catch {
     return false;
   }
+}
+
+function launchVlcDesktop(
+  mediaUrl: string,
+  title = 'OCULTO PLAY',
+  onOpened?: () => void,
+): boolean {
+  const hint = `#audio-language=${VLC_AUDIO_LANG}&sub-language=${VLC_SUB_LANG}&sub-autodetect-file=1`;
+  const vlcUri = `vlc://${mediaUrl}${hint}`;
+
+  let handoffDetected = false;
+  const markOpened = () => {
+    if (handoffDetected) return;
+    handoffDetected = true;
+    try { onOpened?.(); } catch { /* noop */ }
+  };
+  const onBlur = () => markOpened();
+  const onHide = () => { if (document.hidden) markOpened(); };
+  window.addEventListener('blur', onBlur, { once: true });
+  document.addEventListener('visibilitychange', onHide);
+
+  // 1) tenta abrir o handler `vlc://` — silencioso se não estiver registrado.
+  try {
+    const a = document.createElement('a');
+    a.href = vlcUri;
+    a.rel = 'noreferrer';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    window.setTimeout(() => a.remove(), 0);
+  } catch { /* noop */ }
+
+  // 2) se em ~1.4s a página não perdeu foco, o handler não abriu — baixa .m3u8
+  window.setTimeout(() => {
+    window.removeEventListener('blur', onBlur);
+    document.removeEventListener('visibilitychange', onHide);
+    if (handoffDetected || document.hidden) return;
+    triggerM3uDownload(mediaUrl, title);
+  }, 1400);
+
+  return true;
 }
 
 function getDirectVideoExt(rawUrl: string): string {
