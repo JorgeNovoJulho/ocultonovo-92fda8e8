@@ -149,7 +149,7 @@ export function ModernVideoPlayer({
   const [stopped, setStopped] = useState<boolean>(false);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const gainRef = useRef<GainNode | null>(null);
-  const mediaSrcRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const mediaSrcRef = useRef<AudioNode | null>(null);
 
   const ensureBoostChain = useCallback(async () => {
     const el = videoRef.current;
@@ -169,10 +169,19 @@ export function ModernVideoPlayer({
       }
       if (ctx.state !== 'running') return null;
 
+      const captureStream = (el as any).captureStream || (el as any).mozCaptureStream;
+      const stream: MediaStream | null = typeof captureStream === 'function' ? captureStream.call(el) : null;
+      const hasAudioTrack = !!stream?.getAudioTracks?.().length;
+      if (!stream || !hasAudioTrack) return null;
+
       try { el.muted = false; el.volume = 1; } catch { /* noop */ }
-      const source = ctx.createMediaElementSource(el);
+      // Não usamos createMediaElementSource: ele substitui a saída nativa do
+      // <video> e, quando CORS/AudioContext falha, o resultado prático é som
+      // mudo. captureStream mantém o áudio nativo tocando e soma apenas ganho
+      // extra por cima, então falhas de boost nunca silenciam o vídeo.
+      const source = ctx.createMediaStreamSource(stream);
       const gain = ctx.createGain();
-      gain.gain.value = 1;
+      gain.gain.value = 0;
       source.connect(gain);
       gain.connect(ctx.destination);
       audioCtxRef.current = ctx;
@@ -191,7 +200,7 @@ export function ModernVideoPlayer({
     const gain = await ensureBoostChain();
     if (!gain) return false;
     const ctx = audioCtxRef.current;
-    const target = BOOST_LEVELS[level];
+    const target = Math.max(0, BOOST_LEVELS[level] - 1);
     try {
       if (ctx && typeof gain.gain.setTargetAtTime === 'function') {
         gain.gain.setTargetAtTime(target, ctx.currentTime, 0.03);
