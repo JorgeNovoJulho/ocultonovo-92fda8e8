@@ -590,7 +590,6 @@ export function ModernVideoPlayer({
         poster={poster ?? undefined}
         controls={controls}
         controlsList="nodownload noplaybackrate noremoteplayback"
-        crossOrigin="anonymous"
         disablePictureInPicture
         playsInline={playsInline}
         autoPlay={autoPlay}
