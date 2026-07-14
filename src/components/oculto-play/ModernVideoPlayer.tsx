@@ -151,20 +151,25 @@ export function ModernVideoPlayer({
   const gainRef = useRef<GainNode | null>(null);
   const mediaSrcRef = useRef<MediaElementAudioSourceNode | null>(null);
 
-  const ensureBoostChain = useCallback(() => {
+  const ensureBoostChain = useCallback(async () => {
     const el = videoRef.current;
     if (!el) return null;
     if (gainRef.current) return gainRef.current;
     try {
       const AC: typeof AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
       if (!AC) return null;
-      // CORS: para roteamento via Web Audio, o media element precisa de
-      // crossOrigin definido. Sem isso, alguns browsers (Safari/Chrome)
-      // silenciam a saída ao criar o MediaElementAudioSourceNode.
-      if (!el.crossOrigin) {
-        try { el.crossOrigin = 'anonymous'; } catch { /* noop */ }
+      const ctx = audioCtxRef.current ?? new AC();
+      audioCtxRef.current = ctx;
+
+      // Só cria o MediaElementAudioSourceNode depois que o contexto estiver
+      // rodando. Criar/conectar o grafo enquanto o AudioContext está suspended
+      // rouba a saída nativa do <video> e deixa o usuário sem áudio.
+      if (ctx.state !== 'running') {
+        try { await ctx.resume(); } catch { /* noop */ }
       }
-      const ctx = new AC();
+      if (ctx.state !== 'running') return null;
+
+      try { el.muted = false; el.volume = 1; } catch { /* noop */ }
       const source = ctx.createMediaElementSource(el);
       const gain = ctx.createGain();
       gain.gain.value = 1;
@@ -177,20 +182,15 @@ export function ModernVideoPlayer({
     } catch { return null; }
   }, []);
 
-  const applyBoost = useCallback((level: 0 | 1 | 2) => {
-    if (level === 0 && !gainRef.current) return;
-    const gain = ensureBoostChain();
-    if (!gain) return;
+  const applyBoost = useCallback(async (level: 0 | 1 | 2): Promise<boolean> => {
+    const el = videoRef.current;
+    if (!el) return false;
+    try { el.muted = false; el.volume = 1; } catch { /* noop */ }
+
+    if (level === 0 && !gainRef.current) return true;
+    const gain = await ensureBoostChain();
+    if (!gain) return false;
     const ctx = audioCtxRef.current;
-    // Resume síncrono dentro do gesto do usuário — sem isso, o AudioContext
-    // permanece "suspended" e o áudio some (todo o som fica silenciado pelo
-    // grafo). Precisamos garantir que o contexto está "running" ANTES de
-    // ajustar o gain, senão o usuário ouve silêncio até tocar em algo.
-    try {
-      if (ctx && ctx.state !== 'running') {
-        ctx.resume().catch(() => { /* noop */ });
-      }
-    } catch { /* noop */ }
     const target = BOOST_LEVELS[level];
     try {
       if (ctx && typeof gain.gain.setTargetAtTime === 'function') {
@@ -201,16 +201,17 @@ export function ModernVideoPlayer({
     } catch {
       try { gain.gain.value = target; } catch { /* noop */ }
     }
+    return true;
   }, [ensureBoostChain]);
 
   const cycleBoost = useCallback(() => {
-    setBoostLevel(prev => {
-      const next = ((prev + 1) % 3) as 0 | 1 | 2;
-      try { localStorage.setItem(BOOST_PREF_KEY, String(next)); } catch { /* noop */ }
-      applyBoost(next);
-      return next;
+    const next = ((boostLevel + 1) % 3) as 0 | 1 | 2;
+    void applyBoost(next).then((ok) => {
+      const safeNext = ok ? next : 0;
+      try { localStorage.setItem(BOOST_PREF_KEY, String(safeNext)); } catch { /* noop */ }
+      setBoostLevel(safeNext);
     });
-  }, [applyBoost]);
+  }, [applyBoost, boostLevel]);
 
   const handleStop = useCallback(() => {
     const el = videoRef.current;
@@ -219,8 +220,8 @@ export function ModernVideoPlayer({
     lastTimeRef.current = 0;
     try { el.pause(); } catch { /* noop */ }
     try { el.currentTime = 0; } catch { /* noop */ }
-    try { el.load(); } catch { /* noop */ }
-    setStopped(true);
+    setLoading(false);
+    setStopped(false);
   }, []);
 
   useEffect(() => {
@@ -282,7 +283,7 @@ export function ModernVideoPlayer({
       desiredPlayingRef.current = true;
       setStopped(false);
       rememberTime();
-      if (boostLevel > 0) applyBoost(boostLevel);
+      if (boostLevel > 0) void applyBoost(boostLevel);
     };
     const onPause = () => {
       rememberTime();
@@ -580,6 +581,7 @@ export function ModernVideoPlayer({
         poster={poster ?? undefined}
         controls={controls}
         controlsList="nodownload noplaybackrate noremoteplayback"
+        crossOrigin="anonymous"
         disablePictureInPicture
         playsInline={playsInline}
         autoPlay={autoPlay}
@@ -600,14 +602,6 @@ export function ModernVideoPlayer({
         <div className="absolute inset-0 grid place-items-center pointer-events-none">
           <Loader2 className="h-8 w-8 animate-spin text-white/80" />
         </div>
-      ) : null}
-
-      {stopped && poster ? (
-        <img
-          src={poster}
-          alt=""
-          className="absolute inset-0 w-full h-full object-contain bg-black pointer-events-none z-[5]"
-        />
       ) : null}
 
       {boostLevel > 0 ? (
