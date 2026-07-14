@@ -670,19 +670,15 @@ export function OcultoPlayLinkPlayer({
 
         // ---------- Desktop: vlc:// direto + fallback .m3u8 --------------
         if (platform === 'desktop') {
-          launchVlcDesktop(url, 'OCULTO PLAY', () => {
+          launchVlcDesktop(url, () => {
             writeVlcDetected();
             setVlcKnownInstalled(true);
             setVlcLaunchState('opened');
             cleanup();
-          });
-          // Se em 1.6s ainda não detectamos handoff, o .m3u8 foi baixado —
-          // marcamos "opened" mesmo assim para não confundir o usuário.
-          window.setTimeout(() => {
-            if (opened) return;
-            setVlcLaunchState('opened');
+          }, () => {
+            setVlcLaunchState('fallback');
             cleanup();
-          }, 1600);
+          });
           return;
         }
 
