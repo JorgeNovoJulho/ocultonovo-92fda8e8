@@ -711,24 +711,24 @@ export function OcultoPlayLinkPlayer({
         window.addEventListener('pagehide', markOpened);
         document.addEventListener('visibilitychange', markVisibilityOpened);
 
-        // ---------- Desktop: baixar .m3u8 com opções VLC embutidas -------
+        // ---------- Desktop: vlc:// direto + fallback .m3u8 --------------
         if (platform === 'desktop') {
-          const ok = launchVlcDesktop(url, 'OCULTO PLAY');
-          // O download não perde foco da janela; considere "aberto" após 1.2s
-          // para atualizar o estado visual e evitar prompt de instalação.
-          if (ok) {
-            window.setTimeout(() => {
-              writeVlcDetected();
-              setVlcKnownInstalled(true);
-              setVlcLaunchState('opened');
-              cleanup();
-            }, 1200);
-          } else {
+          launchVlcDesktop(url, 'OCULTO PLAY', () => {
+            writeVlcDetected();
+            setVlcKnownInstalled(true);
+            setVlcLaunchState('opened');
             cleanup();
-            setVlcLaunchState('fallback');
-          }
+          });
+          // Se em 1.6s ainda não detectamos handoff, o .m3u8 foi baixado —
+          // marcamos "opened" mesmo assim para não confundir o usuário.
+          window.setTimeout(() => {
+            if (opened) return;
+            setVlcLaunchState('opened');
+            cleanup();
+          }, 1600);
           return;
         }
+
 
         // ---------- Mobile: intents / custom schemes ---------------------
         const { uris } = buildVlcHandoffUrls(url);
