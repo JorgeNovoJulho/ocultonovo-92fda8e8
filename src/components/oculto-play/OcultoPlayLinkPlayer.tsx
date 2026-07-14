@@ -84,25 +84,15 @@ function writeVlcDetected() {
 const VLC_AUDIO_LANG = 'pt,por,pob';
 const VLC_SUB_LANG = 'pt,por,pob';
 
-/**
- * Gera um playlist .m3u8 com diretivas EXTVLCOPT para forçar o VLC a:
- *  - Selecionar faixa de áudio em português (pt/por/pob) quando existir;
- *  - Selecionar legenda em português quando o áudio escolhido NÃO for PT
- *    (comportamento nativo do VLC 3.x quando `sub-language` está definido e
- *    a faixa de áudio ativa não bate com `audio-language`);
- *  - Manter legendas desligadas quando existir áudio PT (padrão do VLC).
- * Também tenta autodetectar arquivos de legenda externos co-localizados.
- */
-function buildVlcM3uPlaylist(mediaUrl: string, title = 'OCULTO PLAY'): string {
+function buildDesktopVlcUris(mediaUrl: string): string[] {
+  const encoded = encodeURIComponent(mediaUrl);
+  const hint = `audio-language=${encodeURIComponent(VLC_AUDIO_LANG)}&sub-language=${encodeURIComponent(VLC_SUB_LANG)}&sub-autodetect-file=1`;
   return [
-    '#EXTM3U',
-    `#EXTVLCOPT:audio-language=${VLC_AUDIO_LANG}`,
-    `#EXTVLCOPT:sub-language=${VLC_SUB_LANG}`,
-    '#EXTVLCOPT:sub-autodetect-file=1',
-    `#EXTINF:-1,${title}`,
-    mediaUrl,
-    '',
-  ].join('\n');
+    // Handler vlc-protocol (Windows/macOS/Linux): preserva URLs com query assinada.
+    `vlc://weblink?url=${encoded}&${hint}`,
+    // Formato padrão de handlers vlc://.
+    `vlc://${mediaUrl}`,
+  ];
 }
 
 function buildVlcHandoffUrls(mediaUrl: string): { platform: VlcPlatform; uris: string[] } {
@@ -181,43 +171,12 @@ function launchExternalAppUri(uri: string, platform: VlcPlatform, mode: 'primary
 }
 
 /**
- * Desktop: tenta abrir o VLC diretamente via esquema `vlc://` (registrado
- * pelo instalador oficial no Windows e no macOS). Se o browser não perder
- * o foco em ~1.4s (indicativo de que o handler não está registrado), cai
- * para o download de um .m3u8 com opções embutidas — o SO abre no VLC
- * ao usuário confirmar o arquivo baixado.
- * Retorna sempre true (algum caminho foi tentado).
+ * Desktop: tenta abrir somente via protocolo externo. Browsers não permitem
+ * criar/abrir/deletar arquivo local em segundo plano; por isso removemos o
+ * fallback .m3u8 que causava a janela "salvar arquivo".
  */
-function triggerM3uDownload(mediaUrl: string, title: string): boolean {
-  try {
-    const playlist = buildVlcM3uPlaylist(mediaUrl, title);
-    const blob = new Blob([playlist], { type: 'application/vnd.apple.mpegurl' });
-    const blobUrl = URL.createObjectURL(blob);
-    const safeName = (title || 'oculto-play').replace(/[^\w\-]+/g, '_').slice(0, 40) || 'oculto-play';
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = `${safeName}.m3u8`;
-    a.rel = 'noreferrer';
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    window.setTimeout(() => {
-      a.remove();
-      URL.revokeObjectURL(blobUrl);
-    }, 4000);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function launchVlcDesktop(
-  mediaUrl: string,
-  title = 'OCULTO PLAY',
-  onOpened?: () => void,
-): boolean {
-  const hint = `#audio-language=${VLC_AUDIO_LANG}&sub-language=${VLC_SUB_LANG}&sub-autodetect-file=1`;
-  const vlcUri = `vlc://${mediaUrl}${hint}`;
+function launchVlcDesktop(mediaUrl: string, onOpened?: () => void, onFailed?: () => void): boolean {
+  const uris = buildDesktopVlcUris(mediaUrl);
 
   let handoffDetected = false;
   const markOpened = () => {
@@ -230,24 +189,22 @@ function launchVlcDesktop(
   window.addEventListener('blur', onBlur, { once: true });
   document.addEventListener('visibilitychange', onHide);
 
-  // 1) tenta abrir o handler `vlc://` — silencioso se não estiver registrado.
-  try {
+  uris.forEach((uri, index) => window.setTimeout(() => {
+    if (handoffDetected || document.hidden) return;
     const a = document.createElement('a');
-    a.href = vlcUri;
+    a.href = uri;
     a.rel = 'noreferrer';
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
     window.setTimeout(() => a.remove(), 0);
-  } catch { /* noop */ }
+  }, index * 450));
 
-  // 2) se em ~1.4s a página não perdeu foco, o handler não abriu — baixa .m3u8
   window.setTimeout(() => {
     window.removeEventListener('blur', onBlur);
     document.removeEventListener('visibilitychange', onHide);
-    if (handoffDetected || document.hidden) return;
-    triggerM3uDownload(mediaUrl, title);
-  }, 1400);
+    if (!handoffDetected && !document.hidden) onFailed?.();
+  }, 2200);
 
   return true;
 }
