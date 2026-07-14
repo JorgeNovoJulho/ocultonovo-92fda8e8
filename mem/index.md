@@ -1,0 +1,122 @@
+# Project Memory
+
+## Core
+- **Performance First (<4GB RAM)**: Flat design, no heavy box-shadows. Lazy load everything. No auto-play video. Preserve scroll position.
+- **External Supabase Only**: Exclusively use `rvybbrkzmboqbhcemqar.supabase.co` via `src/lib/supabaseExternal.ts`. Lovable Cloud interno e Lovable AI Gateway são PROIBIDOS. IA via OpenAI direto.
+- **DB Migrations**: NUNCA usar `supabase--migration` ou `psql` (apontam para o interno). SEMPRE gerar `.sql` idempotente em `supabase/external_sql/AAAA_MM_DD_*.sql` E colar o SQL completo no chat para o usuário copiar/colar no SQL Editor do externo.
+- **No Mock Data**: Do NOT use LocalStorage for business data or `mockData.ts`. Always fetch/persist via Supabase SDK.
+- **Removed Feature**: "Dimensão Lens" (fullscreen vertical feed) is explicitly removed. Do not implement.
+- **DB Rules**: Check schema before CREATE/ALTER. Isolate new tables with `oculto_`. `SECURITY DEFINER` requires `SET search_path = public`.
+- **Monetization Split**: 6% tax -> 20% platform -> 5% affiliate. Must use `decimal(10,2)` for precision.
+- **Identifier Mapping**: `profiles.id` links to `posts.author_id`. Frontend often maps `author_id` to `user_id`. Fallback search by `id`, `user_id`, or `username`.
+- **No Organic Steps**: Proibido propor/criar "próxima etapa" por iniciativa própria. Executar somente o que foi pedido no prompt corrente.
+
+## Memories
+- [Comunidades Ocultas](mem://features/comunidades-ocultas) — Sistema estilo Orkut: oculto_community_*, RPCs community_*, bucket privado community-media com signed URLs, aprovação de membros, reações like
+- [Google OAuth Signup Flow](mem://features/google-oauth-signup-flow) — signInWithGoogle no Supabase externo, /auth/callback, /completar-cadastro obrigatório com gate em ProtectedRoute
+- [Single Session Enforcement](mem://features/single-session-enforcement) — Sessão única por usuário (oculto_active_sessions + realtime); master admin é exceção
+- [Social Core Engine](mem://features/social-core-engine) — useSocialCore + social_core_identity_get RPC + admin Identidade
+- [Experiências Sociais Reais](mem://features/experiencias-sociais-reais) — Engine real_experience_* + participants ricos + moderação master + região aproximada
+- [Presença Invisível](mem://features/presenca-invisivel) — Sinais anonimizados oculto_presence_signals + PresencePulseStrip + admin Presença
+- [IA Social](mem://features/ia-social) — Engine por regras explicáveis, opt-out LGPD, SocialAiHintsStrip + admin IA Social
+- [Onda C — Mecânicas Sociais](mem://features/onda-c-mecanicas-sociais) — Noites/Temporadas/Destino/Magnetismo/VIP Pass/Conexões Ocultas/Experiências Reais/Feed Vivo
+- [Legal Compliance](mem://auth/conformidade-legal-e-termos) — BR adult market rules, LGPD, +18 consent, static legal routes
+- [Creator Media Hub](mem://features/gerenciador-de-midias-creator-hub) — 'Minhas Mídias', dnd-kit mobile constraints, author_id linking
+- [Looking Now Filter](mem://features/filtro-buscando-agora-radar-status) — Abstract radar flame filter, orange glow visual rules
+- [Privacy & Display Names](mem://auth/privacidade-de-dados-sensiveis-e-exibicao-de-nome) — Strict privacy for real names, emails, docs
+- [VIP Events](mem://features/eventos-vip-e-interacoes-pos-evento) — Event creation, RSVP, group chat, 1-5 star ratings
+- [Stories System](mem://features/stories-interacoes-e-moderacao-admin) — is_flash=true, decoupled DB architecture, object-contain blur
+- [Mass Broadcasts & PPV](mem://features/broadcast-ppv-e-agendamento-massivo) — Async messaging, scheduled_for cron
+- [VIP Visual Identity](mem://features/identidade-visual-vip-e-monetizacao) — Golden border, SVG verified badge, PPV blur
+- [Recommended Connections](mem://features/conexoes-recomendadas-feed) — Affinity carousel every 20 posts, SPA nav
+- [Tags & Affinity](mem://features/tags-and-affinity-system) — Social/Adult tags, Modo Conexão visibility rules
+- [DB Security Triggers](mem://tech-stack/db-security-and-automation) — RLS security definer, schema-poisoning protection
+- [Resend Email Notifications](mem://notifications/resend-email-triggers) — Dark mode templates, golden branding, Discord alerts
+- [Seed Bot Automation](mem://features/gestao-de-dados-seed-e-automacao-de-bots) — is_seed smart-feed-filler, auto-likes, auto-purge
+- [Ghost Match Curiosity](mem://features/sistema-de-ghost-match-e-curiosidade) — Bot likes, blurred avatars for free users, paywall
+- [Mobile Image Editor](mem://features/mobile-high-performance-image-editor) — 1920px limit, pointer events, blur/stickers/watermark
+- [Security & Blocking](mem://features/security-and-privacy-controls) — v_secure_posts, invisible mode, auto-destruct
+- [Follower Logic](mem://tech-stack/seguranca-e-logica-de-seguidores) — FollowButtonInline, auth.users user_id mapping
+- [Monetization Prerequisites](mem://features/seguranca-e-bloqueio-monetizacao) — Asaas Wallet & PIX key mandatory for selling
+- [Static Platform Plans](mem://features/planos-da-plataforma-estaticos) — Free, Premium (25.90), VIP (145.90) static constants
+- [Free Plan Immunity](mem://auth/free-plan-immunity) — Free users immune to payment blocks
+- [Realtime PIX Polling](mem://features/payment-pix-realtime-polling) — 3s polling, local unlock with confetti
+- [Live Users Counter](mem://features/feed-filtering-live-users-and-online-counter) — Filters is_seed out of live sessions, 60s online count
+- [Perfect Pair Discovery](mem://features/perfect-pair-discovery-and-recycling-logic) — 200km radius, 10-day swipe recycling, atomic chat
+- [Feed Visibility Algorithm](mem://features/sistema-de-prioridade-e-algoritmo-de-visibilidade) — Humans > bots priority, strict recency sorting
+- [WhatsApp Flows](mem://features/whatsapp-engagement-flows) — Automated welcome, matches, verification via edge function
+- [System Stability](mem://tech-stack/system-stability-architecture) — SafeSuspense, production logging silenced, layout containment
+- [OpenAI Proxy](mem://tech-stack/openai-direct-integration-gpt4o-proxy) — gpt-4o via openai-chat edge function
+- [Realtime Auctions](mem://features/auctions-realtime) — Anti-sniping (+2 min), credit card pre-auth
+- [Dashboard Layout](mem://features/dashboard-layout-sincronizado) — Sidebar hierarchy, unified finance modal, forwardRef
+- [Edge Function Auth](mem://tech-stack/supabase-edge-functions-auth-convention) — verify_jwt = false convention, manual token validation
+- [A/B Testing Infrastructure](mem://admin/ab-testing-infrastructure) — ab_test_configs table, useABTest hook
+- [Marketplace & Content](mem://features/content-marketplace-and-creator-plans) — purchase_marketplace_item, VIP plan isolation
+- [Referrals & Promotions](mem://features/promotions-and-marketing-automation) — 5% commission, Madrinhas program, Web Share API
+- [Platform Waitlist](mem://features/platform-capacity-and-waitlist) — 1000 user limit, FOR UPDATE DB lock, lead capture
+- [Creator Profile UI](mem://features/perfil-creator-customizacao-e-interacao) — Grid layout, Acervo VIP 25px blur
+- [Notification Management](mem://features/notificacoes-gestao-e-navegacao) — Selective cleanup (read only), real-time is_seed filtering
+- [Edge Push Conventions](mem://tech-stack/edge-functions-notification-conventions) — verify_jwt=false, filter is_seed, looking_now_match type
+- [Asaas Sandbox Mode](mem://tech-stack/asaas-pix-gateway-config) — Sandbox key matching sandbox_mode=true
+- [Referral Access Logic](mem://features/referral-system-access) — lookup_referral_code RPC for anonymous link validation
+- [Identity & GPS Location](mem://features/user-profile-identity-and-location) — location_lat/lng fields, display name fallback chain
+- [Payment Methods](mem://features/finance-payment-methods-management) — PIX keys, AddCardModal with auto-brand detection
+- [Stripe Hardening](mem://features/stripe-payment-hardening) — Idempotency via useRef, Grace Period support
+- [Hardware Optimization](mem://features/hardware-performance-optimization) — Adaptive 60 FPS, Zero Re-render timers, aggressive video discard
+- [Radar V2 Abstract](mem://features/radar-v2-abstract-and-pings) — Abstract UI, Ghost Position angles, 50 user limit
+- [E2EE Chat Ecosystem](mem://features/chat-e-mensagens-ecossistema-e2ee) — AES-GCM 256-bit, Super DM, is_seed filtering
+- [DB Integrity & Conventions](mem://tech-stack/database-integrity-and-security-conventions) — DB isolation, decimal(10,2) precision, schema rules
+- [Profile Likes Tracking](mem://features/profile-likes-interaction-tracking) — markAllAsSeen RLS, blur for free users
+- [Free Plan Restrictions](mem://features/restricoes-e-bloqueios-plano-gratuito-admin) — Radar block, blurred matches, gift blocks
+- [Security View Hardening](mem://tech-stack/security-audit-view-policy-hardening) — Non-recursive RLS, SECURITY INVOKER for views
+- [Payment Test Tools](mem://admin/ferramentas-de-teste-de-pagamento) — PIX polling, Stripe Dual Key test card switching
+- [Video Infrastructure](mem://tech-stack/video-infrastructure-and-performance) — Cloudflare Stream HLS, static thumbs, autoplay disabled
+- [VIP Monetization Modal](mem://features/vip-publication-modal-and-monetization-split) — Tax-first split calculator, Acervo VIP lock
+- [Admin Access Roles](mem://admin/access-and-role-management) — Ghost Mode impersonation, unified Premium enum
+- [Geo Heatmap Analytics](mem://admin/financial-and-geographic-analytics) — Leaflet OSM map, real user GPS filtering
+- [Removed Lens Scope](mem://project/escopo-e-restricoes-lens-excluida) — Dimensão Lens explicitly removed
+- [Monetization Split Engine](mem://features/finance/monetization-split-and-checkout-realtime) — process_oculto_payment_split RPC, usePaymentRealtime
+- [Zero Mock Data Policy](mem://tech-stack/zero-mock-data-policy) — No mockData.ts, pure Supabase fetching
+- [Profile Sync Debugger](mem://features/profile-sync-debugger-tool) — Re-sync upsert tool in Account Settings
+- [PIX & Card Integration](mem://features/finance/integracao-pagamentos-pix-e-cartao-producao) — PIX check-status polling, visibilitychange listener
+- [Checkout & Billing](mem://features/finance/checkout-and-billing) — Monthly/Annual cycles, dynamic PIX SVG
+- [Mobile Perf Golden Rules](mem://constraints/regras-de-ouro-mobile-performance) — Flat UI, lazy loading, requestIdleCallback
+- [Decoupled Author Feed](mem://features/feed-decoupled-author-resolution-architecture) — Batch profile fetching via author_id -> user_id
+- [Admin Cache Integrity](mem://admin/integridade-de-dados-e-cache-do-painel) — Zustand v3 storage, useAdminMetrics hooks
+- [Creator Fan Rankings](mem://features/ranking-de-fas-creator-dashboard) — fan_rankings view, virtuoso virtualization
+- [Landing Page DB Persistence](mem://admin/landing-editor-persistencia-no-banco) — landing_settings DB, realtime sync, no LocalStorage
+- [Safety Check-in](mem://features/encontro-seguro-safety-checkin) — WhatsApp alerts, ShieldCheck icon, draft persistence
+- [Ghost Mode Privacy](mem://features/ghost-mode-privacidade-e-checkout) — Premium/VIP anonymity addon, record_profile_visit
+- [Master Admin Privileges](mem://admin/privilegios-master-e-funcoes-rpc-seguras) — ocultomaster account, useIsMasterAdmin hook, Pink VIP badge
+- [User Management UI](mem://admin/gestao-de-usuarios-e-acoes-rapidas) — 10 users/page limit, Optimistic UI bans/verifications
+- [Resilient Profile UI](mem://features/perfil-resiliencia-e-ui-otimista) — Debounced username check, 10s audio bio, WebP compression
+- [External Supabase Hosting](mem://tech-stack/autonomia-e-hosting-supabase-externo-apenas-infra) — Exclusive use of external Supabase instance
+- [SPA Routing Cache](mem://tech-stack/roteamento-spa-e-invalida-cache-estratgia-infra) — index.html rewrite, window.fetch patch, Cache-Control overrides
+- [Resilient Signup Auth](mem://auth/resiliencia-de-cadastro-e-sincronia-db-externo-signup) — Single upsert bootstrap, useProfile hook bypass
+- [Resilient Profile Search](mem://tech-stack/resilient-profile-resolution-architecture) — Multi-identifier fallback search (id, user_id, username)
+- [Post Interaction Logic](mem://features/post-ui-and-interaction-logic) — Premium/VIP badges only, decoupled threads
+- [Profile Tabs Architecture](mem://features/user-profile-tabs-logic) — Posts, Media, Likes, Referrals tab data joins
+- [Quick Edit Admin Tool](mem://admin/quick-edit-profile-tool) — Admin SQL-free profile editor, cache invalidation
+- [DB Identifier Maps](mem://tech-stack/database-identifier-mapping-constraints) — Map profiles.id to posts.author_id, UI uses user_id
+- [Inactivity Auto-Logout](mem://auth/sessao-e-logout-por-inatividade) — 5 min inactivity forced logout
+- [Fullscreen Gallery](mem://features/media-gallery-modal) — object-contain gallery, unmounts on close
+- [Support Tickets](mem://support/central-de-ajuda-e-tickets) — Attachments bucket, initialTab prop routing
+- [Checkout Flow Details](mem://features/finance/monetization-and-checkout-flow) — Stripe plans, PIX polling, dynamic success modal
+- [KYC Verifications](mem://features/kyc-verification-flow) — Native camera capture, document_verified status
+- [Creator Withdrawals](mem://features/finance/creator-earnings-and-payouts) — vw_extrato_criador, R$ 50 min withdrawal
+- [Discipline System](mem://features/moderation-and-discipline-system) — Shadowban, Freeze 1-30 days, audit_logs
+- [Push & Support Alerts](mem://tech-stack/push-notifications-and-support-alerts) — VAPID push, admin realtime support alerts
+- [Admin Support Tickets](mem://admin/admin-support-management) — Batch-fetch decoupling, sets admin_response
+- [Proibido Cloud Interno & Lovable AI](mem://constraints/proibido-cloud-interno-e-lovable-ai) — Banimento absoluto do Lovable Cloud interno e Lovable AI Gateway
+- [Lightweight i18n Helper](mem://tech-stack/lightweight-i18n-helper) — Custom zero-dep i18n in src/lib/i18n.ts (PT/EN/ES), no i18next allowed
+- [Onboarding pós-login](mem://features/onboarding-pos-login) — Tour 4 steps, re-exibição 30 dias via onboarding_* em profiles
+- [Perfil VIP Híbrido](mem://features/perfil-vip-hibrido) — Single creator profile (social+monetized), trailer em subscription_plans.intro_*, vídeo ≤90s
+- [VIP Creator Channel — Where to Create](mem://features/vip-creator-channel-where-to-create) — 3 entry points: planos em /subscriptions, post VIP em Criar Post, PPV em Conteúdo Pago
+- [Social & Trust System](mem://features/social-and-trust-system) — Aura Social (5 níveis, perks dinâmicos), Trust tips, painel /admin/social-trust
+- [Prestígio Social](mem://features/prestigio-social) — Camada emocional sobre Score Social, 6 tiers configuráveis, badge+card no perfil, aba admin
+- [Social Universe Architecture](mem://tech-stack/social-universe-architecture) — src/social-universe/ modular base, SocialUniverseProvider, useSocialIdentity, single realtime channel
+- [Beta Control & Production Launch](mem://features/beta-control-and-production-launch) — usePlatformPhase + useBetaGuard, checklist categorizado, trigger backend que bloqueia produção sem checklist, production_launch_log auditável
+- [Perfil Avaliações e Depoimentos](mem://features/perfil-avaliacoes-e-depoimentos) — 3-dot menu glow, RateProfileModal 5 estrelas, ProfileTestimonialsSection com hearts/reply, oculto_profile_ratings/testimonials/hearts/real_recommendations
+- [Master Online Gift Alert](mem://admin/master-online-gift-alert) — Alerta sonoro auto + modal de presente XP por usuário (anti-duplicidade)
+- [SQL Sempre no Chat](mem://constraints/sql-sempre-no-chat) — SQL completo colado no chat para SQL Editor externo
+- [Feed View Modes](mem://features/feed-view-modes) — 5 modos (completo/social/descoberta/limpo/card), provider isolado, admin /admin/modos-feed

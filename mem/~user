@@ -1,0 +1,4 @@
+Sempre responder em português (pt-BR).
+Sempre usar o Supabase externo (@/lib/supabaseExternal) — nunca o cliente interno @/integrations/supabase/client.
+Provide complete SQL scripts in chat for manual execution when modifying DB structure or RLS.
+SEMPRE colar o conteúdo COMPLETO de qualquer SQL no chat (não apenas referenciar o caminho do arquivo) — mesmo que o script seja longo. O usuário copia e cola direto do chat no SQL Editor do Supabase externo. Nunca pular essa etapa.

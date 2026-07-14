@@ -1,0 +1,185 @@
+{
+  "rewrites": [
+    { "source": "/sb-proxy/:path*", "destination": "https://rvybbrkzmboqbhcemqar.supabase.co/:path*" },
+    { "source": "/update", "destination": "/update.html" },
+    {
+      "source": "/leitura/:id",
+      "has": [
+        { "type": "header", "key": "user-agent", "value": ".*(facebookexternalhit|Facebot|facebot|WhatsApp|whatsapp|Twitterbot|twitterbot|LinkedInBot|linkedinbot|TelegramBot|telegrambot|Slackbot|slackbot|Discordbot|discordbot|Googlebot|googlebot|Bingbot|bingbot|Applebot|applebot|Pinterestbot|pinterestbot|Redditbot|redditbot|Embedly|embedly|SkypeUriPreview|skypeuripreview|vkShare|vkshare|w3c_validator|developers\\.google\\.com|Bot|bot|Crawler|crawler|Spider|spider|Preview|preview).*" }
+      ],
+      "destination": "https://rvybbrkzmboqbhcemqar.supabase.co/functions/v1/og-leitura?id=:id"
+    },
+    {
+      "source": "/play/p/:id",
+      "has": [
+        { "type": "header", "key": "user-agent", "value": ".*(facebookexternalhit|Facebot|facebot|WhatsApp|whatsapp|Twitterbot|twitterbot|LinkedInBot|linkedinbot|TelegramBot|telegrambot|Slackbot|slackbot|Discordbot|discordbot|Googlebot|googlebot|Bingbot|bingbot|Applebot|applebot|Pinterestbot|pinterestbot|Redditbot|redditbot|Embedly|embedly|SkypeUriPreview|skypeuripreview|vkShare|vkshare|w3c_validator|developers\\.google\\.com|Bot|bot|Crawler|crawler|Spider|spider|Preview|preview).*" }
+      ],
+      "destination": "/api/og-play?id=:id"
+    },
+    { "source": "/play/share/:id", "destination": "/api/og-play?id=:id" },
+    { "source": "/play/og-image/:id", "destination": "/api/og-play-image?id=:id" },
+    { "source": "/c/og-image/:id", "destination": "/api/og-c-image?id=:id" },
+    {
+      "source": "/c/:id",
+      "has": [
+        { "type": "header", "key": "user-agent", "value": ".*(facebookexternalhit|Facebot|facebot|WhatsApp|whatsapp|Twitterbot|twitterbot|LinkedInBot|linkedinbot|TelegramBot|telegrambot|Slackbot|slackbot|Discordbot|discordbot|Googlebot|googlebot|Bingbot|bingbot|Applebot|applebot|Pinterestbot|pinterestbot|Redditbot|redditbot|Embedly|embedly|SkypeUriPreview|skypeuripreview|vkShare|vkshare|w3c_validator|developers\\.google\\.com|Bot|bot|Crawler|crawler|Spider|spider|Preview|preview).*" }
+      ],
+      "destination": "/api/og-c?id=:id"
+    },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/play/p/:id",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" },
+        { "key": "CDN-Cache-Control", "value": "no-store" },
+        { "key": "Vary", "value": "User-Agent" }
+      ]
+    },
+    {
+      "source": "/play/share/:id",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" },
+        { "key": "CDN-Cache-Control", "value": "no-store" },
+        { "key": "Vary", "value": "User-Agent" }
+      ]
+    },
+    {
+      "source": "/play/og-image/:id",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    },
+    {
+      "source": "/c/og-image/:id",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" },
+        { "key": "CDN-Cache-Control", "value": "no-store" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    },
+    {
+      "source": "/((?!play/p/|play/share/|play/og-image/|c/og-image/|api/og).*)",
+      "headers": [
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    },
+    {
+      "source": "/:path*.:ext(js|css|map)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=604800, stale-while-revalidate=2592000" }
+      ]
+    },
+    {
+      "source": "/((?!.*\\.[a-zA-Z0-9]{1,6}$).*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" }
+      ]
+    },
+    {
+      "source": "/index.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    },
+    {
+      "source": "/icons/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=2592000, stale-while-revalidate=604800" }
+      ]
+    },
+    {
+      "source": "/sounds/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=2592000, stale-while-revalidate=604800" }
+      ]
+    },
+    {
+      "source": "/fonts/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
+      ]
+    },
+    {
+      "source": "/:path*.:ext(png|jpg|jpeg|webp|avif|svg|gif|ico|mp3|ogg|wav|woff|woff2|ttf|otf)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=2592000, stale-while-revalidate=604800" }
+      ]
+    },
+    {
+      "source": "/sb-proxy/storage/v1/object/public/avatars/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=86400, stale-while-revalidate=604800" },
+        { "key": "CDN-Cache-Control", "value": "public, max-age=86400, stale-while-revalidate=604800" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    },
+    {
+      "source": "/sb-proxy/storage/v1/object/public/(post-media|post-thumbs|story-media|community-media|creator-media|cover-images|banners)/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=604800, stale-while-revalidate=2592000" },
+        { "key": "CDN-Cache-Control", "value": "public, max-age=604800, stale-while-revalidate=2592000" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    },
+    {
+      "source": "/update",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" }
+      ]
+    },
+    {
+      "source": "/update.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0" }
+      ]
+    },
+    {
+      "source": "/version.json",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" }
+      ]
+    },
+    {
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" },
+        { "key": "Service-Worker-Allowed", "value": "/" }
+      ]
+    },
+    {
+      "source": "/manifest.webmanifest",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate, max-age=0" }
+      ]
+    },
+    {
+      "source": "/",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate, max-age=0" },
+        { "key": "CDN-Cache-Control", "value": "no-cache, must-revalidate, max-age=0" }
+      ]
+    },
+    {
+      "source": "/index.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate, max-age=0" },
+        { "key": "CDN-Cache-Control", "value": "no-cache, must-revalidate, max-age=0" }
+      ]
+    }
+  ]
+}

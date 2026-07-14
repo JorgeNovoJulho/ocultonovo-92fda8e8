@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="robots" content="noindex,nofollow" />
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<title>Atualizando o Oculto…</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: #0b0b10;
+    color: #f5f5f7;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    width: 100%; max-width: 460px;
+    background: linear-gradient(180deg, #15151c 0%, #0f0f15 100%);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 20px;
+    padding: 28px 24px;
+    box-shadow: 0 20px 60px -20px rgba(0,0,0,0.6);
+    text-align: center;
+  }
+  .logo {
+    font-weight: 800; letter-spacing: 0.3em; font-size: 12px;
+    color: #c9a84c; margin-bottom: 18px;
+  }
+  h1 { font-size: 20px; margin: 0 0 8px; font-weight: 700; }
+  p  { font-size: 14px; line-height: 1.5; color: #b9b9c4; margin: 8px 0; }
+  .spinner {
+    width: 38px; height: 38px; margin: 18px auto;
+    border-radius: 50%;
+    border: 3px solid rgba(201,168,76,0.18);
+    border-top-color: #c9a84c;
+    animation: spin 0.9s linear infinite;
+  }
+  .spinner.done {
+    border-color: rgba(76, 201, 120, 0.4);
+    border-top-color: #4cc978;
+    animation: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  ul.steps {
+    list-style: none; padding: 0; margin: 18px 0 4px;
+    text-align: left;
+  }
+  ul.steps li {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: #8c8c99;
+    padding: 6px 4px;
+    transition: color .2s;
+  }
+  ul.steps li .ic {
+    width: 18px; height: 18px; flex: 0 0 18px;
+    border-radius: 50%;
+    border: 1.5px solid #3a3a48;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; line-height: 1; color: transparent;
+  }
+  ul.steps li.active { color: #f5f5f7; }
+  ul.steps li.active .ic {
+    border-color: #c9a84c;
+    box-shadow: 0 0 0 3px rgba(201,168,76,0.12);
+  }
+  ul.steps li.done { color: #cfcfd6; }
+  ul.steps li.done .ic {
+    background: #4cc978; border-color: #4cc978; color: #0b0b10;
+  }
+  ul.steps li.done .ic::after { content: "✓"; }
+  .status {
+    font-size: 12px; color: #8c8c99; margin-top: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    word-break: break-word;
+  }
+  .actions { margin-top: 18px; min-height: 44px; }
+  .btn {
+    display: inline-block;
+    background: #c9a84c; color: #0b0b10;
+    border: 0; border-radius: 12px;
+    padding: 12px 20px; font-weight: 700; font-size: 14px;
+    cursor: pointer; text-decoration: none;
+  }
+  .btn.secondary {
+    background: transparent; color: #c9a84c;
+    border: 1px solid rgba(201,168,76,0.4);
+    margin-left: 8px;
+  }
+  .btn:active { transform: translateY(1px); }
+  .hidden { display: none !important; }
+  .muted { font-size: 11px; color: #6c6c78; margin-top: 16px; }
+</style>
+</head>
+<body>
+  <main class="card" role="status" aria-live="polite">
+    <div class="logo">OCULTO</div>
+    <div id="spinner" class="spinner" aria-hidden="true"></div>
+    <h1 id="title">Atualizando sua versão…</h1>
+    <p>Isso <strong>não apaga sua conta</strong> nem seus dados. Estamos apenas baixando a versão mais recente do app.</p>
+
+    <ul class="steps" id="steps">
+      <li data-step="cache"><span class="ic"></span><span>Limpando caches antigos</span></li>
+      <li data-step="sw"><span class="ic"></span><span>Atualizando service worker</span></li>
+      <li data-step="chunks"><span class="ic"></span><span>Removendo chunks temporários</span></li>
+      <li data-step="version"><span class="ic"></span><span>Verificando versão publicada</span></li>
+      <li data-step="reload"><span class="ic"></span><span>Recarregando o app</span></li>
+    </ul>
+
+    <div id="status" class="status">Preparando…</div>
+
+    <div class="actions">
+      <a id="back" class="btn hidden" href="/feed?_u=ok&amp;r=manual">Voltar ao Oculto</a>
+      <a id="manual" class="btn secondary hidden" href="/feed?_u=force">Forçar agora</a>
+    </div>
+
+    <p class="muted">Se nada acontecer em 15 segundos, toque em "Voltar ao Oculto".</p>
+  </main>
+
+<script>
+(function () {
+  var statusEl = document.getElementById('status');
+  var spinner  = document.getElementById('spinner');
+  var titleEl  = document.getElementById('title');
+  var backBtn  = document.getElementById('back');
+  var manualBtn= document.getElementById('manual');
+  var stepsEl  = document.getElementById('steps');
+  var searchParams = new URLSearchParams(location.search);
+  var reason = searchParams.get('reason') || 'manual';
+  var returnToRaw = searchParams.get('returnTo') || '/feed';
+  var hintedVersion = searchParams.get('remote') || searchParams.get('_ucv') || '';
+
+  function sanitizeReturnTo(value) {
+    try {
+      var decoded = decodeURIComponent(value || '/feed');
+      if (!decoded || decoded[0] !== '/') return '/feed';
+      if (/^\/update(?:\.html)?(?:[/?#]|$)/i.test(decoded)) return '/feed';
+      if (/^\/(?:oculto-play|play(?:\/|$))/i.test(decoded)) return '/feed';
+      return decoded;
+    } catch (_) {
+      return '/feed';
+    }
+  }
+
+  var returnTo = sanitizeReturnTo(returnToRaw);
+
+  // ============================================================
+  // LOG LOCAL DETALHADO — persiste em localStorage para debug
+  // ============================================================
+  var LOG_KEY = 'oculto:update-log';
+  var LOG_MAX = 50;
+  function appendLog(entry) {
+    try {
+      var raw = localStorage.getItem(LOG_KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(arr)) arr = [];
+      arr.push(entry);
+      if (arr.length > LOG_MAX) arr = arr.slice(-LOG_MAX);
+      localStorage.setItem(LOG_KEY, JSON.stringify(arr));
+    } catch (_) {}
+    try { console.info('[update]', entry); } catch (_) {}
+  }
+  appendLog({
+    t: Date.now(),
+    iso: new Date().toISOString(),
+    phase: 'enter',
+    reason: reason,
+    href: location.href,
+    ua: navigator.userAgent,
+  });
+
+  function setStatus(msg, phase) {
+    try { statusEl.textContent = msg; } catch (_) {}
+    appendLog({ t: Date.now(), iso: new Date().toISOString(), phase: phase || 'status', msg: msg });
+  }
+  function markStep(name, state) {
+    try {
+      var li = stepsEl.querySelector('li[data-step="' + name + '"]');
+      if (!li) return;
+      li.classList.remove('active', 'done');
+      if (state) li.classList.add(state);
+    } catch (_) {}
+  }
+  function showFinalActions(success, summary) {
+    try {
+      spinner.classList.add('done');
+      titleEl.textContent = success ? 'Pronto! Tudo atualizado.' : 'Concluído com avisos.';
+      statusEl.textContent = summary;
+      backBtn.classList.remove('hidden');
+      manualBtn.classList.remove('hidden');
+    } catch (_) {}
+  }
+
+  // Chaves de sessão Supabase e preferências que NUNCA devem ser apagadas
+  var PRESERVE_PREFIXES = ['sb-', 'supabase.', 'oculto:', 'auth.', 'lovable.'];
+  function shouldPreserve(key) {
+    if (!key) return true;
+    for (var i = 0; i < PRESERVE_PREFIXES.length; i++) {
+      if (key.indexOf(PRESERVE_PREFIXES[i]) === 0) return true;
+    }
+    return false;
+  }
+
+  async function clearCacheStorage() {
+    if (!('caches' in window)) return 0;
+    try {
+      var keys = await caches.keys();
+      await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+      return keys.length;
+    } catch (e) { appendLog({ t: Date.now(), phase: 'error', where: 'caches', err: String(e) }); return 0; }
+  }
+
+  async function unregisterServiceWorkers() {
+    if (!('serviceWorker' in navigator)) return 0;
+    try {
+      var regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(function (r) {
+        try { r.waiting && r.waiting.postMessage({ type: 'SKIP_WAITING' }); } catch (_) {}
+        return r.unregister().catch(function () { return false; });
+      }));
+      return regs.length;
+    } catch (e) { appendLog({ t: Date.now(), phase: 'error', where: 'sw', err: String(e) }); return 0; }
+  }
+
+  function pruneNonEssentialStorage(storage) {
+    if (!storage) return 0;
+    var removed = 0;
+    try {
+      var toRemove = [];
+      for (var i = 0; i < storage.length; i++) {
+        var k = storage.key(i);
+        if (!shouldPreserve(k)) toRemove.push(k);
+      }
+      toRemove.forEach(function (k) { try { storage.removeItem(k); removed++; } catch (_) {} });
+    } catch (_) {}
+    return removed;
+  }
+
+  async function run() {
+    var done = false;
+    // Failsafe: se algo travar, ainda mostra ações ao usuário em 15s
+    var failsafe = setTimeout(function () {
+      if (done) return;
+      appendLog({ t: Date.now(), phase: 'failsafe' });
+      showFinalActions(false, 'Tempo esgotado. Toque em "Voltar ao Oculto".');
+    }, 15000);
+
+    // 1) Cache Storage
+    markStep('cache', 'active'); setStatus('Limpando cache de assets…', 'cache');
+    var nCaches = await clearCacheStorage();
+    markStep('cache', 'done');
+
+    // 2) Service Workers
+    markStep('sw', 'active'); setStatus('Removendo service worker antigo…', 'sw');
+    var nSW = await unregisterServiceWorkers();
+    markStep('sw', 'done');
+
+    // 3) Chunks/sessionStorage
+    markStep('chunks', 'active'); setStatus('Limpando chunks temporários…', 'chunks');
+    var nPruned = pruneNonEssentialStorage(window.sessionStorage);
+    try { sessionStorage.removeItem('oculto:version-reload-at'); } catch (_) {}
+    try { sessionStorage.removeItem('oculto:chunk-reload-at'); } catch (_) {}
+    markStep('chunks', 'done');
+
+    // 4) Versão publicada
+    markStep('version', 'active'); setStatus('Verificando versão publicada…', 'version');
+    var remoteVer = '';
+    try {
+      var versionUrl = new URL('/version.json', location.origin);
+      versionUrl.searchParams.set('t', String(Date.now()));
+      var previewToken = searchParams.get('__lovable_token');
+      if (previewToken) versionUrl.searchParams.set('__lovable_token', previewToken);
+      var r = await fetch(versionUrl.toString(), {
+        cache: 'no-store',
+        credentials: 'same-origin',
+        headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache' }
+      });
+      if (r.ok) {
+        var j = await r.json();
+        remoteVer = (j && j.version) || '';
+      }
+    } catch (e) {
+      appendLog({ t: Date.now(), phase: 'error', where: 'version.json', err: String(e) });
+    }
+    // CRÍTICO: registra a versão como "aceita" para o watcher do app
+    // não disparar um novo redirect para /update num loop.
+    try {
+      var acceptedVer = remoteVer || hintedVersion;
+      if (acceptedVer) {
+        localStorage.setItem('oculto:accepted-version', acceptedVer);
+        localStorage.setItem('oculto:accepted-version-at', String(Date.now()));
+        localStorage.removeItem('oculto:webapp-update-modal:pending');
+        localStorage.setItem('oculto:last-version-check', String(Date.now()));
+      }
+    } catch (_) {}
+    markStep('version', 'done');
+
+    // 5) Pronto para recarregar
+    markStep('reload', 'active');
+    var summary = 'Caches: ' + nCaches + ' • SW: ' + nSW + ' • sessão: ' + nPruned + (remoteVer ? ' • v=' + remoteVer : '');
+    setStatus(summary, 'summary');
+
+    try {
+      document.cookie = 'oculto_updated_at=' + Date.now() + '; Path=/; Max-Age=60; SameSite=Lax';
+    } catch (_) {}
+
+    clearTimeout(failsafe);
+    done = true;
+    appendLog({ t: Date.now(), phase: 'complete', reason: reason, version: remoteVer, nCaches: nCaches, nSW: nSW, nPruned: nPruned });
+
+    // Atualiza href dos botões com a versão correta
+    try {
+      var joiner = returnTo.indexOf('?') >= 0 ? '&' : '?';
+      var finalVersion = remoteVer || hintedVersion || '';
+      var okUrl = returnTo + joiner + '_u=ok&r=' + encodeURIComponent(reason) + '&_ucv=' + encodeURIComponent(finalVersion) + '&_uct=' + Date.now() + '&_reload=' + Date.now();
+      var forceUrl = returnTo + joiner + '_u=force&r=' + encodeURIComponent(reason) + '&_ucv=' + encodeURIComponent(finalVersion) + '&_uct=' + Date.now() + '&_reload=' + Date.now();
+      backBtn.href = okUrl;
+      manualBtn.href = forceUrl;
+      setTimeout(function () { location.replace(okUrl); }, 900);
+    } catch (_) {}
+
+    markStep('reload', 'done');
+    showFinalActions(true, summary);
+  }
+
+  run();
+})();
+</script>
+</body>
+</html>

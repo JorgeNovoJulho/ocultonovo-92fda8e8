@@ -1,0 +1,1 @@
+DROP POLICY "Users can insert own applications" ON public.creator_founder_applications;

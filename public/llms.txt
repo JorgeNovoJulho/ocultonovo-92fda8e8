@@ -1,0 +1,20 @@
+# OCULTO
+
+> Plataforma brasileira para casais liberais e criadores +18. Comunidade verificada, Modo Fantasma, chat criptografado e monetização para criadores adultos.
+
+OCULTO é um ecossistema social e de monetização voltado ao público adulto brasileiro. Conecta casais liberais, solteiros e criadores de conteúdo +18 em um ambiente com verificação de identidade, privacidade por design (Modo Fantasma), chat criptografado ponta-a-ponta e ferramentas de monetização como assinaturas VIP, PPV, leilões e eventos. A plataforma segue a LGPD e oferece planos Free, Premium e VIP.
+
+## Pages
+
+- [/](/): Página inicial — descubra a comunidade OCULTO, planos e como começar grátis.
+- [/denunciar](/denunciar): Canal oficial para denunciar conteúdo, perfis ou comportamentos que violem as regras da plataforma.
+- [/contestacao](/contestacao): Formulário para contestar decisões de moderação ou suspensões de conta.
+- [/legal/termos](/legal/termos): Termos de uso da plataforma OCULTO.
+- [/legal/privacidade](/legal/privacidade): Política de privacidade e tratamento de dados pessoais.
+- [/legal/lgpd](/legal/lgpd): Informações sobre conformidade com a Lei Geral de Proteção de Dados (LGPD).
+- [/legal/cookies](/legal/cookies): Política de cookies e tecnologias de rastreamento.
+- [/legal/conteudo](/legal/conteudo): Diretrizes e políticas de conteúdo +18 da plataforma.
+
+## Optional
+
+- [Sitemap](https://ocultoswing.com.br/sitemap.xml): Índice XML de todas as páginas públicas indexáveis.

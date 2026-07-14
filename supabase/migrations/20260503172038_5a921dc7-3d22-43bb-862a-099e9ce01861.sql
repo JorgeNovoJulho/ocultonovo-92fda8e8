@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS onboarding_intent TEXT CHECK (onboarding_intent IN ('creator','user'));

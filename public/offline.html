@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a0a0a" />
+  <title>Sem conexão — OCULTO</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; padding: 0; background: #0a0a0a; color: #e8e4dd; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; min-height: 100vh; }
+    body { display: flex; align-items: center; justify-content: center; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+    .wrap { max-width: 420px; width: 100%; padding: 32px 24px; text-align: center; }
+    .logo { font-size: 36px; font-weight: 700; letter-spacing: 6px; color: #c9a84c; margin-bottom: 32px; }
+    h1 { font-size: 22px; font-weight: 600; margin: 0 0 12px; }
+    p { font-size: 15px; line-height: 1.5; color: #9a958a; margin: 0 0 28px; }
+    .btn { display: inline-block; padding: 14px 28px; background: #c9a84c; color: #0a0a0a; border: 0; border-radius: 12px; font-weight: 600; font-size: 15px; cursor: pointer; text-decoration: none; min-width: 200px; }
+    .btn:hover { background: #d4b85e; }
+    .btn.secondary { background: transparent; color: #c9a84c; border: 1px solid #3a342a; margin-top: 12px; }
+    .icon { width: 64px; height: 64px; margin: 0 auto 20px; border: 2px solid #3a342a; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+    .icon svg { width: 32px; height: 32px; stroke: #c9a84c; fill: none; stroke-width: 2; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo">OCULTO</div>
+    <div class="icon">
+      <svg viewBox="0 0 24 24"><path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0119 12.55M5 12.55a10.94 10.94 0 015.17-2.39M10.71 5.05A16 16 0 0122.58 9M1.42 9a15.91 15.91 0 014.7-2.88M8.53 16.11a6 6 0 016.95 0M12 20h.01"/></svg>
+    </div>
+    <h1>Você está sem conexão</h1>
+    <p>Algumas funções do OCULTO precisam de internet. Verifique seu Wi-Fi ou dados móveis e tente novamente.</p>
+    <button class="btn" onclick="location.reload()">Tentar novamente</button>
+    <br />
+    <a class="btn secondary" href="/">Voltar ao início</a>
+  </div>
+  <script>
+    // Auto-reload assim que a conexão voltar
+    window.addEventListener('online', function () { location.reload(); });
+  </script>
+</body>
+</html>

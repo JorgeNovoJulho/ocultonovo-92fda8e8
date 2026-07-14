@@ -1,0 +1,6 @@
+-- Cópia do SQL aplicado no Supabase externo (Etapa 23).
+-- Consulte o chat para a versão completa colada no SQL Editor.
+-- Tabelas: oculto_play_playlists, oculto_play_playlist_items
+-- RPCs: oculto_play_admin_playlist_upsert / _delete / _add_item / _remove_item / _reorder
+--       oculto_play_playlist_get (público)
+-- Idempotente.

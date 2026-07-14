@@ -1,0 +1,1644 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RESET UNIVERSAL DE SCROLL — Chrome Desktop + Android Chrome + iOS Safari
+   REGRA ABSOLUTA: html e body SEM overflow declarado.
+   O scroll é 100% do Window nativo. Nenhuma propriedade CSS intercepta wheel.
+══════════════════════════════════════════════════════════════════════════ */
+
+/* Neutraliza overflow:hidden injetado pelo Radix após fechar modal */
+body[data-radix-pointer-events-lock],
+body[data-scroll-locked],
+body[style*="pointer-events: none"],
+body[style*="overflow: hidden"] {
+  pointer-events: auto !important;
+}
+
+/* Remove backdrop-blur em mobile para fluidez em hardware fraco (C55) */
+@media (max-width: 480px) {
+  [class*="backdrop-blur"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  
+  /* Navbar fixa: pointer-events apenas nos elementos interativos */
+  nav.fixed, header.fixed {
+    pointer-events: none !important;
+  }
+  nav.fixed > *, header.fixed > * {
+    pointer-events: auto !important;
+  }
+}
+
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --card-glass: 0 0% 96% / 0.8;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 330 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 270 70% 59%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 330 100% 50%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 330 100% 50%;
+    --radius: 0.75rem;
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    --gold: 45 93% 47%;
+    --gold-foreground: 0 0% 10%;
+    --publish: 210 100% 55%;
+    --publish-foreground: 0 0% 100%;
+    --publish-border: 210 100% 65%;
+    --publish-glow: 200 100% 60%;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 330 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 330 100% 50%;
+  }
+
+  .dark {
+    /* Background base — nunca preto puro, sempre um cinza-azulado profundo
+       para preservar contraste com cards/popovers/sidebar */
+    --background: 240 10% 9%;
+    --foreground: 0 0% 98%;
+
+    /* Card: superfície primária acima do background (~+4% lightness) */
+    --card: 240 8% 13%;
+    --card-glass: 240 8% 15% / 0.85;
+    --card-foreground: 0 0% 98%;
+
+    /* Popover: surface elevada, distinta do card (~+2%) */
+    --popover: 240 8% 15%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 330 100% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 270 70% 62%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Muted: chips, badges secundários, hover de tabs */
+    --muted: 240 6% 20%;
+    --muted-foreground: 240 5% 72%;
+
+    --accent: 240 6% 22%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 70% 48%;
+    --destructive-foreground: 0 0% 98%;
+
+    /* Borders + inputs com contraste suficiente para serem visíveis */
+    --border: 240 6% 26%;
+    --input: 240 6% 22%;
+    --ring: 330 100% 55%;
+
+    /* Sidebar — base ligeiramente mais escura que o background */
+    --sidebar-background: 240 10% 7%;
+    --sidebar-foreground: 0 0% 96%;
+    --sidebar-primary: 330 100% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 6% 18%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 240 6% 22%;
+    --sidebar-ring: 330 100% 55%;
+
+    --success: 142 70% 45%;
+    --success-foreground: 0 0% 100%;
+    --gold: 45 93% 58%;
+    --gold-foreground: 0 0% 10%;
+    --publish: 210 100% 50%;
+    --publish-foreground: 0 0% 100%;
+    --publish-border: 210 100% 60%;
+    --publish-glow: 200 100% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     RESET DE SCROLL UNIVERSAL — Chrome Desktop + Android Chrome + iOS Safari
+     
+     PRINCÍPIO: Nenhum overflow em html/body. Zero. O scroll é 100% do Window.
+     O corte de overflow-x horizontal é feito por max-width, não por overflow.
+     
+     POR QUÊ:
+     - overflow:hidden → bloqueia wheel events no Chrome Desktop
+     - overflow:clip   → bloqueia wheel events no Chrome Desktop (mesma causa)  
+     - overflow:auto   → cria scroll container interno, desvincula do Window
+     A ÚNICA solução é: html e body sem overflow algum.
+  ═══════════════════════════════════════════════════════════════════════ */
+
+  html {
+    /* NÃO forçamos .dark aqui — a classe é controlada pelo useTheme/index.html.
+       Forçar @apply dark quebra a alternância Sun/Moon. */
+    /* SEM overflow declarado — o browser usa o default (visible) */
+    /* O scroll é do Window (document.documentElement), não de um container */
+    height: auto !important;
+    min-height: 100% !important;
+    position: static !important;
+    -webkit-text-size-adjust: 100%;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', sans-serif;
+    /* SEM overflow — body expande naturalmente, Window gerencia o scroll */
+    height: auto !important;
+    min-height: 100dvh !important;
+    position: static !important;
+    /* Corte lateral visual via max-width, não overflow */
+    max-width: 100vw !important;
+    /* iOS momentum scroll nativo */
+    -webkit-overflow-scrolling: touch;
+    /* Garante eventos de pointer/touch chegam ao body */
+    pointer-events: auto !important;
+  }
+
+  /* #root: expande naturalmente sem criar scroll container */
+  #root {
+    min-height: 100dvh !important;
+    /* visible = não cria scroll container, não captura wheel events */
+    overflow: visible !important;
+    height: auto !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    display: block !important;
+  }
+
+  /* main: fluxo natural, sem overflow que crie container */
+  main {
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+    width: 100% !important;
+  }
+}
+
+@layer utilities {
+  /* Hidden scrollbar utility — apenas para elementos com overflow próprio */
+  .scrollbar-hide {
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+  }
+
+  /* Carrosséis do feed: o wildcard `.feed-post-item *` força pan-y para o
+     feed vertical; esta classe reabre o gesto horizontal para todos os filhos
+     do scroller, evitando travas quando o toque começa sobre imagem/botão. */
+  .feed-horizontal-scroll,
+  .feed-horizontal-scroll * {
+    touch-action: pan-x pan-y pinch-zoom !important;
+  }
+
+  .feed-horizontal-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scroll-behavior: auto;
+    user-select: none;
+  }
+
+  .feed-horizontal-scroll[data-dragging-scroll="true"] {
+    cursor: grabbing !important;
+  }
+
+  .feed-horizontal-scroll[data-dragging-scroll="true"] * {
+    cursor: grabbing !important;
+  }
+
+  .oculto-play-marquee {
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    position: relative;
+    mask-image: linear-gradient(90deg, transparent 0, #000 8px, #000 calc(100% - 8px), transparent 100%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 8px, #000 calc(100% - 8px), transparent 100%);
+  }
+
+  .oculto-play-marquee-track {
+    display: inline-flex !important;
+    min-width: 200%;
+    gap: 0;
+    will-change: transform;
+  }
+
+  .oculto-play-marquee-track--playing {
+    animation: oculto-play-marquee 14s linear infinite !important;
+    animation-play-state: running !important;
+  }
+
+  .oculto-play-marquee-track > span {
+    flex: 0 0 auto;
+    min-width: 100%;
+  }
+
+  @keyframes oculto-play-marquee {
+    0%   { transform: translate3d(0,0,0); }
+    100% { transform: translate3d(-50%,0,0); }
+  }
+
+  /* Em reduced-motion a animação ainda funciona, apenas mais devagar. */
+  @media (prefers-reduced-motion: reduce) {
+    .oculto-play-marquee-track--playing {
+      animation-duration: 18s !important;
+      animation-iteration-count: infinite !important;
+      animation-play-state: running !important;
+    }
+  }
+
+  /* Scroll invisível para o modal expandido do Play */
+  .oculto-play-focus-scroll {
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
+  }
+  .oculto-play-focus-scroll::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+  }
+
+
+  .chat-history-scroll [data-orientation],
+  .chat-history-scroll [data-radix-scroll-area-scrollbar],
+  .chat-history-scroll [data-radix-scroll-area-thumb],
+  .chat-history-scroll [data-radix-scroll-area-corner] {
+    display: none !important;
+    opacity: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+    pointer-events: none !important;
+  }
+  
+  /* Sidebars: scroll interno oculto sem afetar o body */
+  aside {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  aside::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  /* ═══ FEED CONTENT WRAPPER ═══ */
+  .feed-content-wrapper {
+    display: block !important;
+    height: auto !important;
+    min-height: 100dvh !important;
+    width: 100% !important;
+    position: relative !important;
+    overflow: visible !important;
+  }
+
+  /* ═══ FEED COLUNA CENTRAL ═══ */
+  .feed-coluna-central {
+    width: 100% !important;
+    display: block !important;
+    height: auto !important;
+    min-height: 100dvh !important;
+    overflow: visible !important;
+    /* touch-action removido — não interfere mais com wheel do mouse no desktop */
+  }
+
+  .gradient-border {
+    position: relative;
+    background: hsl(var(--card));
+  }
+  
+  .gradient-border::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, hsl(330 100% 50% / 0.5), hsl(270 70% 59% / 0.3), transparent);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .glow-primary {
+    box-shadow: 0 0 20px hsl(330 100% 50% / 0.3), 0 0 40px hsl(330 100% 50% / 0.1);
+  }
+
+  .glow-text {
+    text-shadow: 0 0 20px hsl(330 100% 50% / 0.5);
+  }
+
+  /* Glow de texto mais intenso para títulos */
+  .glow-text-intense {
+    text-shadow: 
+      0 0 10px rgba(255, 0, 127, 0.3),
+      0 0 30px rgba(255, 0, 127, 0.2),
+      0 0 60px rgba(255, 0, 127, 0.1);
+  }
+
+  /* Animação de gradiente para elementos */
+  @keyframes gradient-shift {
+    0%, 100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+
+  .animate-gradient-shift {
+    background-size: 200% 200%;
+    animation: gradient-shift 3s ease infinite;
+  }
+
+  .blur-paywall {
+    filter: blur(12px);
+    user-select: none;
+    pointer-events: none;
+  }
+
+  /* Paid content blur - allows silhouette preview.
+     Variáveis controlam intensidade por tipo de mídia (texto / imagem / vídeo).
+     Defaults = "auto" (medium tier). data-paywall-blur sobrescreve, e tier ajusta. */
+  .blur-paywall-paid {
+    --paywall-blur-img: 14px;
+    --paywall-blur-video: 16px;
+    --paywall-blur-text: 6px;
+    --paywall-blur-opacity: 1;
+    --paywall-blur-saturate: 1.05;
+    filter: blur(var(--paywall-blur-img)) saturate(var(--paywall-blur-saturate));
+    opacity: var(--paywall-blur-opacity);
+    user-select: none;
+    pointer-events: none;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    will-change: filter;
+    transition: filter 0.4s ease-out, opacity 0.3s ease-out;
+  }
+  /* Por tipo: imagens / vídeos / texto recebem blur calibrado */
+  .blur-paywall-paid img,
+  .blur-paywall-paid picture {
+    filter: blur(var(--paywall-blur-img)) saturate(var(--paywall-blur-saturate));
+  }
+  .blur-paywall-paid video {
+    filter: blur(var(--paywall-blur-video)) saturate(var(--paywall-blur-saturate));
+  }
+  .blur-paywall-paid p,
+  .blur-paywall-paid span,
+  .blur-paywall-paid h1,
+  .blur-paywall-paid h2,
+  .blur-paywall-paid h3,
+  .blur-paywall-paid h4 {
+    filter: blur(var(--paywall-blur-text));
+    opacity: calc(var(--paywall-blur-opacity) * 0.95);
+  }
+
+  /* === Adaptação automática por hardware tier === */
+  html[data-paywall-blur="auto"][data-perf-tier="high"] .blur-paywall-paid,
+  html:not([data-paywall-blur]) [data-perf-tier="high"] .blur-paywall-paid {
+    --paywall-blur-img: 18px;
+    --paywall-blur-video: 20px;
+    --paywall-blur-text: 8px;
+    --paywall-blur-saturate: 1.1;
+  }
+  html[data-paywall-blur="auto"][data-perf-tier="low"] .blur-paywall-paid,
+  .perf-no-animations .blur-paywall-paid {
+    --paywall-blur-img: 8px;
+    --paywall-blur-video: 10px;
+    --paywall-blur-text: 4px;
+    --paywall-blur-opacity: 0.92;
+    --paywall-blur-saturate: 1;
+  }
+  html[data-data-saver="true"] .blur-paywall-paid {
+    --paywall-blur-img: 6px;
+    --paywall-blur-video: 8px;
+    --paywall-blur-text: 3px;
+    --paywall-blur-opacity: 0.92;
+  }
+
+  /* === Override por intensidade escolhida pelo criador ===
+     !important para vencer especificidade dos seletores de tier de hardware. */
+  .blur-paywall-paid.blur-paywall-light {
+    --paywall-blur-img: 10px !important;
+    --paywall-blur-video: 12px !important;
+    --paywall-blur-text: 4px !important;
+    --paywall-blur-opacity: 1 !important;
+    --paywall-blur-saturate: 1.05 !important;
+  }
+  .blur-paywall-paid.blur-paywall-medium {
+    --paywall-blur-img: 28px !important;
+    --paywall-blur-video: 32px !important;
+    --paywall-blur-text: 10px !important;
+    --paywall-blur-opacity: 0.85 !important;
+    --paywall-blur-saturate: 1.1 !important;
+  }
+  /* Forte = quase invisível: blur extremo + forte redução de opacidade + dessaturação */
+  .blur-paywall-paid.blur-paywall-strong {
+    --paywall-blur-img: 140px !important;
+    --paywall-blur-video: 150px !important;
+    --paywall-blur-text: 48px !important;
+    --paywall-blur-opacity: 0.22 !important;
+    --paywall-blur-saturate: 0.4 !important;
+  }
+  .blur-paywall-paid.blur-paywall-strong img,
+  .blur-paywall-paid.blur-paywall-strong picture,
+  .blur-paywall-paid.blur-paywall-strong video {
+    transform: scale(1.35);
+    filter: blur(var(--paywall-blur-img)) saturate(var(--paywall-blur-saturate)) brightness(0.32) contrast(0.85) !important;
+  }
+
+  /* === Override manual via configurações do usuário === */
+  html[data-paywall-blur="low"] .blur-paywall-paid {
+    --paywall-blur-img: 6px;
+    --paywall-blur-video: 8px;
+    --paywall-blur-text: 3px;
+    --paywall-blur-opacity: 0.95;
+    --paywall-blur-saturate: 1;
+  }
+  html[data-paywall-blur="medium"] .blur-paywall-paid {
+    --paywall-blur-img: 12px;
+    --paywall-blur-video: 14px;
+    --paywall-blur-text: 5px;
+    --paywall-blur-opacity: 1;
+    --paywall-blur-saturate: 1.05;
+  }
+  html[data-paywall-blur="high"] .blur-paywall-paid {
+    --paywall-blur-img: 22px;
+    --paywall-blur-video: 24px;
+    --paywall-blur-text: 10px;
+    --paywall-blur-opacity: 1;
+    --paywall-blur-saturate: 1.15;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .blur-paywall-paid { transition: none; }
+  }
+
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Subtle pulse animation for verified couples */
+  @keyframes pulse-subtle {
+    0%, 100% {
+      opacity: 1;
+      box-shadow: 0 0 15px rgba(255, 0, 127, 0.3);
+    }
+    50% {
+      opacity: 0.95;
+      box-shadow: 0 0 25px rgba(255, 0, 127, 0.5);
+    }
+  }
+
+  .animate-pulse-subtle {
+    animation: pulse-subtle 3s ease-in-out infinite;
+  }
+
+  /* Glow amarelo pulsante para texto CURIOSO */
+  @keyframes glow-yellow-pulse {
+    0%, 100% {
+      text-shadow: 0 0 5px rgba(250, 204, 21, 0.5), 
+                   0 0 10px rgba(250, 204, 21, 0.3);
+    }
+    50% {
+      text-shadow: 0 0 15px rgba(250, 204, 21, 0.8), 
+                   0 0 25px rgba(250, 204, 21, 0.5),
+                   0 0 35px rgba(250, 204, 21, 0.3);
+    }
+  }
+
+  .glow-yellow-pulse {
+    animation: glow-yellow-pulse 2s ease-in-out infinite;
+  }
+
+  /* Floating particles animation */
+  @keyframes float {
+    0%, 100% { 
+      transform: translateY(0) translateX(0); 
+      opacity: 0.3; 
+    }
+    25% { 
+      transform: translateY(-20px) translateX(10px); 
+      opacity: 0.6; 
+    }
+    50% { 
+      transform: translateY(-10px) translateX(-5px); 
+      opacity: 0.4; 
+    }
+    75% { 
+      transform: translateY(-30px) translateX(5px); 
+      opacity: 0.5; 
+    }
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  /* Slow ping for radar effect */
+  @keyframes ping-slow {
+    0% { 
+      transform: scale(1); 
+      opacity: 0.5; 
+    }
+    100% { 
+      transform: scale(2); 
+      opacity: 0; 
+    }
+  }
+
+  .animate-ping-slow {
+    animation: ping-slow 3s ease-out infinite;
+  }
+
+  /* Shimmer effect for buttons */
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 3s ease-in-out infinite;
+  }
+
+  /* Fade in animation — sem translateY (GPU cost) para hardware fraco */
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.15s ease-out forwards;
+  }
+
+  /* Dispositivos lentos: sem animação, conteúdo visível instantaneamente */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-fade-in {
+      animation: none !important;
+      opacity: 1 !important;
+    }
+  }
+
+  /* Bounce subtle */
+  @keyframes bounce-subtle {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+  }
+
+  .animate-bounce-subtle {
+    animation: bounce-subtle 2s ease-in-out infinite;
+  }
+
+  /* Glow pulse pink for hero elements */
+  @keyframes glow-pulse-pink {
+    0%, 100% { 
+      box-shadow: 0 0 30px rgba(255, 0, 127, 0.4), 0 0 60px rgba(255, 0, 127, 0.2); 
+    }
+    50% { 
+      box-shadow: 0 0 50px rgba(255, 0, 127, 0.6), 0 0 100px rgba(255, 0, 127, 0.3); 
+    }
+  }
+
+  .animate-glow-pulse-pink {
+    animation: glow-pulse-pink 3s ease-in-out infinite;
+  }
+
+  /* Beat pulse for spy button */
+  @keyframes beat-pulse {
+    0%, 100% { transform: scale(1); }
+    25% { transform: scale(1.02); }
+    50% { transform: scale(0.98); }
+    75% { transform: scale(1.01); }
+  }
+
+  .animate-beat-pulse {
+    animation: beat-pulse 2s ease-in-out infinite;
+  }
+
+  /* Star twinkle animation */
+  @keyframes star-twinkle {
+    0%, 100% { opacity: 0.4; transform: scale(0.95); }
+    50% { opacity: 1; transform: scale(1.05); }
+  }
+
+  .animate-star-twinkle {
+    animation: star-twinkle 3s ease-in-out infinite;
+  }
+
+  /* Neon pulse for Espiar button - ULTRA INTENSE */
+  @keyframes neon-pulse {
+    0%, 100% { 
+      box-shadow: 0 0 30px rgba(255,0,127,0.5), 0 0 60px rgba(255,0,127,0.3), 0 0 100px rgba(255,0,127,0.15);
+      border-color: rgba(255,0,127,0.7);
+    }
+    50% { 
+      box-shadow: 0 0 50px rgba(255,0,127,0.8), 0 0 100px rgba(255,0,127,0.5), 0 0 150px rgba(255,0,127,0.3);
+      border-color: rgba(255,0,127,1);
+    }
+  }
+
+  .animate-neon-pulse {
+    animation: neon-pulse 1.2s ease-in-out infinite;
+  }
+
+  /* Title glow animation - ULTRA VIBRANT */
+  @keyframes title-glow-pulse {
+    0%, 100% { 
+      filter: drop-shadow(0 0 30px rgba(255,0,127,0.6)) drop-shadow(0 0 60px rgba(255,0,127,0.4));
+    }
+    50% { 
+      filter: drop-shadow(0 0 50px rgba(255,0,127,0.9)) drop-shadow(0 0 100px rgba(255,0,127,0.6));
+    }
+  }
+
+  .animate-title-glow {
+    animation: title-glow-pulse 2.5s ease-in-out infinite;
+  }
+}
+
+/* ==================== PERFORMANCE MODE TOKENS ==================== */
+/* Applied via PerformanceContext on <html> element */
+
+.perf-no-animations,
+.perf-no-animations * {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+}
+
+/* ── Acessibilidade global: respeita prefers-reduced-motion do SO ──
+   Aplica-se em TODO o app sem necessidade de tocar componentes.
+   Mantém transformações instantâneas (sem latência), mas zera duração. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0s !important;
+    transition-duration: 0.001ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* O letreiro do player precisa continuar andando mesmo em modo econômico/reduced-motion. */
+.perf-no-animations .oculto-play-marquee-track,
+.oculto-play-marquee .oculto-play-marquee-track {
+  animation-name: oculto-play-marquee !important;
+  animation-duration: 14s !important;
+  animation-timing-function: linear !important;
+  animation-iteration-count: infinite !important;
+  animation-play-state: running !important;
+}
+
+.perf-no-shadows,
+.perf-no-shadows * {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Low-end: replace gradient borders with solid borders */
+.perf-no-shadows .gradient-border::before {
+  display: none !important;
+}
+
+.perf-no-shadows .gradient-border {
+  border: 1px solid hsl(var(--border)) !important;
+}
+
+/* Low-end: disable glow effects */
+.perf-no-shadows .glow-primary,
+.perf-no-shadows .glow-text,
+.perf-no-shadows .glow-text-intense {
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+/* Low-end: simplify bg-gradients to solid */
+.perf-no-animations .animate-gradient-shift {
+  animation: none !important;
+  background-size: 100% 100% !important;
+}
+
+/* VIP Avatar Border Animation - CSS puro, sem GPU */
+@keyframes vip-border-rotate {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes online-neon-pulse-kf {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(57,255,20,0.65), 0 0 20px rgba(57,255,20,0.35);
+    border-color: #39ff14;
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(57,255,20,0.95), 0 0 32px rgba(57,255,20,0.55);
+    border-color: #7dff5a;
+  }
+}
+.online-neon-pulse {
+  animation: online-neon-pulse-kf 2.2s ease-in-out infinite;
+}
+
+
+/* ==================== ANTI-WHITE-SCREEN & MOBILE GUARDS ==================== */
+
+/* Force bg-background on all page roots to prevent white flash */
+/* ATENÇÃO: overflow-x REMOVIDO daqui — está agora no @layer base acima.
+   Duplicar overflow:hidden em #root cria scroll container isolado no Android. */
+#root {
+  background-color: hsl(var(--background));
+  /* overflow já definido no @layer base — não redefinir aqui */
+}
+
+/* html e body: apenas overscroll-behavior aqui (overflow NÃO declarado — deixa browser default) */
+html, body {
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: contain;
+}
+
+/* Image lazy load: prevent layout shift — sem content-visibility (bloqueia toque no Android) */
+img {
+  /* content-visibility: auto removido — causa freeze de toque no Chrome <100 / Realme C55 */
+  max-width: 100%;
+}
+
+/* Imagens lazy: sem opacity:0 inicial — em hardware lento a transição nunca
+   completa e o conteúdo fica invisível ("tela preta") */
+img[loading="lazy"] {
+  opacity: 1;
+}
+
+/* Feed items: GPU isolation SEM bloquear scroll em Android baixo recurso */
+/* content-visibility:auto foi removido — causava freeze de eventos de toque no Realme C55 */
+.feed-post-item {
+  /* contain:style|paint sem layout — layout cria contexto isolado que bloqueia scroll */
+  contain: style paint;
+  /* Sem content-visibility para garantir compatibilidade com Android WebView/Chrome <100 */
+  position: relative;
+}
+
+/* Touch-action explícito para garantir scroll vertical livre em qualquer elemento */
+.feed-post-item,
+.feed-post-item * {
+  /* Nunca bloquear o scroll com touch-action:none — apenas vídeo usa pan-x */
+  touch-action: pan-y pinch-zoom;
+}
+
+.newcomers-highlight-surface {
+  border-color: hsl(var(--border) / 0.7);
+  background:
+    radial-gradient(circle at top left, hsl(var(--primary) / 0.18), transparent 42%),
+    linear-gradient(135deg, hsl(var(--background)), hsl(var(--primary) / 0.08) 48%, hsl(var(--secondary) / 0.06));
+}
+
+.dark .discovery-card-shell {
+  background: hsl(0 0% 100%);
+  color: hsl(240 10% 3.9%);
+}
+
+html:not(.dark) .discovery-card-shell {
+  background: hsl(240 10% 8%);
+  color: hsl(0 0% 98%);
+}
+
+.dark .discovery-card-media {
+  background: hsl(240 6% 96%);
+}
+
+html:not(.dark) .discovery-card-media {
+  background: hsl(240 10% 10%);
+}
+
+.dark .discovery-card-actions {
+  border-color: hsl(240 6% 85%);
+  background: linear-gradient(180deg, hsl(0 0% 100%), hsl(240 6% 94%));
+}
+
+html:not(.dark) .discovery-card-actions {
+  border-color: hsl(240 6% 22%);
+  background: linear-gradient(180deg, hsl(240 10% 8%), hsl(240 8% 12%));
+}
+
+.dark .discovery-card-btn-muted {
+  color: hsl(240 6% 35%);
+}
+
+.dark .discovery-card-btn-muted:hover {
+  background: hsl(240 6% 93%);
+  color: hsl(240 10% 6%);
+}
+
+html:not(.dark) .discovery-card-btn-muted {
+  color: hsl(240 5% 72%);
+}
+
+html:not(.dark) .discovery-card-btn-muted:hover {
+  background: hsl(240 6% 18%);
+  color: hsl(0 0% 100%);
+}
+
+.dark .discovery-card-btn-muted-active {
+  background: hsl(240 10% 8%);
+  color: hsl(0 0% 100%);
+}
+
+html:not(.dark) .discovery-card-btn-muted-active {
+  background: hsl(240 6% 94%);
+  color: hsl(240 10% 6%);
+}
+
+.dark .discovery-card-btn-gift {
+  color: hsl(45 93% 32%);
+}
+
+.dark .discovery-card-btn-gift:hover {
+  background: hsl(45 93% 92%);
+  color: hsl(38 92% 24%);
+}
+
+html:not(.dark) .discovery-card-btn-gift {
+  color: hsl(45 93% 58%);
+}
+
+html:not(.dark) .discovery-card-btn-gift:hover {
+  background: hsl(45 93% 47% / 0.12);
+  color: hsl(45 93% 66%);
+}
+
+.discovery-suggestions-scroll {
+  -webkit-overflow-scrolling: touch;
+  /* Permite pan horizontal E vertical (mesmo padrão dos demais carrosséis).
+     pan-x sozinho cancela qualquer gesto com componente vertical, travando o
+     swipe em mobile. */
+  touch-action: pan-x pan-y;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-behavior: auto;
+  contain: paint style;
+  will-change: scroll-position;
+  transform: translateZ(0);
+  padding-inline-end: 0.75rem;
+}
+
+/* NÃO restringir touch-action dos filhos — deixar herdar do scroller.
+   Restrições nos filhos quebravam o gesto em Android quando o toque iniciava
+   sobre a foto/avatar do card. */
+.discovery-suggestions-scroll > * {
+  scroll-snap-align: start;
+  /* scroll-snap-stop: always travava o usuário em cada card e impedia
+     swipes longos com inércia. Removido para casar com VipCreators/Hidden. */
+}
+
+.discovery-suggestions-scroll [data-discovery-action="true"] {
+  touch-action: manipulation;
+}
+
+.discovery-suggestion-slot {
+  contain: paint style;
+  transform: translateZ(0);
+}
+
+/* Vídeo: permite scroll vertical mesmo com o dedo sobre o player */
+video {
+  touch-action: pan-y;
+  display: block;
+  /* contain:layout pode bloquear scroll — usar apenas paint */
+  contain: paint;
+}
+
+audio {
+  display: block;
+}
+
+
+/* Suspense page fallback — bg matches app, no white */
+.page-loading-shell {
+  min-height: 100dvh;
+  background-color: hsl(var(--background));
+}
+
+/* Prevent text size adjust on orientation change (iOS) */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* GPU composite layer for heavy animated elements */
+.will-animate {
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* Remove on low-perf */
+.perf-no-animations .will-animate {
+  will-change: auto;
+  transform: none;
+}
+
+/* Scroll preservation across SPA navigation */
+/* scroll-behavior: smooth REMOVIDO — cria lag de 300ms+ em CPU fraca (Realme C55) */
+.scroll-preserve {
+  -webkit-overflow-scrolling: touch;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+/* Media player stability */
+.media-player-container {
+  position: relative;
+  contain: layout style;
+  isolation: isolate;
+}
+
+/* Safe bottom padding for mobile navbar */
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 80px);
+}
+
+/* Perfect Pair neon glow pulse */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* Super Like blue neon pulse */
+@keyframes pulse-glow-blue {
+  0%, 100% { box-shadow: 0 0 15px hsl(210 100% 60% / 0.3); }
+  50% { box-shadow: 0 0 25px hsl(210 100% 60% / 0.6); }
+}
+
+/* ==================== MODAL & DIALOG INSTANT PERFORMANCE ==================== */
+
+/* Radix Dialog/Sheet/Popover — GPU-accelerated, instant render */
+[data-radix-dialog-overlay],
+[data-radix-alert-dialog-overlay] {
+  will-change: opacity;
+  /* contain:strict removido — inclui 'size' que bloqueia toque e scroll no Android */
+}
+
+[data-radix-dialog-content],
+[data-radix-alert-dialog-content],
+[data-radix-popover-content],
+[data-radix-dropdown-menu-content],
+[data-radix-select-content],
+[data-radix-sheet-content] {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  /* Garante scroll interno nos modais */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Faster Radix UI animation durations (override defaults) */
+[data-state="open"] {
+  animation-duration: 120ms !important;
+}
+
+[data-state="closed"] {
+  animation-duration: 100ms !important;
+}
+
+/* Modal dialog — NÃO usar contain:layout pois isola scroll interno */
+[role="dialog"] {
+  /* contain: layout style removido — bloqueia scroll interno em Android */
+}
+
+/* Skeleton shimmer — optimized for GPU */
+@keyframes skeleton-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-fast {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 25%,
+    hsl(var(--muted-foreground) / 0.1) 50%,
+    hsl(var(--muted)) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1s linear infinite;
+  will-change: background-position;
+}
+
+/* Dropdown menus — Radix calculates transform for positioning, do NOT override it */
+[data-radix-popper-content-wrapper] {
+  will-change: auto;
+}
+
+/* Admin panel table rows — contain paint for large tables */
+.admin-table-row {
+  contain: style paint;
+}
+
+/* Disable heavy transition on low-perf */
+.perf-no-animations [data-state="open"],
+.perf-no-animations [data-state="closed"] {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   REGRAS FINAIS — Blindagem contra scroll-lock de modais
+   O scroll do body é livre por padrão. Os modais não podem
+   reinjetar overflow:hidden no body sem mecanismo de liberação.
+   ═══════════════════════════════════════════════════════════ */
+
+/* Quando Radix injeta scroll-lock: neutraliza SEM quebrar o modal */
+body[data-scroll-locked],
+body[data-radix-scroll-lock],
+body[data-radix-pointer-events-lock] {
+  /* Mantém pointer-events ativos para que o overlay do modal receba cliques */
+  pointer-events: auto !important;
+  /* NÃO forçar overflow aqui — Radix precisa controlar isso durante o modal */
+}
+
+/* Touch targets mínimos — apenas em mobile, sem quebrar componentes com tamanho explícito */
+@media (max-width: 768px) {
+  button:not([class*="h-"]):not([class*="size-"]):not(.btn-compact):not([class*="p-0"]),
+  a:not([class*="h-"]):not([class*="size-"]):not(.btn-compact) {
+    min-height: 44px;
+  }
+}
+
+/* Conteúdo do modal: scroll interno quando mais alto que viewport */
+[data-radix-dialog-content],
+[data-radix-alert-dialog-content],
+.modal-content {
+  height: auto !important;
+  max-height: 90dvh;
+  overflow-y: auto;
+  pointer-events: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   PERFORMANCE PATCH — Realme C55 / dispositivos de entrada
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Imagens quebradas — placeholder sem colapso de layout ───────────── */
+img[data-fallback-applied] {
+  object-fit: contain !important;
+  opacity: 0.2 !important;
+  background-color: hsl(var(--muted) / 0.4);
+}
+
+/* ── GPU: promoção de layer apenas para spinners e modais ────────────── */
+.animate-spin {
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* ── Layout containment no feed — evita repaints durante scroll ──────── */
+.feed-coluna-central > * {
+  contain: layout style;
+}
+
+/* ── Tabelas admin → cards empilhados no mobile (sem scroll horizontal) ─ */
+@media (max-width: 768px) {
+  .table-mobile-cards {
+    display: block !important;
+    overflow-x: hidden !important;
+  }
+  .table-mobile-cards thead {
+    display: none !important;
+  }
+  .table-mobile-cards tbody,
+  .table-mobile-cards tr {
+    display: block !important;
+    width: 100% !important;
+  }
+  .table-mobile-cards td {
+    display: flex !important;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem !important;
+    border-bottom: 1px solid hsl(var(--border) / 0.3);
+  }
+}
+
+/* ── Toque: feedback tátil imediato — sem lag visual ────────────────── */
+button:active,
+[role="button"]:active {
+  transform: scale(0.97);
+  transition: transform 60ms ease-out;
+}
+
+/* ── Chat: input sobe quando teclado abre (env keyboard inset) ──────── */
+@supports (height: 100dvh) {
+  .chat-input-area {
+    padding-bottom: env(keyboard-inset-height, 0px);
+    transition: padding-bottom 180ms ease;
+  }
+}
+
+/* ── Feed Performance: contain + GPU-free items ──────────────────────── */
+.feed-post-item {
+  contain: content;
+  will-change: auto;
+}
+
+/* Remove sombras pesadas e filtros em mobile fraco */
+@media (max-width: 480px) {
+  .feed-post-item [class*="shadow-lg"],
+  .feed-post-item [class*="shadow-xl"] {
+    box-shadow: none !important;
+  }
+  .feed-post-item [class*="filter"],
+  .feed-post-item [class*="blur"] {
+    filter: none !important;
+  }
+}
+
+/* ── Modal Performance: lightweight enter on low-end devices ─────────── */
+@media (max-width: 480px) {
+  [data-state="open"][role="dialog"] {
+    animation-duration: 150ms !important;
+    contain: layout style paint;
+  }
+  [data-state="closed"][role="dialog"] {
+    animation-duration: 100ms !important;
+  }
+  /* Reduce overlay complexity on mobile */
+  [data-state="open"][data-radix-dialog-overlay],
+  [data-state="open"][data-vaul-overlay] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* ── Skeleton: ultra-light pulse for RLS loading states ──────────────── */
+.perf-no-animations .animate-pulse {
+  animation: none !important;
+  opacity: 0.5;
+}
+
+/* ── Carousel: GPU-free horizontal scroll ────────────────────────────── */
+.scrollbar-hide {
+  contain: layout style;
+}
+
+/* ── Touch Response: ensure <100ms tactile feedback ──────────────────── */
+@media (pointer: coarse) {
+  button, [role="button"], a {
+    touch-action: manipulation;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ADMIN PANEL — Responsividade global + scrollbars invisíveis + perf low-end
+   Aplica-se a todo conteúdo dentro do AdminLayout (<main>) e a qualquer
+   modal/sheet aberto a partir do admin. Não toca o app público.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* 1. Scrollbars invisíveis em TODOS os modais/sheets/scroll-areas do admin */
+.admin-modal,
+.admin-modal *,
+[data-admin-scope],
+[data-admin-scope] * {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+.admin-modal *::-webkit-scrollbar,
+[data-admin-scope] *::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+/* 2. Garante que páginas legadas do admin não estourem viewport em mobile */
+[data-admin-scope] {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+[data-admin-scope] table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+[data-admin-scope] img,
+[data-admin-scope] video,
+[data-admin-scope] canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+/* 3. Padding fluido para containers de página admin em telas pequenas */
+@media (max-width: 640px) {
+  [data-admin-scope] .container,
+  [data-admin-scope] [class*="px-6"],
+  [data-admin-scope] [class*="px-8"] {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+  [data-admin-scope] [class*="py-8"],
+  [data-admin-scope] [class*="py-10"] {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+  }
+  /* Grids virando coluna única automaticamente em telas estreitas */
+  [data-admin-scope] [class*="grid-cols-2"],
+  [data-admin-scope] [class*="grid-cols-3"],
+  [data-admin-scope] [class*="grid-cols-4"] {
+    grid-template-columns: 1fr !important;
+  }
+  /* Texto grande não estoura */
+  [data-admin-scope] h1 { font-size: 1.5rem !important; line-height: 1.2 !important; }
+  [data-admin-scope] h2 { font-size: 1.25rem !important; line-height: 1.25 !important; }
+  /* Modais ocupam tela inteira sem margem cinza */
+  [role="dialog"] {
+    max-width: 100vw !important;
+  }
+}
+
+/* 4. Performance low-end (Realme C55 e inferiores): desabilita efeitos caros */
+@media (max-width: 640px) and (pointer: coarse) {
+  [data-admin-scope] *,
+  .admin-modal * {
+    /* Remove sombras pesadas (mantém ring/border) */
+    box-shadow: none !important;
+    /* Reduz backdrop-filter (drena GPU em chips Mali/Adreno baixos) */
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  /* Reduz blur de glass cards */
+  [data-admin-scope] [class*="blur"] {
+    filter: none !important;
+  }
+  /* Desliga animações não-essenciais */
+  [data-admin-scope] [class*="animate-"]:not(.animate-spin) {
+    animation: none !important;
+  }
+}
+
+@keyframes aura-float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50%      { transform: translate3d(0, -4px, 0); }
+}
+@keyframes aura-pulse {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.04); }
+}
+
+/* Universo vivo — orbs ambientes (CSS only, GPU) */
+@keyframes aura-drift-a {
+  0%, 100% { transform: translate3d(-2%, -1%, 0) scale(1); }
+  50%      { transform: translate3d(3%,  2%, 0) scale(1.06); }
+}
+@keyframes aura-drift-b {
+  0%, 100% { transform: translate3d(2%, 1%, 0)  scale(1.02); }
+  50%      { transform: translate3d(-3%, -2%, 0) scale(0.96); }
+}
+@keyframes aura-shimmer {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.55; }
+}
+/* Aparição lenta (descoberta) */
+@keyframes aura-emerge {
+  0%   { opacity: 0; transform: scale(0.7); }
+  100% { opacity: 1; transform: scale(1); }
+}
+/* Etapa 8 — shockwave de toque */
+@keyframes aura-shockwave {
+  0%   { opacity: 0.9; transform: scale(0.6); }
+  100% { opacity: 0;   transform: scale(2.2); }
+}
+
+.perf-no-animations [style*="aura-float"],
+.perf-no-animations [style*="aura-pulse"],
+.perf-no-animations [style*="aura-drift"],
+.perf-no-animations [style*="aura-shimmer"],
+.perf-no-animations [style*="aura-emerge"],
+.perf-no-animations [style*="aura-shockwave"] {
+  animation: none !important;
+}
+
+
+/* === Salas em Ascensão · Energia Compartilhada === */
+@keyframes aura-bonded-pulse {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50%      { transform: scale(1.04); filter: brightness(1.15); }
+}
+.aura-bonded {
+  animation: aura-bonded-pulse 2.5s ease-in-out infinite;
+  will-change: transform;
+}
+.aura-rising-halo {
+  box-shadow: inset 0 0 30px hsla(var(--rising-hue, 290), 90%, 60%, 0.18),
+              0 0 0 1px hsla(var(--rising-hue, 290), 90%, 65%, 0.35);
+}
+.perf-no-animations .aura-bonded { animation: none !important; }
+
+.aura-room-title-text {
+  color: hsl(0 0% 100%) !important;
+  text-shadow: 0 1px 0 hsl(0 0% 0% / 0.4), 0 0 14px hsl(290 90% 60% / 0.24);
+}
+
+.aura-room-title-subtext {
+  color: hsl(0 0% 100% / 0.92) !important;
+  text-shadow: 0 1px 0 hsl(0 0% 0% / 0.34);
+}
+
+.aura-bubble-tag {
+  border-radius: 9999px;
+  border: 1px solid hsl(0 0% 100% / 0.28);
+  background: linear-gradient(180deg, hsl(272 40% 18% / 0.98), hsl(258 44% 12% / 0.96));
+  color: hsl(0 0% 100%);
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 1px hsl(0 0% 0% / 0.55);
+  box-shadow: 0 12px 26px -16px hsl(0 0% 0% / 0.8), 0 0 0 1px hsl(0 0% 100% / 0.06) inset;
+  backdrop-filter: blur(8px);
+}
+
+.aura-bubble-tag--rare {
+  border-color: hsl(38 100% 62% / 0.85);
+  background: linear-gradient(180deg, hsl(42 95% 30% / 0.98), hsl(28 92% 20% / 0.97));
+  color: hsl(48 100% 92%);
+  text-shadow: 0 1px 2px hsl(28 90% 12% / 0.85);
+}
+
+.aura-bubble-tag--resonant {
+  border-color: hsl(326 90% 60% / 0.75);
+  background: linear-gradient(180deg, hsl(322 60% 24% / 0.98), hsl(292 52% 16% / 0.97));
+  color: hsl(322 100% 94%);
+  text-shadow: 0 1px 2px hsl(292 60% 10% / 0.85);
+}
+
+.aura-bubble-tag--emotion {
+  /* Fundo escuro com texto vívido na cor da emoção para máximo contraste */
+  border-color: var(--bubble-accent-border, hsl(0 0% 100% / 0.45));
+  background: linear-gradient(180deg, hsl(220 30% 10% / 0.95), hsl(220 35% 6% / 0.92));
+  color: var(--bubble-accent, hsl(0 0% 100%));
+  text-shadow: 0 1px 2px hsl(0 0% 0% / 0.75);
+  box-shadow: 0 8px 18px -10px hsl(0 0% 0% / 0.85), 0 0 0 1px var(--bubble-accent-border, hsl(0 0% 100% / 0.2)) inset;
+}
+
+
+/* === Destaque Dourado · Realtime Glow === */
+@keyframes hl-gold-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 2px rgba(251, 191, 36, 0.85),
+      0 0 14px 2px rgba(251, 191, 36, 0.55),
+      0 0 28px 6px rgba(245, 158, 11, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(252, 211, 77, 1),
+      0 0 22px 4px rgba(251, 191, 36, 0.85),
+      0 0 44px 10px rgba(245, 158, 11, 0.55);
+  }
+}
+.highlight-glow-gold {
+  position: relative;
+  border-radius: inherit;
+  animation: hl-gold-pulse 2.4s ease-in-out infinite;
+  will-change: box-shadow;
+  contain: paint;
+}
+
+/* RGB rotating border (sentido horário) usando conic-gradient + máscara.
+   Otimizações: contain:paint isola repaint à moldura; filter dropshadow
+   reduzido; duração 6s + steps(60) limita para ~10fps visual sem
+   prejudicar a sensação de rotação contínua. */
+@property --hl-rgb-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes hl-rgb-spin {
+  to { --hl-rgb-angle: 360deg; }
+}
+.highlight-glow-rgb {
+  position: relative;
+  border-radius: inherit;
+  isolation: isolate;
+  /* halo externo via box-shadow para sobreviver a overflow:hidden em ancestrais */
+  box-shadow:
+    0 0 14px 2px rgba(255, 0, 128, 0.30),
+    0 0 24px 4px rgba(0, 200, 255, 0.22);
+}
+.highlight-glow-rgb::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--hl-rgb-angle, 0deg),
+    #ff004c, #ff8a00, #ffe600, #00ff66,
+    #00d2ff, #6a00ff, #ff00d4, #ff004c
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  animation: hl-rgb-spin 6s steps(60, end) infinite;
+  pointer-events: none;
+  z-index: 3;
+  will-change: --hl-rgb-angle;
+}
+
+/* Tier baixo (auto-downgrade) e dispositivos coarse com bateria fraca: dourado estático */
+[data-perf-tier="low"] .highlight-glow-rgb::before { animation: none; }
+[data-perf-tier="low"] .highlight-glow-gold { animation: none; }
+
+/* Acessibilidade: respeita preferência do SO */
+@media (prefers-reduced-motion: reduce) {
+  .highlight-glow-gold,
+  .highlight-glow-rgb::before { animation: none !important; }
+}
+.perf-no-animations .highlight-glow-gold,
+.perf-no-animations .highlight-glow-rgb::before {
+  animation: none !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ⚡️ MODO ECONOMIA — html[data-data-saver="true"]
+   Auto-ativado em hardware fraco (Realme C55) ou quando FPS cai.
+   Reduz globalmente blurs, sombras grandes e transições pesadas.
+   ════════════════════════════════════════════════════════════════════════ */
+html[data-data-saver="true"] [class*="backdrop-blur"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html[data-data-saver="true"] [class*="blur-"]:not(.blur-paywall-paid):not(.blur-md):not(.blur-sm) {
+  filter: none !important;
+}
+html[data-data-saver="true"] [class*="shadow-2xl"],
+html[data-data-saver="true"] [class*="shadow-xl"],
+html[data-data-saver="true"] [class*="drop-shadow-2xl"],
+html[data-data-saver="true"] [class*="drop-shadow-xl"] {
+  box-shadow: none !important;
+  filter: none !important;
+}
+html[data-data-saver="true"] *,
+html[data-data-saver="true"] *::before,
+html[data-data-saver="true"] *::after {
+  transition-duration: 0ms !important;
+  animation-duration: 0ms !important;
+}
+
+/* Mídia: força lazy-loading + decode async + limita resolução p/ economizar
+   CPU/GPU/RAM em mobile fraco (Realme C55, etc.). */
+html[data-data-saver="true"] img {
+  image-rendering: auto;
+  content-visibility: auto;
+}
+html[data-data-saver="true"] video {
+  /* Sem autoplay/preload em economia de dados. */
+  -webkit-playsinline: true;
+}
+/* Reduz a qualidade percebida via CSS image-rendering para imgs grandes */
+html[data-data-saver="true"] img[loading="lazy"] {
+  content-visibility: auto;
+}
+
+/* NewMembersStrip: scrollbar nativa sempre oculta — usa CarouselScrollbar customizada */
+.new-members-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.new-members-scroll::-webkit-scrollbar { display: none; height: 0; width: 0; }
+
+/* Utility: scroll vertical invisível (usado no AdCreatorModal e similares) */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+/* =====================================================================
+   Aura Match — Contraste de fontes no tema CLARO
+   A página foi originalmente desenhada para fundo escuro. No tema claro
+   muitos textos com opacidade/tons pastel ficam ilegíveis. Os overrides
+   abaixo afetam APENAS [data-aura-page] em modo claro, preservando o
+   visual do dark mode.
+   ===================================================================== */
+html:not(.dark) [data-aura-page] {
+  color: hsl(var(--foreground));
+}
+html:not(.dark) [data-aura-page] .text-muted-foreground {
+  color: hsl(220 14% 28%) !important;
+}
+/* Tons frios/quentes pastel (200/300/400 + variantes /80 /90) ganham contraste */
+html:not(.dark) [data-aura-page] [class*="text-white"],
+html:not(.dark) [data-aura-page] [class*="text-zinc-200"],
+html:not(.dark) [data-aura-page] [class*="text-zinc-300"],
+html:not(.dark) [data-aura-page] [class*="text-zinc-400"],
+html:not(.dark) [data-aura-page] [class*="text-slate-200"],
+html:not(.dark) [data-aura-page] [class*="text-slate-300"],
+html:not(.dark) [data-aura-page] [class*="text-slate-400"],
+html:not(.dark) [data-aura-page] [class*="text-neutral-300"],
+html:not(.dark) [data-aura-page] [class*="text-neutral-400"],
+html:not(.dark) [data-aura-page] [class*="text-gray-300"],
+html:not(.dark) [data-aura-page] [class*="text-gray-400"] {
+  color: hsl(220 14% 20%) !important;
+}
+html:not(.dark) [data-aura-page] [class*="text-fuchsia-200"],
+html:not(.dark) [data-aura-page] [class*="text-fuchsia-300"],
+html:not(.dark) [data-aura-page] [class*="text-fuchsia-400"],
+html:not(.dark) [data-aura-page] [class*="text-pink-200"],
+html:not(.dark) [data-aura-page] [class*="text-pink-300"],
+html:not(.dark) [data-aura-page] [class*="text-pink-400"] {
+  color: hsl(322 75% 38%) !important;
+}
+html:not(.dark) [data-aura-page] [class*="text-purple-200"],
+html:not(.dark) [data-aura-page] [class*="text-purple-300"],
+html:not(.dark) [data-aura-page] [class*="text-purple-400"],
+html:not(.dark) [data-aura-page] [class*="text-violet-200"],
+html:not(.dark) [data-aura-page] [class*="text-violet-300"],
+html:not(.dark) [data-aura-page] [class*="text-violet-400"] {
+  color: hsl(270 70% 38%) !important;
+}
+html:not(.dark) [data-aura-page] [class*="text-amber-200"],
+html:not(.dark) [data-aura-page] [class*="text-amber-300"],
+html:not(.dark) [data-aura-page] [class*="text-amber-400"],
+html:not(.dark) [data-aura-page] [class*="text-yellow-200"],
+html:not(.dark) [data-aura-page] [class*="text-yellow-300"],
+html:not(.dark) [data-aura-page] [class*="text-yellow-400"] {
+  color: hsl(32 92% 32%) !important;
+}
+html:not(.dark) [data-aura-page] [class*="text-cyan-200"],
+html:not(.dark) [data-aura-page] [class*="text-cyan-300"],
+html:not(.dark) [data-aura-page] [class*="text-sky-300"],
+html:not(.dark) [data-aura-page] [class*="text-blue-300"] {
+  color: hsl(200 85% 30%) !important;
+}
+html:not(.dark) [data-aura-page] [class*="text-emerald-200"],
+html:not(.dark) [data-aura-page] [class*="text-emerald-300"],
+html:not(.dark) [data-aura-page] [class*="text-green-300"],
+html:not(.dark) [data-aura-page] [class*="text-teal-300"] {
+  color: hsl(158 70% 26%) !important;
+}
+html:not(.dark) [data-aura-page] [class*="text-red-200"],
+html:not(.dark) [data-aura-page] [class*="text-red-300"],
+html:not(.dark) [data-aura-page] [class*="text-rose-300"] {
+  color: hsl(0 75% 38%) !important;
+}
+/* Anula opacidade textual residual (/60 /70 /80) que mata contraste */
+html:not(.dark) [data-aura-page] [class*="text-"][class*="/60"],
+html:not(.dark) [data-aura-page] [class*="text-"][class*="/70"],
+html:not(.dark) [data-aura-page] [class*="text-"][class*="/80"],
+html:not(.dark) [data-aura-page] [class*="text-"][class*="/90"] {
+  --tw-text-opacity: 1 !important;
+  opacity: 1 !important;
+}
+
+/* Oculto Play — card destaque dourado (shine sutil) */
+@keyframes gold-card-shine {
+  0%   { transform: translateX(-120%) skewX(-18deg); opacity: 0; }
+  15%  { opacity: 1; }
+  60%  { opacity: 1; }
+  100% { transform: translateX(220%) skewX(-18deg); opacity: 0; }
+}
+.gold-card-shine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.55) 50%, transparent 65%);
+  animation: gold-card-shine 3.6s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gold-card-shine::after { animation: none; opacity: 0.35; }
+}

@@ -1,0 +1,17 @@
+-- Garante REPLICA IDENTITY FULL e publicação realtime na tabela notifications
+-- Idempotente: pode rodar várias vezes sem erro.
+
+ALTER TABLE public.notifications REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'notifications'
+  ) THEN
+    EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications';
+  END IF;
+END$$;

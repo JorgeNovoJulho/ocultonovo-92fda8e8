@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="pt-BR" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Cache-Control vem dos headers HTTP do Vercel; meta http-equiv foi removido para não
+         interferir no cache de subresources estáticos (icons/sounds/fonts/imagens). -->
+
+    <title>OCULTO — Rede Social</title>
+    <meta name="description" content="VENHA DESCOBRIR TUDO QUE ESTÁ OCULTO
+Plataforma brasileira de rede social completa para adultos . Verificação, Modo Fantasma e chat criptografado. Comece grátis">
+    <meta name="author" content="OCULTO" />
+    <meta name="keywords" content="encontros liberais, casais liberais, criadores +18, plataforma adulta brasil, swing, ménage, conteúdo exclusivo" />
+    <link rel="canonical" href="https://ocultoswing.com.br/" />
+    <meta name="google-site-verification" content="GT-KVV3XWC0D0VYGf8-KfZHkE1yKm0Np5b3T5Mrq-Og" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="OCULTO" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" href="/icons/icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Performance: antecipa handshake TLS + DNS para backend (Supabase externo) e CDN de mídia -->
+    <link rel="preconnect" href="https://rvybbrkzmboqbhcemqar.supabase.co" crossorigin />
+    <link rel="preconnect" href="https://rvybbrkzmboqbhcemqar.supabase.co" />
+    <link rel="dns-prefetch" href="https://rvybbrkzmboqbhcemqar.supabase.co" />
+    <link rel="dns-prefetch" href="https://ocultoswing.com.br" />
+    <!-- Tiles do mini-mapa (Leaflet/OSM) usados em vários painéis -->
+    <link rel="dns-prefetch" href="https://tile.openstreetmap.org" />
+    <link rel="dns-prefetch" href="https://nominatim.openstreetmap.org" />
+    <!-- Pre-carrega o ícone PWA (LCP em telas de auth, custo baixo) -->
+    <link rel="preload" as="image" href="/icons/icon-192.png" fetchpriority="low" />
+
+
+    
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://ocultoswing.com.br/" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:site_name" content="OCULTO" />
+    
+    
+    <meta property="og:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/jqtX4cBt3sTRqMeTc3KwwIYLbjO2/social-images/social-1782570813252-ChatGPT_Image_4_de_jun._de_2026,_11_08_18_(8).webp">
+    <meta property="og:image:secure_url" content="https://ocultoswing.com.br/og-image.jpg?v=3" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="OCULTO — Rede Social +18" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@oculto" />
+    
+    
+    <meta name="twitter:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/jqtX4cBt3sTRqMeTc3KwwIYLbjO2/social-images/social-1782570813252-ChatGPT_Image_4_de_jun._de_2026,_11_08_18_(8).webp">
+    
+
+    
+    
+
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@type":"Organization","name":"OCULTO","url":"https://ocultoswing.com.br","logo":"https://ocultoswing.com.br/icons/icon-512.png"}
+    </script>
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@type":"WebSite","name":"OCULTO","url":"https://ocultoswing.com.br","inLanguage":"pt-BR"}
+    </script>
+    <script>
+      // Aplica tema escuro como padrão antes do React montar (evita FOUC).
+      (function () {
+        try {
+          var KEY = 'oculto-theme-mode';
+          var MIG = 'oculto-theme-default-dark-v1';
+          if (!localStorage.getItem(MIG)) {
+            localStorage.setItem(KEY, 'dark');
+            localStorage.setItem(MIG, '1');
+          }
+          var saved = localStorage.getItem(KEY) || 'dark';
+          var resolved = saved === 'auto'
+            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            : saved;
+          var html = document.documentElement;
+          if (resolved === 'dark') html.classList.add('dark');
+          else html.classList.remove('dark');
+        } catch (e) {}
+      })();
+    </script>
+    <meta property="og:title" content="OCULTO — Rede Social">
+  <meta name="twitter:title" content="OCULTO — Rede Social">
+  <meta property="og:description" content="VENHA DESCOBRIR TUDO QUE ESTÁ OCULTO
+Plataforma brasileira de rede social completa para adultos . Verificação, Modo Fantasma e chat criptografado. Comece grátis">
+  <meta name="twitter:description" content="VENHA DESCOBRIR TUDO QUE ESTÁ OCULTO
+Plataforma brasileira de rede social completa para adultos . Verificação, Modo Fantasma e chat criptografado. Comece grátis">
+</head>
+
+  <body>
+
+    <div id="root"></div>
+    <!-- ── NUCLEAR SCROLL UNLOCKER ─────────────────────────────────────────
+         Radix UI / Vaul injetam overflow:hidden no body via JS.
+         Este script intercepta a propriedade e neutraliza qualquer bloqueio.
+         Roda antes do React montar — zero dependência de bundle.
+    ──────────────────────────────────────────────────────────────────────── -->
+    <script>
+      (function () {
+        // Intercepta atribuição de overflow no body e html
+        function interceptOverflow(el) {
+          if (!el) return;
+          var descriptor = Object.getOwnPropertyDescriptor(el, 'overflow') ||
+            Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, 'overflow');
+          if (!descriptor) return;
+
+          // Override style.overflow
+          try {
+            Object.defineProperty(el.style, 'overflow', {
+              set: function (val) {
+                // Nunca deixa setar 'hidden' no elemento raiz
+                if (val === 'hidden' || val === 'clip') {
+                  // Permite apenas em elementos que não são body/html
+                  return;
+                }
+                CSSStyleDeclaration.prototype.overflow = val;
+              },
+              get: function () {
+                return CSSStyleDeclaration.prototype.overflow;
+              },
+              configurable: true,
+            });
+          } catch (e) {
+            // Fallback: watcher de 300ms
+          }
+        }
+
+        // Watcher de segurança: desbloqueio a cada 300ms
+        function unlock() {
+          var b = document.body;
+          var h = document.documentElement;
+          if (!b || !h) return;
+
+          // Reseta overflow inline se travado
+          if (b.style.overflow === 'hidden' || b.style.overflowY === 'hidden') {
+            b.style.overflow = '';
+            b.style.overflowY = '';
+            b.style.paddingRight = '';
+          }
+          if (h.style.overflow === 'hidden' || h.style.overflowY === 'hidden') {
+            h.style.overflow = '';
+            h.style.overflowY = '';
+          }
+
+          // Remove classes de bloqueio
+          b.classList.remove('lock-scroll', 'no-scroll', 'modal-open', 'overflow-hidden');
+          h.classList.remove('lock-scroll', 'no-scroll', 'modal-open', 'overflow-hidden');
+        }
+
+        // Inicia watcher imediatamente e continua rodando
+        document.addEventListener('DOMContentLoaded', function () {
+          setInterval(unlock, 300);
+          unlock();
+        });
+
+        // Escuta fechamento de qualquer dialog/modal via atributo Radix
+        var observer = new MutationObserver(function (mutations) {
+          mutations.forEach(function (m) {
+            if (m.type === 'attributes' && m.attributeName === 'style') {
+              unlock();
+            }
+            if (m.type === 'childList') {
+              unlock();
+            }
+          });
+        });
+
+        document.addEventListener('DOMContentLoaded', function () {
+          observer.observe(document.body, {
+            attributes: true,
+            childList: true,
+            subtree: false,
+          });
+          observer.observe(document.documentElement, {
+            attributes: true,
+            childList: false,
+          });
+        });
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
