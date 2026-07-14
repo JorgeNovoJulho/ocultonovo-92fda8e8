@@ -109,7 +109,73 @@ function buildVlcHandoffUrls(mediaUrl: string): { platform: VlcPlatform; uris: s
   const platform = getVlcPlatform();
 
   if (platform === 'ios') {
-...
+    return {
+      platform,
+      uris: [
+        `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(mediaUrl)}`,
+        `vlc://${mediaUrl}`,
+      ],
+    };
+  }
+
+  if (platform === 'android') {
+    const extras = [
+      'S.title=OCULTO%20PLAY',
+      `S.audio_language=${encodeURIComponent(VLC_AUDIO_LANG)}`,
+      `S.subtitle_language=${encodeURIComponent(VLC_SUB_LANG)}`,
+    ].join(';');
+    try {
+      const parsedUrl = new URL(mediaUrl);
+      const scheme = parsedUrl.protocol.replace(':', '');
+      const rest = mediaUrl.replace(/^[a-z][a-z\d+.-]*:\/\//i, '');
+      return {
+        platform,
+        uris: [
+          `intent://${rest}#Intent;scheme=${scheme};action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;package=org.videolan.vlc;type=video/*;${extras};end`,
+          `vlc://${mediaUrl}`,
+        ],
+      };
+    } catch {
+      return {
+        platform,
+        uris: [
+          `intent://${mediaUrl.replace(/^[a-z][a-z\d+.-]*:\/\//i, '')}#Intent;scheme=http;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;package=org.videolan.vlc;type=video/*;${extras};end`,
+          `vlc://${mediaUrl}`,
+        ],
+      };
+    }
+  }
+
+  // Desktop — o esquema vlc:// não é registrado por instalações padrão do
+  // VLC (Win/macOS/Linux). A rota real é o download de .m3u8 (função
+  // launchVlcDesktop). Mantemos aqui apenas fallbacks best-effort.
+  return {
+    platform,
+    uris: [
+      `vlc://${mediaUrl}`,
+    ],
+  };
+}
+
+function launchExternalAppUri(uri: string, platform: VlcPlatform, mode: 'primary' | 'fallback' = 'primary') {
+  if (platform === 'android' || platform === 'ios') {
+    window.location.href = uri;
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = uri;
+  a.rel = 'noreferrer';
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  window.setTimeout(() => a.remove(), 0);
+  if (mode === 'primary') {
+    try {
+      const f = document.createElement('iframe');
+      f.style.display = 'none';
+      f.src = uri;
+      document.body.appendChild(f);
+      window.setTimeout(() => f.remove(), 2500);
     } catch { /* noop */ }
   }
 }
