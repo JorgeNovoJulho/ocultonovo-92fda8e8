@@ -118,9 +118,12 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (!autoRefresh) return;
+    // Executa imediatamente ao ativar (inclusive logo após login) e depois a cada 60s
+    refreshDashboard();
     const interval = window.setInterval(refreshDashboard, 60000);
     return () => window.clearInterval(interval);
-  }, [autoRefresh, queryClient]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRefresh]);
 
   useEffect(() => {
     // Find unread milestone notification
