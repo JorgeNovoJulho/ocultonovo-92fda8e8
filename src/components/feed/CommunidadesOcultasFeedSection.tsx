@@ -333,6 +333,9 @@ export function CommunidadesOcultasFeedSection() {
 
   const eligible = useMemo<Community[]>(() => {
     const list = (communities ?? []).filter((c) => c.status === 'active' && c.visibility !== 'private');
+    if (user?.id) {
+      // Logic for filtering could be added here if we need to filter communities by is_adult
+    }
     return Number.isFinite(MAX_CARDS) ? list.slice(0, MAX_CARDS) : list;
   }, [communities]);
 

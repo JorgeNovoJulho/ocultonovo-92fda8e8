@@ -245,6 +245,7 @@ const FeedItem = memo(function FeedItem({
   showMisterios,
   showHiddenRoomsInline,
   isAdultOnly,
+  isOcultoOnly,
   safeBlurOn,
   onOpenExpandedPost,
 }: {
@@ -261,6 +262,7 @@ const FeedItem = memo(function FeedItem({
   showMisterios: boolean;
   showHiddenRoomsInline: boolean;
   isAdultOnly: boolean;
+  isOcultoOnly: boolean;
   safeBlurOn: boolean;
   onOpenExpandedPost: (post: any) => void;
 }) {
@@ -281,7 +283,7 @@ const FeedItem = memo(function FeedItem({
         ? <CommunityTopicFeedCard post={post} />
         : isNarrative
           ? <VipNarrativeFeedCard post={post} />
-          : <RealPostCard post={post} onSubscribe={onSubscribe} onOpenExpandedPost={onOpenExpandedPost} />}
+          : <RealPostCard post={post} onSubscribe={onSubscribe} onOpenExpandedPost={onOpenExpandedPost} isOcultoOnly={isOcultoOnly} />}
 
 
       {showMarketplaceContent && (
@@ -297,7 +299,7 @@ const FeedItem = memo(function FeedItem({
           </div>
         </ErrorBoundary>
       )}
-      {showSuggestions && activeTab !== 'vip' && !isAdultOnly && (
+      {showSuggestions && activeTab !== 'vip' && !isAdultOnly && !isOcultoOnly && (
         <ErrorBoundary>
           <Suspense fallback={<div className="my-4 h-[260px]" aria-hidden />}>
             {/* Trocou de posição com "Explorar novos misteriosos(as)" —
@@ -308,7 +310,7 @@ const FeedItem = memo(function FeedItem({
       )}
       {/* Mistérios em Destaque: aparece após o 6º post; se o feed tiver
           menos de 6 posts, aparece logo após o último para nunca sumir. */}
-      {showMisterios && activeTab !== 'vip' &&
+      {showMisterios && activeTab !== 'vip' && !isOcultoOnly &&
         (index === MISTERIOS_FIXED_INDEX ||
           (totalPosts <= MISTERIOS_FIXED_INDEX && index === totalPosts - 1)) && (
         <ErrorBoundary>
@@ -322,7 +324,7 @@ const FeedItem = memo(function FeedItem({
       {/* Filmes +18 do Oculto Play — substitui o slot anterior dos "Últimos vídeos".
           Visível para usuários que escolheram "Apenas +18" e também no modo
           "Experiência Completa" (com blur + botão MOSTRAR). */}
-      {activeTab !== 'vip' &&
+      {activeTab !== 'vip' && !isOcultoOnly &&
         (index === MISTERIOS_FIXED_INDEX ||
           (totalPosts <= MISTERIOS_FIXED_INDEX && index === totalPosts - 1)) && (
         <ErrorBoundary>
@@ -395,7 +397,7 @@ export const RealFeed = memo(function RealFeed() {
   const [activeTab, setActiveTab] = useState<FeedTab>('foryou');
   const { shows: legacyFeedModeShows, forcesCardLayout, mode: legacyMode } = useFeedMode();
   const { isSectionEnabled, viewMode: granularMode } = useViewModePreferences();
-  const { isAdultOnly } = useFeedExperienceMode();
+  const { isAdultOnly, isOcultoOnly } = useFeedExperienceMode();
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
   const { safeBlurOn, toggleSafeBlur } = useSafeBlur();
   const [safeBlurPending, setSafeBlurPending] = useState(false);
@@ -613,7 +615,10 @@ export const RealFeed = memo(function RealFeed() {
     return cachedFeedPosts as any[];
   }, [cachedFeedPosts, cachedFeedUpdatedAt, cachedFeedOwner, user?.id]);
   const posts = useMemo(() => {
-    const live = (infiniteData?.pages || []).flatMap((p: any) => p?.posts || []);
+    let live = (infiniteData?.pages || []).flatMap((p: any) => p?.posts || []);
+    if (isOcultoOnly) {
+      live = live.filter((p: any) => p?.is_adult !== true);
+    }
     // Dedupe global por id + ordenação determinística por created_at desc.
     // Garante que prepend otimista + refetch não criem itens duplicados,
     // e que novos posts cheguem sempre na posição correta sem reload.
@@ -640,7 +645,7 @@ export const RealFeed = memo(function RealFeed() {
   // Carrega páginas seguintes automaticamente até encontrar posts exibíveis,
   // mantendo mobile e desktop com a mesma fonte/ordem do infinite feed.
   const emptyPageAutofillRef = useRef({ key: '', attempts: 0 });
-  const feedAutofillKey = `${isAdultOnly ? 'adult' : 'complete'}:${activeTab}:${user?.id ?? 'anon'}`;
+  const feedAutofillKey = `${isAdultOnly ? 'adult' : isOcultoOnly ? 'oculto' : 'complete'}:${activeTab}:${user?.id ?? 'anon'}`;
   useEffect(() => {
     if (emptyPageAutofillRef.current.key !== feedAutofillKey) {
       emptyPageAutofillRef.current = { key: feedAutofillKey, attempts: 0 };
@@ -1130,6 +1135,7 @@ export const RealFeed = memo(function RealFeed() {
           showMisterios={sectionEnabledForMode('mysterious_discovery')}
           showHiddenRoomsInline={sectionEnabledForMode('hidden_rooms') && !isAdultOnly}
           isAdultOnly={isAdultOnly}
+          isOcultoOnly={isOcultoOnly}
           safeBlurOn={safeBlurOn}
           onOpenExpandedPost={handleOpenExpandedPost}
         />
@@ -1145,6 +1151,7 @@ export const RealFeed = memo(function RealFeed() {
     suggestionsReady,
     sectionEnabledForMode,
     isAdultOnly,
+    isOcultoOnly,
     safeBlurOn,
     handleOpenExpandedPost,
   ]);
