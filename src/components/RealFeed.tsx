@@ -1702,7 +1702,7 @@ export const RealFeed = memo(function RealFeed() {
       )}
 
 
-      {feedModeShows('events') && activeTab !== 'vip' && !isOcultoOnly && (
+      {feedModeShows('events') && activeTab !== 'vip' && (
         <ErrorBoundary>
           <Suspense fallback={<div className="my-4 h-[60px]" aria-hidden />}>
             <EventsFeedStrip />
