@@ -347,7 +347,7 @@ const FeedItem = memo(function FeedItem({
         </ErrorBoundary>
       )}
       {/* Salas Ocultas: posicionado logo abaixo de "Últimos vídeos do Oculto Play". */}
-      {showHiddenRoomsInline && activeTab !== 'vip' && !isOcultoOnly &&
+      {showHiddenRoomsInline && activeTab !== 'vip' &&
         (index === COMMUNITIES_FEED_FIXED_INDEX ||
           (totalPosts <= COMMUNITIES_FEED_FIXED_INDEX && index === totalPosts - 1)) && (
         <ErrorBoundary>
