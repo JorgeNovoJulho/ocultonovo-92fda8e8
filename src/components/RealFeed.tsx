@@ -327,7 +327,7 @@ const FeedItem = memo(function FeedItem({
       {/* Filmes +18 do Oculto Play — substitui o slot anterior dos "Últimos vídeos".
           Visível para usuários que escolheram "Apenas +18" e também no modo
           "Experiência Completa" (com blur + botão MOSTRAR). */}
-      {activeTab !== 'vip' && !isOcultoOnly && !isAdultOnly &&
+      {activeTab !== 'vip' && !isAdultOnly &&
         (index === MISTERIOS_FIXED_INDEX ||
           (totalPosts <= MISTERIOS_FIXED_INDEX && index === totalPosts - 1)) && (
         <ErrorBoundary>
