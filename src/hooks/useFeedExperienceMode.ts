@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useProfile } from '@/hooks/useProfile';
 import { useViewStore } from '@/store/useViewStore';
+import { supabase } from '@/lib/supabaseExternal';
 
 export type FeedExperienceMode = 'adult_only' | 'complete' | 'oculto_only';
 
@@ -135,13 +136,30 @@ export function useFeedExperienceMode() {
       setStoreMode(next);
       try { window.dispatchEvent(new CustomEvent(MODE_EVENT, { detail: next })); }
       catch { /* noop */ }
-      try {
-        updateProfile({ feed_experience_mode: next });
-      } catch {
-        /* updateProfile já lida com toasts/erros */
-      }
+      // Persistência direta (sem rollback otimista do perfil): se a coluna/CHECK
+      // do banco ainda não aceitar o valor, a escolha continua valendo localmente.
+      (async () => {
+        try {
+          const { data: auth } = await supabase.auth.getUser();
+          const uid = auth?.user?.id;
+          if (!uid) return;
+          const { error } = await supabase
+            .from('profiles')
+            .update({ feed_experience_mode: next })
+            .eq('id', uid);
+          if (error) {
+            console.warn('[feedExperienceMode] falha ao persistir no banco:', error.message);
+            return;
+          }
+          queryClient.setQueryData(['profile', uid], (old: any) =>
+            old ? { ...old, feed_experience_mode: next } : old
+          );
+        } catch (e) {
+          console.warn('[feedExperienceMode] erro inesperado ao persistir', e);
+        }
+      })();
     },
-    [updateProfile, setStoreMode]
+    [setStoreMode, queryClient]
   );
 
   return {
