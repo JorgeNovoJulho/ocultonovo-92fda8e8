@@ -36,6 +36,7 @@ import {
 import { useCommunityRecentTopicCounts } from '@/hooks/useCommunityRecentTopicCounts';
 import { useHorizontalDragScroll } from '@/hooks/useHorizontalDragScroll';
 import { CarouselScrollbar } from './CarouselScrollbar';
+import { useFeedExperienceMode } from '@/hooks/useFeedExperienceMode';
 
 function visibilityMeta(v: Community['visibility']) {
   switch (v) {
