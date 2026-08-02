@@ -1655,7 +1655,7 @@ export const RealFeed = memo(function RealFeed() {
 
 
       {/* Widget de Matches Ativos */}
-      {feedModeShows('matches') && sidebarWidgetsReady && (
+      {feedModeShows('matches') && sidebarWidgetsReady && !isOcultoOnly && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             <RecentMatchesWidget />
@@ -1663,7 +1663,7 @@ export const RealFeed = memo(function RealFeed() {
         </ErrorBoundary>
       )}
 
-      {feedModeShows('discoveryUniverse') && showRequiredAdultSections && activeTab !== 'vip' && (
+      {feedModeShows('discoveryUniverse') && showRequiredAdultSections && activeTab !== 'vip' && !isOcultoOnly && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             <DiscoveryUniverseCarousel />
@@ -1671,7 +1671,7 @@ export const RealFeed = memo(function RealFeed() {
         </ErrorBoundary>
       )}
 
-      {feedModeShows('shareLink') && activeTab !== 'vip' && (
+      {feedModeShows('shareLink') && activeTab !== 'vip' && !isOcultoOnly && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             <div className="mb-3 px-3">
@@ -1681,7 +1681,7 @@ export const RealFeed = memo(function RealFeed() {
         </ErrorBoundary>
       )}
 
-      {feedModeShows('vipCreators') && showHeavyCarousels && (
+      {feedModeShows('vipCreators') && showHeavyCarousels && !isOcultoOnly && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             <VipCreatorsCarousel />
@@ -1689,7 +1689,7 @@ export const RealFeed = memo(function RealFeed() {
         </ErrorBoundary>
       )}
 
-      {feedModeShows('communitiesFeedCard') && showRequiredAdultSections && activeTab !== 'vip' && (
+      {feedModeShows('communitiesFeedCard') && showRequiredAdultSections && activeTab !== 'vip' && !isOcultoOnly && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             {/* Trocou de posição com Comunidades Ocultas — agora "Explorar
