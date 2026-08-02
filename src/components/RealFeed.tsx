@@ -302,7 +302,7 @@ const FeedItem = memo(function FeedItem({
           </div>
         </ErrorBoundary>
       )}
-      {showSuggestions && activeTab !== 'vip' && !isAdultOnly && !isOcultoOnly && (
+      {showSuggestions && activeTab !== 'vip' && !isAdultOnly && (
         <ErrorBoundary>
           <Suspense fallback={<div className="my-4 h-[260px]" aria-hidden />}>
             {/* Trocou de posição com "Explorar novos misteriosos(as)" —
@@ -313,7 +313,7 @@ const FeedItem = memo(function FeedItem({
       )}
       {/* Mistérios em Destaque: aparece após o 6º post; se o feed tiver
           menos de 6 posts, aparece logo após o último para nunca sumir. */}
-      {showMisterios && activeTab !== 'vip' && !isOcultoOnly &&
+      {showMisterios && activeTab !== 'vip' &&
         (index === MISTERIOS_FIXED_INDEX ||
           (totalPosts <= MISTERIOS_FIXED_INDEX && index === totalPosts - 1)) && (
         <ErrorBoundary>
@@ -327,7 +327,7 @@ const FeedItem = memo(function FeedItem({
       {/* Filmes +18 do Oculto Play — substitui o slot anterior dos "Últimos vídeos".
           Visível para usuários que escolheram "Apenas +18" e também no modo
           "Experiência Completa" (com blur + botão MOSTRAR). */}
-      {activeTab !== 'vip' && !isOcultoOnly && !isAdultOnly &&
+      {activeTab !== 'vip' && !isAdultOnly &&
         (index === MISTERIOS_FIXED_INDEX ||
           (totalPosts <= MISTERIOS_FIXED_INDEX && index === totalPosts - 1)) && (
         <ErrorBoundary>
@@ -337,7 +337,7 @@ const FeedItem = memo(function FeedItem({
         </ErrorBoundary>
       )}
       {/* Últimos vídeos do Oculto Play — movido para logo acima de Salas Ocultas. */}
-      {activeTab !== 'vip' && !isAdultOnly && !isOcultoOnly &&
+      {activeTab !== 'vip' && !isAdultOnly &&
         (index === COMMUNITIES_FEED_FIXED_INDEX ||
           (totalPosts <= COMMUNITIES_FEED_FIXED_INDEX && index === totalPosts - 1)) && (
         <ErrorBoundary>
@@ -347,7 +347,7 @@ const FeedItem = memo(function FeedItem({
         </ErrorBoundary>
       )}
       {/* Salas Ocultas: posicionado logo abaixo de "Últimos vídeos do Oculto Play". */}
-      {showHiddenRoomsInline && activeTab !== 'vip' && !isOcultoOnly &&
+      {showHiddenRoomsInline && activeTab !== 'vip' &&
         (index === COMMUNITIES_FEED_FIXED_INDEX ||
           (totalPosts <= COMMUNITIES_FEED_FIXED_INDEX && index === totalPosts - 1)) && (
         <ErrorBoundary>
@@ -358,7 +358,7 @@ const FeedItem = memo(function FeedItem({
       )}
       {/* Filmes no Oculto Play (azul) — logo abaixo de Comunidades Ocultas.
           Apenas no Universo Completo (não aparece em "Apenas +18"). */}
-      {activeTab !== 'vip' && !isAdultOnly && !isOcultoOnly &&
+      {activeTab !== 'vip' && !isAdultOnly &&
         (index === LATEST_MOVIES_BIG_FIXED_INDEX ||
           (totalPosts <= LATEST_MOVIES_BIG_FIXED_INDEX && index === totalPosts - 1)) && (
         <ErrorBoundary>
@@ -370,7 +370,7 @@ const FeedItem = memo(function FeedItem({
       {/* Descubra no OCULTO PLAY — 5 vídeos aleatórios por sessão.
           Aparece 5 postagens depois de Salas Ocultas (index 6+5 = 11). Se o
           feed for menor, ancora ao último post para nunca sumir. */}
-      {activeTab !== 'vip' && !isAdultOnly && !isOcultoOnly &&
+      {activeTab !== 'vip' && !isAdultOnly &&
         (index === OCULTO_PLAY_RANDOM_FIXED_INDEX ||
           (totalPosts <= OCULTO_PLAY_RANDOM_FIXED_INDEX && index === totalPosts - 1)) && (
         <ErrorBoundary>
@@ -1663,7 +1663,7 @@ export const RealFeed = memo(function RealFeed() {
         </ErrorBoundary>
       )}
 
-      {feedModeShows('discoveryUniverse') && showRequiredAdultSections && activeTab !== 'vip' && !isOcultoOnly && (
+      {feedModeShows('discoveryUniverse') && showRequiredAdultSections && activeTab !== 'vip' && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             <DiscoveryUniverseCarousel />
@@ -1689,7 +1689,7 @@ export const RealFeed = memo(function RealFeed() {
         </ErrorBoundary>
       )}
 
-      {feedModeShows('communitiesFeedCard') && showRequiredAdultSections && activeTab !== 'vip' && !isOcultoOnly && (
+      {feedModeShows('communitiesFeedCard') && showRequiredAdultSections && activeTab !== 'vip' && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             {/* Trocou de posição com Comunidades Ocultas — agora "Explorar
@@ -1702,7 +1702,7 @@ export const RealFeed = memo(function RealFeed() {
       )}
 
 
-      {feedModeShows('events') && activeTab !== 'vip' && !isOcultoOnly && (
+      {feedModeShows('events') && activeTab !== 'vip' && (
         <ErrorBoundary>
           <Suspense fallback={<div className="my-4 h-[60px]" aria-hidden />}>
             <EventsFeedStrip />
