@@ -186,6 +186,7 @@ interface RealPostCardProps {
   onSubscribe?: () => void;
   isDisliked?: boolean;
   onOpenExpandedPost?: (post: Post) => void;
+  isOcultoOnly?: boolean;
 }
 
 const getPlanLabel = (plan?: string) => {
@@ -194,7 +195,7 @@ const getPlanLabel = (plan?: string) => {
   return null;
 };
 
-export const RealPostCard = memo(function RealPostCard({ post: rawPost, onSubscribe, isDisliked = false, onOpenExpandedPost }: RealPostCardProps) {
+export const RealPostCard = memo(function RealPostCard({ post: rawPost, onSubscribe, isDisliked = false, onOpenExpandedPost, isOcultoOnly }: RealPostCardProps) {
   // Defensive normalization: aceita media_urls[] como fallback de media_url,
   // e garante que content_text nulo nunca quebre o render do card.
   const post = useMemo(() => {
@@ -213,6 +214,10 @@ export const RealPostCard = memo(function RealPostCard({ post: rawPost, onSubscr
       video_duration_seconds: duration || (rawPost as any).video_duration_seconds || null,
     } as typeof rawPost;
   }, [rawPost]);
+  
+  const isAdult = (post as any).is_adult === true;
+  if (isOcultoOnly && isAdult) return null;
+
   const { toast } = useToast();
   const { user } = useAuth();
   const navigate = useNavigate();

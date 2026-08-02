@@ -20,7 +20,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Sparkles, Crown, Flame, Globe2, Check } from 'lucide-react';
+import { Sparkles, Crown, Flame, Globe2, Check, ShieldAlert } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import { usePlatformPhase } from '@/hooks/usePlatformPhase';
@@ -57,7 +57,7 @@ export function BetaWelcomeModal() {
     if (profile.beta_welcome_seen_at) return;
     // Se o usuário já escolheu uma experiência de feed (em qualquer device),
     // ele já passou pelo modal — não exibir novamente.
-    if (profile.feed_experience_mode === 'adult_only' || profile.feed_experience_mode === 'complete') {
+    if (profile.feed_experience_mode === 'adult_only' || profile.feed_experience_mode === 'complete' || profile.feed_experience_mode === 'oculto_only') {
       markShown(user.id);
       return;
     }
@@ -150,6 +150,13 @@ export function BetaWelcomeModal() {
               title="QUERO VER APENAS CONTEÚDO +18"
               subtitle="Feed restrito a postagens marcadas como +18."
               onClick={() => setChoice('adult_only')}
+            />
+            <ChoiceCard
+              active={choice === 'oculto_only'}
+              icon={<ShieldAlert className="h-5 w-5" />}
+              title="APENAS UNIVERSO OCULTO"
+              subtitle="Oculta conteúdos +18, seções de destaque e comunidades adultas."
+              onClick={() => setChoice('oculto_only')}
             />
             <ChoiceCard
               active={choice === 'complete'}

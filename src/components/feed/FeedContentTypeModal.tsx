@@ -5,7 +5,7 @@
  */
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, Flame, Globe2, Check } from 'lucide-react';
+import { Sparkles, Flame, Globe2, Check, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFeedExperienceMode } from '@/hooks/useFeedExperienceMode';
 
@@ -23,6 +23,12 @@ export default function FeedContentTypeModal({ open, onOpenChange }: Props) {
       icon: Flame,
       title: 'Apenas conteúdo +18',
       desc: 'Feed restrito a postagens marcadas como +18. Stories, comunidades, salas e Oculto Play ficam ocultos no feed (continuam acessíveis pelo menu).',
+    },
+    {
+      id: 'oculto_only' as const,
+      icon: ShieldAlert,
+      title: 'Apenas universo OCULTO',
+      desc: 'Oculta totalmente conteúdos +18, seções Explorar Novos Mistérios, Mistérios em Destaque, Filmes +18 e comunidades adultas.',
     },
     {
       id: 'complete' as const,

@@ -34,7 +34,7 @@ interface CreatorEarnings {
   withdrawStatus: 'idle' | 'processing' | 'completed';
 }
 
-export type FeedExperienceModeValue = 'adult_only' | 'complete';
+export type FeedExperienceModeValue = 'adult_only' | 'complete' | 'oculto_only';
 
 interface ViewState {
   viewedPosts: number;

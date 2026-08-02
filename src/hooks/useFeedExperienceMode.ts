@@ -14,7 +14,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useProfile } from '@/hooks/useProfile';
 import { useViewStore } from '@/store/useViewStore';
 
-export type FeedExperienceMode = 'adult_only' | 'complete';
+export type FeedExperienceMode = 'adult_only' | 'complete' | 'oculto_only';
 
 const STORAGE_KEY = 'oculto:feedExperienceMode';
 const MODE_EVENT = 'oculto:feedExperienceModeChanged';
@@ -24,7 +24,7 @@ const SYNC_TTL_MS = 4000; // janela em que o badge ainda aparece após reload
 const readStoredMode = (): FeedExperienceMode | null => {
   try {
     const raw = typeof window !== 'undefined' ? window.localStorage.getItem(STORAGE_KEY) : null;
-    return raw === 'adult_only' || raw === 'complete' ? raw : null;
+    return raw === 'adult_only' || raw === 'complete' || raw === 'oculto_only' ? raw : null;
   } catch {
     return null;
   }
@@ -87,16 +87,16 @@ export function useFeedExperienceMode() {
   // Importante: alguns ambientes ainda não possuem profiles.feed_experience_mode;
   // nesse caso o UPDATE pode falhar e o cache do perfil fazer rollback. O modo
   // escolhido precisa continuar funcionando no frontend imediatamente.
-  const mode: FeedExperienceMode = rawMode === 'adult_only' || rawMode === 'complete'
+  const mode: FeedExperienceMode = rawMode === 'adult_only' || rawMode === 'complete' || rawMode === 'oculto_only'
     ? rawMode
     : (localMode ?? 'complete');
-  const hasChosen = rawMode === 'adult_only' || rawMode === 'complete' || !!localMode;
+  const hasChosen = rawMode === 'adult_only' || rawMode === 'complete' || rawMode === 'oculto_only' || !!localMode;
 
   // Sincroniza mudanças vindas do REALTIME (outro device alterou o modo).
   // Atualiza local + invalida queries do feed para refletir imediatamente
   // sem precisar recarregar a página.
   useEffect(() => {
-    if (rawMode !== 'adult_only' && rawMode !== 'complete') return;
+    if (rawMode !== 'adult_only' && rawMode !== 'complete' && rawMode !== 'oculto_only') return;
     setLocalMode(rawMode);
     writeStoredMode(rawMode);
     setStoreMode(rawMode);
@@ -143,6 +143,7 @@ export function useFeedExperienceMode() {
     mode,
     hasChosen,
     isAdultOnly: mode === 'adult_only',
+    isOcultoOnly: mode === 'oculto_only',
     setMode,
     isUpdating: !!isUpdating,
     justSyncedAt,
