@@ -370,7 +370,7 @@ const FeedItem = memo(function FeedItem({
       {/* Descubra no OCULTO PLAY — 5 vídeos aleatórios por sessão.
           Aparece 5 postagens depois de Salas Ocultas (index 6+5 = 11). Se o
           feed for menor, ancora ao último post para nunca sumir. */}
-      {activeTab !== 'vip' && !isAdultOnly && !isOcultoOnly &&
+      {activeTab !== 'vip' && !isAdultOnly &&
         (index === OCULTO_PLAY_RANDOM_FIXED_INDEX ||
           (totalPosts <= OCULTO_PLAY_RANDOM_FIXED_INDEX && index === totalPosts - 1)) && (
         <ErrorBoundary>
