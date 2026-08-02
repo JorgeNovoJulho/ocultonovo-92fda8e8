@@ -13,7 +13,7 @@ import { useAuth } from './useAuth';
  */
 export function useAdminBypass() {
   const { user } = useAuth();
-  const isMasterEmail = user?.email === 'ocultomaster@gmail.com';
+  const isMasterEmail = user?.email === 'ocultomaster@ocultoswing.com.br';
 
   const { data: isMasterAdmin, isLoading } = useQuery({
     queryKey: ['admin-master-check', user?.id],
@@ -28,7 +28,7 @@ export function useAdminBypass() {
       if (error) {
         // Fallback: direct email check for master
         console.warn('[Oculto] has_role RPC failed, using email fallback:', error.message);
-        return user.email === 'ocultomaster@gmail.com';
+        return user.email === 'ocultomaster@ocultoswing.com.br';
       }
       
       return data === true;
@@ -53,7 +53,7 @@ export function useAdminBypass() {
  */
 export function useIsAnyAdmin() {
   const { user } = useAuth();
-  const isMasterEmail = user?.email === 'ocultomaster@gmail.com';
+  const isMasterEmail = user?.email === 'ocultomaster@ocultoswing.com.br';
 
   const { data: isAdmin, isLoading } = useQuery({
     queryKey: ['admin-any-check', user?.id],
@@ -80,7 +80,7 @@ export function useIsAnyAdmin() {
       if (isMod) return true;
       
       // Final fallback: email check
-      return user.email === 'ocultomaster@gmail.com';
+      return user.email === 'ocultomaster@ocultoswing.com.br';
     },
     enabled: !!user?.id && !isMasterEmail,
     initialData: isMasterEmail ? true : undefined,

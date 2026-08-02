@@ -111,7 +111,7 @@ export default function CheckoutPage() {
   const [autoSaving, setAutoSaving] = useState(false);
 
   // Master admin (único que vê o botão de simulação)
-  const isMasterAdmin = (user?.email || '').trim().toLowerCase() === 'ocultomaster@gmail.com';
+  const isMasterAdmin = (user?.email || '').trim().toLowerCase() === 'ocultomaster@ocultoswing.com.br';
 
   // Load CPF/CNPJ from profile (auto-preenchimento)
   useEffect(() => {

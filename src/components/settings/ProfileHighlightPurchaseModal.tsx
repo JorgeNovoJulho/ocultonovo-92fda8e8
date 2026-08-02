@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
-const MASTER_EMAIL = 'ocultomaster@gmail.com';
+const MASTER_EMAIL = 'ocultomaster@ocultoswing.com.br';
 import { Crown, CreditCard, Copy, Loader2, QrCode, ShieldCheck, Sparkles, CheckCircle2, AlertCircle, Clock, Zap } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';

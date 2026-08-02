@@ -168,7 +168,7 @@ export default function AdminUsers() {
     } catch { return 'Sem registro de último acesso'; }
   };
 
-  const MASTER_EMAIL = 'ocultomaster@gmail.com';
+  const MASTER_EMAIL = 'ocultomaster@ocultoswing.com.br';
   const mergedUsers = useMemo(() => {
     let list = users.map((user) => ({ ...user, ...(optimisticUsers[user.id] || {}) }));
     if (sortMode === 'logins_desc') {
