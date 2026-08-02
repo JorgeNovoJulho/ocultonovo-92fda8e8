@@ -190,6 +190,7 @@ const AdminCemiterioPage = lazy(() => import("./pages/admin/AdminCemiterioPage")
 const AdminAdsPage = lazy(() => import("./pages/admin/AdminAdsPage"));
 const AdminMarketplaceAdsPage = lazy(() => import("./pages/admin/AdminMarketplaceAdsPage"));
 const AdminSuggestionsPage = lazy(() => import("./pages/admin/AdminSuggestionsPage"));
+const AdminFeedNovidadesPage = lazy(() => import("./pages/admin/AdminFeedNovidadesPage"));
 const AdminStoryReportsPage = lazy(() => import("./pages/admin/AdminStoryReportsPage"));
 const AdminQualityControlPage = lazy(() => import("./pages/admin/AdminQualityControlPage"));
 const AdminMatchNotificationPage = lazy(() => import("./pages/admin/AdminMatchNotificationPage"));
@@ -638,6 +639,8 @@ const App = () => {
                   <Route path="/admin/ads" element={<Suspense fallback={<PageFallback />}><AdminAdsPage /></Suspense>} />
                   <Route path="/admin/marketplace-ads" element={<Suspense fallback={<PageFallback />}><AdminMarketplaceAdsPage /></Suspense>} />
                   <Route path="/admin/suggestions" element={<Suspense fallback={<PageFallback />}><AdminSuggestionsPage /></Suspense>} />
+                  <Route path="/admin/feed-novidades" element={<MasterAdminRoute><Suspense fallback={<PageFallback />}><AdminFeedNovidadesPage /></Suspense></MasterAdminRoute>} />
+
                   <Route path="/admin/marketing" element={<MasterAdminRoute><Suspense fallback={<PageFallback />}><AdminMarketingAutomationPage /></Suspense></MasterAdminRoute>} />
                   <Route path="/admin/push-campaigns" element={<MasterAdminRoute><Suspense fallback={<PageFallback />}><AdminPushCampaignsPage /></Suspense></MasterAdminRoute>} />
                   <Route path="/admin/promotions" element={<MasterAdminRoute><Suspense fallback={<PageFallback />}><AdminPromotionsPage /></Suspense></MasterAdminRoute>} />

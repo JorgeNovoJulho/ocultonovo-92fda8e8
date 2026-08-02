@@ -14,6 +14,9 @@ import { CommunityTopicFeedCard, parseCommunityTopicSnapshot } from "./feed/Comm
 import { SubscriptionModal } from "./SubscriptionModal";
 import { FeedTabs, FeedTab } from "./FeedTabs";
 import { FeedCardItem } from "./feed/FeedCardItem";
+const NovidadesDoOcultoCarousel = lazy(() =>
+  import("./feed/NovidadesDoOcultoCarousel").then((m) => ({ default: m.NovidadesDoOcultoCarousel }))
+);
 const FlashStoriesBar = lazy(() =>
   import("./stories").then((m) => ({ default: m.FlashStoriesBar }))
 );
@@ -1409,6 +1412,11 @@ export const RealFeed = memo(function RealFeed() {
       <div className="flex flex-col">
         {topActionButtons}
         <FeedTabs activeTab={activeTab} onTabChange={setActiveTab} onCreatePost={() => setShowCreateModal(true)} onScrollTop={() => { virtuosoRef.current?.scrollToIndex({ index: 0, align: "start", behavior: "smooth" }); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
+        <ErrorBoundary>
+          <Suspense fallback={null}>
+            <NovidadesDoOcultoCarousel />
+          </Suspense>
+        </ErrorBoundary>
         {!isAdultOnly && storiesReady && (
           <ErrorBoundary>
             <Suspense fallback={null}>
@@ -1565,6 +1573,13 @@ export const RealFeed = memo(function RealFeed() {
       {auraModalMount}
 
 
+
+      {/* Novidades do Oculto — carrossel acima dos Stories. */}
+      <ErrorBoundary>
+        <Suspense fallback={null}>
+          <NovidadesDoOcultoCarousel />
+        </Suspense>
+      </ErrorBoundary>
 
       {/* Flash Stories Bar — agora acima da sessão "Boas-vindas aos novos do OCULTO". */}
       {feedModeShows('stories') && storiesReady && !isAdultOnly && (
