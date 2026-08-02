@@ -1582,7 +1582,7 @@ export const RealFeed = memo(function RealFeed() {
       </ErrorBoundary>
 
       {/* Flash Stories Bar — agora acima da sessão "Boas-vindas aos novos do OCULTO". */}
-      {feedModeShows('stories') && storiesReady && !isAdultOnly && (
+      {feedModeShows('stories') && storiesReady && !isAdultOnly && !isOcultoOnly && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             <FlashStoriesBar />
@@ -1604,7 +1604,7 @@ export const RealFeed = memo(function RealFeed() {
       <DataSaverBadge />
 
       {/* Universo Social — Noite Oculta ativa (se houver) */}
-      {feedModeShows('noiteOculta') && socialStripsReady && (
+      {feedModeShows('noiteOculta') && socialStripsReady && !isOcultoOnly && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             <div className="px-3 pt-2">
@@ -1621,7 +1621,7 @@ export const RealFeed = memo(function RealFeed() {
           <Suspense fallback={null}>
             <div className="px-3 pt-3 space-y-3">
               {/* === Início Inteligente (Retenção) === */}
-              {feedModeShows('retentionBlock') && (
+              {feedModeShows('retentionBlock') && !isOcultoOnly && (
                 <section
                   aria-label="Início Inteligente"
                   className="rounded-2xl border border-pink-500/20 bg-gradient-to-b from-pink-500/[0.06] to-transparent p-3 space-y-2.5"
