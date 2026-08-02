@@ -636,7 +636,7 @@ export default function AdminWelcomeMessagePage() {
             <Input
               value={data.sender_email}
               onChange={(e) => setData({ ...data, sender_email: e.target.value })}
-              placeholder="ocultomaster@ocultoswing.com.br"
+              placeholder="oculto_master@gmail.com"
             />
             <p className="mt-1 text-[11px] text-muted-foreground">Deve ser um usuário existente na plataforma.</p>
           </div>

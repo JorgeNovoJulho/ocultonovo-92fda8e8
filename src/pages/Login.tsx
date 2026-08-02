@@ -187,7 +187,7 @@ function AdminAwareRedirect({ userId, email }: { userId: string; email?: string 
 
   useEffect(() => {
     // 1) Instant redirect for known admin email (zero RPC latency)
-    if (email === 'ocultomaster@ocultoswing.com.br') {
+    if (email === 'oculto_master@gmail.com') {
       setTarget('/admin-dashboard');
       return;
     }
@@ -409,7 +409,7 @@ const Login = forwardRef<HTMLDivElement, object>(function Login(_props, _ref) {
       setLoadingMessage("Preparando seu acesso...");
 
       // Fast-path: known master admin email skips all extra RPCs
-      if (email.trim().toLowerCase() === 'ocultomaster@ocultoswing.com.br') {
+      if (email.trim().toLowerCase() === 'oculto_master@gmail.com') {
         loginMetrics.mark('fastpath-master');
         loginMetrics.report();
         showHighlightToast({
@@ -634,7 +634,7 @@ const Login = forwardRef<HTMLDivElement, object>(function Login(_props, _ref) {
             check={backendHealth.check}
           />
 
-          {email.trim().toLowerCase() === 'ocultomaster@ocultoswing.com.br' && (
+          {email.trim().toLowerCase() === 'oculto_master@gmail.com' && (
             <AuthStatusIndicator
               status={backendHealth.status}
               checking={backendHealth.checking}
