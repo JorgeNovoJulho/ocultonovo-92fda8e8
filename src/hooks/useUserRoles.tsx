@@ -33,7 +33,7 @@ export function useHasRole(role: UserRole) {
       if (isMasterEmail) return true;
 
       const { data, error } = await (supabase as any)
-        .rpc('has_role', { _user_id: user.id, _role: role });
+        .rpc('has_role', { _user_id: user.id, _role: role as string });
 
       if (error) {
         console.warn('[Oculto] has_role check failed:', error.message);
@@ -62,7 +62,7 @@ export function useIsAdmin() {
       // Check each role via has_role (no recursion)
       for (const role of ['admin_master', 'admin_regional', 'moderator'] as const) {
         const { data } = await (supabase as any)
-          .rpc('has_role', { _user_id: user.id, _role: role });
+          .rpc('has_role', { _user_id: user.id, _role: role as string });
         if (data === true) return true;
       }
       // Fallback email check
@@ -128,7 +128,7 @@ export function useIsMasterAdmin() {
       // 1) has_role RPC
       try {
         const res: any = await withTimeout(
-          (supabase as any).rpc('has_role', { _user_id: user.id, _role: 'admin_master' })
+          (supabase as any).rpc('has_role', { _user_id: user.id, _role: 'admin_master' as string })
         );
         if (res && res.data === true) return true;
       } catch { /* segue fallback */ }
