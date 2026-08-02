@@ -54,17 +54,25 @@ export default function AdminCemiterioPage() {
     
     if (error) { 
       setBusyId(null);
+      console.error('[restore_account] error:', error);
       toast.error('Erro ao restaurar: ' + error.message); 
       return; 
     }
 
-    // Otimização UI: Remove imediatamente da lista local
-    setRows(prev => prev.filter(r => r.user_id !== row.user_id));
+    // REMOÇÃO IMEDIATA E FORÇADA DA UI
+    setRows(prev => {
+      const updated = prev.filter(r => r.user_id !== row.user_id);
+      console.log(`[cemiterio] removendo ${row.username} da UI. Itens restantes:`, updated.length);
+      return updated;
+    });
+    
     setBusyId(null);
     toast.success('Conta restaurada com sucesso');
     
-    // Recarrega em background para garantir sincronia total
-    setTimeout(() => void load(), 500);
+    // Pequeno delay para o DB processar antes do refresh de background
+    setTimeout(() => {
+      void load();
+    }, 1000);
   };
 
   const handleAccess = async (row: CemeteryRow) => {
