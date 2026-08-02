@@ -87,9 +87,14 @@ export function useFeedExperienceMode() {
   // Importante: alguns ambientes ainda não possuem profiles.feed_experience_mode;
   // nesse caso o UPDATE pode falhar e o cache do perfil fazer rollback. O modo
   // escolhido precisa continuar funcionando no frontend imediatamente.
-  const mode: FeedExperienceMode = rawMode === 'adult_only' || rawMode === 'complete' || rawMode === 'oculto_only'
-    ? rawMode
-    : (localMode ?? 'complete');
+  // Local-first: a escolha do usuário sempre vence sobre o valor vindo do
+  // servidor. Se o UPDATE falhar (ex.: CHECK constraint antiga que não aceita
+  // 'oculto_only'), o rollback do cache do perfil não desfaz a escolha na UI.
+  const mode: FeedExperienceMode =
+    localMode ??
+    (rawMode === 'adult_only' || rawMode === 'complete' || rawMode === 'oculto_only'
+      ? rawMode
+      : 'complete');
   const hasChosen = rawMode === 'adult_only' || rawMode === 'complete' || rawMode === 'oculto_only' || !!localMode;
 
   // Sincroniza mudanças vindas do REALTIME (outro device alterou o modo).
