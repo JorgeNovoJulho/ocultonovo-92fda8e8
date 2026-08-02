@@ -185,6 +185,12 @@ export function NovidadesDoOcultoCarousel() {
     return () => window.clearInterval(id);
   }, [slides.length]);
 
+  useEffect(() => {
+    setIndex((i) => (slides.length === 0 ? 0 : i % slides.length));
+  }, [slides.length]);
+
+  if (slides.length === 0) return null;
+
   return (
     <section
       className="px-3 pt-2 pb-1"
