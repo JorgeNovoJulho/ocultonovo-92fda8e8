@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import AdminFeedCardsSection from './AdminFeedCardsSection';
+import AdminFeedPlayPicksSection from './AdminFeedPlayPicksSection';
 
 /**
  * Painel master — configura o card "Novidades Recentes do Oculto"
@@ -87,6 +89,8 @@ export default function AdminFeedNovidadesPage() {
         </div>
       </div>
 
+      <AdminFeedCardsSection />
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Adicionar novidade</CardTitle>
@@ -163,6 +167,18 @@ export default function AdminFeedNovidadesPage() {
           )}
         </CardContent>
       </Card>
+
+      <AdminFeedPlayPicksSection
+        kind="audio"
+        title="Músicas do card do feed"
+        description="Escolha as 4 músicas do Oculto Play exibidas no carrossel. Sem seleção, o sistema usa as 4 mais recentes."
+      />
+
+      <AdminFeedPlayPicksSection
+        kind="link"
+        title="Filmes/vídeos do card do feed"
+        description="Escolha os 4 títulos do Oculto Play exibidos no carrossel. Sem seleção, o sistema usa os 4 mais recentes."
+      />
     </div>
   );
 }

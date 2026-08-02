@@ -5,7 +5,14 @@ import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseExternal';
 import { useProfile } from '@/hooks/useProfile';
-import { useOcultoFeedNews, useLatestPlayTitles } from '@/hooks/useOcultoFeedNews';
+import {
+  useOcultoFeedNews,
+  useLatestPlayTitles,
+  useOcultoFeedCards,
+  useOcultoFeedPlayPicks,
+  DEFAULT_FEED_CARDS,
+  type OcultoFeedCardKey,
+} from '@/hooks/useOcultoFeedNews';
 import { getShareBaseUrl } from '@/lib/appConfig';
 import { cn } from '@/lib/utils';
 
@@ -54,8 +61,15 @@ export function NovidadesDoOcultoCarousel() {
   const navigate = useNavigate();
   const link = useInviteLink();
   const { data: news = [] } = useOcultoFeedNews(4);
-  const { data: musics = [] } = useLatestPlayTitles('audio', 4);
-  const { data: movies = [] } = useLatestPlayTitles('link', 4);
+  const { data: latestMusics = [] } = useLatestPlayTitles('audio', 4);
+  const { data: latestMovies = [] } = useLatestPlayTitles('link', 4);
+  const { data: pickedMusics = [] } = useOcultoFeedPlayPicks('audio', 4);
+  const { data: pickedMovies = [] } = useOcultoFeedPlayPicks('link', 4);
+  const { data: cards = DEFAULT_FEED_CARDS } = useOcultoFeedCards();
+
+  // Curadoria do painel tem prioridade; se vazia, cai no automático.
+  const musics = pickedMusics.length > 0 ? pickedMusics : latestMusics;
+  const movies = pickedMovies.length > 0 ? pickedMovies : latestMovies;
 
   const [index, setIndex] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -74,9 +88,9 @@ export function NovidadesDoOcultoCarousel() {
   }, [link]);
 
   const slides = useMemo(() => {
-    const list: React.ReactNode[] = [];
+    const byKey: Partial<Record<OcultoFeedCardKey, React.ReactNode>> = {};
 
-    list.push(
+    byKey.link = (
       <CardShell key="link" icon={<Link2 className="h-4 w-4" />} title="Divulgue seu Link exclusivo">
         <div className="flex items-center gap-2 mt-0.5">
           <span className="truncate flex-1 text-foreground/90 font-medium">
@@ -95,7 +109,7 @@ export function NovidadesDoOcultoCarousel() {
       </CardShell>
     );
 
-    list.push(
+    byKey.news = (
       <CardShell key="news" icon={<Sparkles className="h-4 w-4" />} title="Novidades Recentes do Oculto">
         {news.length === 0 ? (
           <p>Em breve, novas funções por aqui.</p>
@@ -112,7 +126,7 @@ export function NovidadesDoOcultoCarousel() {
       </CardShell>
     );
 
-    list.push(
+    byKey.musics = (
       <CardShell key="musics" icon={<Music2 className="h-4 w-4" />} title="Novas músicas no Oculto Play">
         {musics.length === 0 ? (
           <p>Nenhuma música publicada ainda.</p>
@@ -134,7 +148,7 @@ export function NovidadesDoOcultoCarousel() {
       </CardShell>
     );
 
-    list.push(
+    byKey.movies = (
       <CardShell key="movies" icon={<Film className="h-4 w-4" />} title="Novos filmes no Oculto Play">
         {movies.length === 0 ? (
           <p>Nenhum filme publicado ainda.</p>
@@ -156,8 +170,12 @@ export function NovidadesDoOcultoCarousel() {
       </CardShell>
     );
 
-    return list;
-  }, [link, copied, handleCopy, news, musics, movies, navigate]);
+    return [...cards]
+      .filter((c) => c.is_active)
+      .sort((a, b) => a.position - b.position)
+      .map((c) => byKey[c.card_key])
+      .filter(Boolean) as React.ReactNode[];
+  }, [link, copied, handleCopy, news, musics, movies, navigate, cards]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -166,6 +184,12 @@ export function NovidadesDoOcultoCarousel() {
     }, ROTATE_MS);
     return () => window.clearInterval(id);
   }, [slides.length]);
+
+  useEffect(() => {
+    setIndex((i) => (slides.length === 0 ? 0 : i % slides.length));
+  }, [slides.length]);
+
+  if (slides.length === 0) return null;
 
   return (
     <section
