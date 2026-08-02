@@ -1689,7 +1689,7 @@ export const RealFeed = memo(function RealFeed() {
         </ErrorBoundary>
       )}
 
-      {feedModeShows('communitiesFeedCard') && showRequiredAdultSections && activeTab !== 'vip' && !isOcultoOnly && (
+      {feedModeShows('communitiesFeedCard') && showRequiredAdultSections && activeTab !== 'vip' && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             {/* Trocou de posição com Comunidades Ocultas — agora "Explorar
