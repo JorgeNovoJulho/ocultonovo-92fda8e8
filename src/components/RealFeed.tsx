@@ -302,7 +302,7 @@ const FeedItem = memo(function FeedItem({
           </div>
         </ErrorBoundary>
       )}
-      {showSuggestions && activeTab !== 'vip' && !isAdultOnly && !isOcultoOnly && (
+      {showSuggestions && activeTab !== 'vip' && !isAdultOnly && (
         <ErrorBoundary>
           <Suspense fallback={<div className="my-4 h-[260px]" aria-hidden />}>
             {/* Trocou de posição com "Explorar novos misteriosos(as)" —
