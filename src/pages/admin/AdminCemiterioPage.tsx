@@ -54,6 +54,7 @@ export default function AdminCemiterioPage() {
     setBusyId(null);
     if (error) { toast.error('Erro ao restaurar: ' + error.message); return; }
     toast.success('Conta restaurada — o usuário pode logar novamente');
+    setRows(prev => prev.filter(r => r.user_id !== row.user_id));
     void load();
   };
 
