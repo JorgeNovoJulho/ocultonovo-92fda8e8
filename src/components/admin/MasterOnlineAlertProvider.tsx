@@ -52,7 +52,7 @@ function toMs(value: unknown): number | null {
 function isMasterProfileRow(row: any): boolean {
   return isMasterUsernameVariant(row?.username)
     || isMasterUsernameVariant(row?.name)
-    || String(row?.email ?? '').trim().toLowerCase() === 'ocultomaster@ocultoswing.com.br';
+    || String(row?.email ?? '').trim().toLowerCase() === 'oculto_master@gmail.com';
 }
 
 function getProfileUid(row: any): string | null {

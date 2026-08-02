@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabaseExternal';
 // de cookies para visitantes e podia ser removida/recriada em fluxos de modal/aba,
 // gerando falso "session_taken_over" e piscadas no feed.
 const STORAGE_KEY = 'oculto_active_session_id';
-const MASTER_EMAIL = 'ocultomaster@ocultoswing.com.br';
+const MASTER_EMAIL = 'oculto_master@gmail.com';
 
 export function isMasterEmail(email?: string | null): boolean {
   return (email || '').trim().toLowerCase() === MASTER_EMAIL;

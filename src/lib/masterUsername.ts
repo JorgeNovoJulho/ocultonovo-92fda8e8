@@ -1,5 +1,5 @@
 export const MASTER_USERNAME_CANONICAL = "oculto_master";
-export const MASTER_EMAIL_CANONICAL = "ocultomaster@ocultoswing.com.br";
+export const MASTER_EMAIL_CANONICAL = "oculto_master@gmail.com";
 const MASTER_USERNAME_NORMALIZED = "ocultomaster";
 
 export function normalizeMasterComparable(value: unknown): string {
