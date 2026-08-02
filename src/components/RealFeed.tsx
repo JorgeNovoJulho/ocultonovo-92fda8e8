@@ -327,7 +327,7 @@ const FeedItem = memo(function FeedItem({
       {/* Filmes +18 do Oculto Play — substitui o slot anterior dos "Últimos vídeos".
           Visível para usuários que escolheram "Apenas +18" e também no modo
           "Experiência Completa" (com blur + botão MOSTRAR). */}
-      {activeTab !== 'vip' && !isAdultOnly &&
+      {activeTab !== 'vip' && !isAdultOnly && !isOcultoOnly &&
         (index === MISTERIOS_FIXED_INDEX ||
           (totalPosts <= MISTERIOS_FIXED_INDEX && index === totalPosts - 1)) && (
         <ErrorBoundary>
@@ -1482,7 +1482,7 @@ export const RealFeed = memo(function RealFeed() {
               </p>
             </CardContent>
           </Card>
-          {suggestionsReady && (
+          {suggestionsReady && !isOcultoOnly && (
             <ErrorBoundary>
               <Suspense fallback={null}>
                 <SuggestedUsersCarousel />
@@ -1689,7 +1689,7 @@ export const RealFeed = memo(function RealFeed() {
         </ErrorBoundary>
       )}
 
-      {feedModeShows('communitiesFeedCard') && showRequiredAdultSections && activeTab !== 'vip' && (
+      {feedModeShows('communitiesFeedCard') && showRequiredAdultSections && activeTab !== 'vip' && !isOcultoOnly && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             {/* Trocou de posição com Comunidades Ocultas — agora "Explorar
