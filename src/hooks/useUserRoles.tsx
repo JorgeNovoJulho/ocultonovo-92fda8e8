@@ -24,7 +24,7 @@ export interface UserRoleEntry {
 // Check if current user has a specific role (via has_role RPC)
 export function useHasRole(role: UserRole) {
   const { user } = useAuth();
-  const isMasterEmail = (user?.email || '').trim().toLowerCase() === 'ocultomaster@gmail.com';
+  const isMasterEmail = (user?.email || '').trim().toLowerCase() === 'ocultomaster@ocultoswing.com.br';
 
   return useQuery({
     queryKey: ['user-role', user?.id, role],
@@ -51,7 +51,7 @@ export function useHasRole(role: UserRole) {
 // Check if current user is any type of admin (via has_role RPC)
 export function useIsAdmin() {
   const { user } = useAuth();
-  const isMasterEmail = (user?.email || '').trim().toLowerCase() === 'ocultomaster@gmail.com';
+  const isMasterEmail = (user?.email || '').trim().toLowerCase() === 'ocultomaster@ocultoswing.com.br';
 
   return useQuery({
     queryKey: ['is-admin', user?.id],
@@ -66,7 +66,7 @@ export function useIsAdmin() {
         if (data === true) return true;
       }
       // Fallback email check
-      return (user.email || '').trim().toLowerCase() === 'ocultomaster@gmail.com';
+      return (user.email || '').trim().toLowerCase() === 'ocultomaster@ocultoswing.com.br';
     },
     enabled: !!user && !isMasterEmail,
     initialData: isMasterEmail ? true : undefined,
@@ -162,7 +162,7 @@ export function useIsMasterAdmin() {
 // Get current user's roles
 export function useMyRoles() {
   const { user } = useAuth();
-  const isMasterEmail = (user?.email || '').trim().toLowerCase() === 'ocultomaster@gmail.com';
+  const isMasterEmail = (user?.email || '').trim().toLowerCase() === 'ocultomaster@ocultoswing.com.br';
 
   return useQuery({
     queryKey: ['my-roles', user?.id],
