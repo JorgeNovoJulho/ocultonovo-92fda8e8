@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Copy, Check, Sparkles, Music2, Film, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -74,6 +74,9 @@ export function NovidadesDoOcultoCarousel() {
   const [index, setIndex] = useState(0);
   const [copied, setCopied] = useState(false);
   const pausedRef = useRef(false);
+  const touchStartRef = useRef<number | null>(null);
+  const touchEndRef = useRef<number | null>(null);
+  const minSwipeDistance = 50;
 
   const handleCopy = useCallback(async () => {
     if (!link) return;
@@ -177,10 +180,37 @@ export function NovidadesDoOcultoCarousel() {
       .filter(Boolean) as React.ReactNode[];
   }, [link, copied, handleCopy, news, musics, movies, navigate, cards]);
 
+  const onTouchStart = (e: TouchEvent) => {
+    touchEndRef.current = null;
+    touchStartRef.current = e.targetTouches[0].clientX;
+    pausedRef.current = true;
+  };
+
+  const onTouchMove = (e: TouchEvent) => {
+    touchEndRef.current = e.targetTouches[0].clientX;
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStartRef.current || !touchEndRef.current) return;
+    const distance = touchStartRef.current - touchEndRef.current;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+
+    if (isLeftSwipe) {
+      setIndex((i) => (i + 1) % slides.length);
+    } else if (isRightSwipe) {
+      setIndex((i) => (i - 1 + slides.length) % slides.length);
+    }
+    
+    setTimeout(() => {
+      pausedRef.current = false;
+    }, 2000);
+  };
+
   useEffect(() => {
     const id = window.setInterval(() => {
       if (pausedRef.current) return;
-      setIndex((i) => (i + 1) % slides.length);
+      setIndex((i) => (slides.length > 0 ? (i + 1) % slides.length : 0));
     }, ROTATE_MS);
     return () => window.clearInterval(id);
   }, [slides.length]);
@@ -205,9 +235,14 @@ export function NovidadesDoOcultoCarousel() {
         </h2>
       </div>
 
-      <div className="relative overflow-hidden rounded-2xl">
+      <div 
+        className="relative overflow-hidden rounded-2xl touch-pan-y"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
         <div
-          className="flex transition-transform duration-500 ease-out"
+          className="flex transition-transform duration-500 ease-out will-change-transform"
           style={{ transform: `translateX(-${index * 100}%)` }}
         >
           {slides.map((slide, i) => (
