@@ -358,7 +358,7 @@ const FeedItem = memo(function FeedItem({
       )}
       {/* Filmes no Oculto Play (azul) — logo abaixo de Comunidades Ocultas.
           Apenas no Universo Completo (não aparece em "Apenas +18"). */}
-      {activeTab !== 'vip' && !isAdultOnly && !isOcultoOnly &&
+      {activeTab !== 'vip' && !isAdultOnly &&
         (index === LATEST_MOVIES_BIG_FIXED_INDEX ||
           (totalPosts <= LATEST_MOVIES_BIG_FIXED_INDEX && index === totalPosts - 1)) && (
         <ErrorBoundary>
