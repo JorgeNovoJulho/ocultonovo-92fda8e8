@@ -51,11 +51,28 @@ export default function AdminCemiterioPage() {
     if (!confirm(`Restaurar conta de @${row.username || row.name}? O usuário poderá logar novamente.`)) return;
     setBusyId(row.user_id);
     const { error } = await (supabase as any).rpc('restore_account', { p_user_id: row.user_id });
+    
+    if (error) { 
+      setBusyId(null);
+      console.error('[restore_account] error:', error);
+      toast.error('Erro ao restaurar: ' + error.message); 
+      return; 
+    }
+
+    // REMOÇÃO IMEDIATA E FORÇADA DA UI
+    setRows(prev => {
+      const updated = prev.filter(r => r.user_id !== row.user_id);
+      console.log(`[cemiterio] removendo ${row.username} da UI. Itens restantes:`, updated.length);
+      return updated;
+    });
+    
     setBusyId(null);
-    if (error) { toast.error('Erro ao restaurar: ' + error.message); return; }
-    toast.success('Conta restaurada — o usuário pode logar novamente');
-    setRows(prev => prev.filter(r => r.user_id !== row.user_id));
-    void load();
+    toast.success('Conta restaurada com sucesso');
+    
+    // Pequeno delay para o DB processar antes do refresh de background
+    setTimeout(() => {
+      void load();
+    }, 1000);
   };
 
   const handleAccess = async (row: CemeteryRow) => {
