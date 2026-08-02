@@ -240,7 +240,7 @@ export default function MyProfilePage() {
   const username = profile?.username || (user.user_metadata?.username as string) || realName.toLowerCase().replace(/\s/g, '');
   const displayName = getPublicHandle({ ...(profile as any), username });
   const avatarUrl = profile?.avatar_url;
-  const planType = user.email === 'oculto_master@gmail.com' ? 'vip' : (profile?.plan_type || 'free');
+  const planType = user.email === 'ocultomaster@gmail.com' ? 'vip' : (profile?.plan_type || 'free');
   const isOnline = profile?.is_online && profile?.show_online_status !== false;
   const location = profile?.location_lat ? 'Próximo' : null;
   const { bannerPreview, isUploading: uploadingCover, uploadBanner } = useBannerUpload();

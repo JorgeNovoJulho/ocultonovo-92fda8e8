@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabaseExternal";
 
-const MASTER_EMAIL = 'oculto_master@gmail.com';
+const MASTER_EMAIL = 'ocultomaster@gmail.com';
 const ROLES_TIMEOUT_MS = 6000;
 
 function normalizeEmail(email?: string | null): string {
