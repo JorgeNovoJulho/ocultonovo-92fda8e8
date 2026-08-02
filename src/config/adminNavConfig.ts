@@ -178,7 +178,7 @@ export const adminTopLevelItems: AdminNavItem[] = [
   { label: "Criar Anúncio Marketplace", href: "/admin/marketplace-ads", icon: Megaphone },
   { label: "Mensagem de Boas-Vindas", href: "/admin/welcome-message", icon: MessageSquareHeart },
   { label: "Pesquisas no Chat (200 XP)", href: "/admin/pesquisas", icon: ClipboardCheck, masterOnly: true },
-  "/admin/feed-novidades",
+  { label: "Novidades do Oculto (Feed)", href: "/admin/feed-novidades", icon: Sparkles, masterOnly: true },
   { label: "Beta Control (Fase da Plataforma)", href: "/admin/beta-control", icon: Sparkles, masterOnly: true },
   { label: "Laboratório Oculto (Feature Flags)", href: "/admin/laboratorio-oculto", icon: FlaskConical, masterOnly: true },
   { label: "Modo Manutenção", href: "/admin/manutencao", icon: Sparkles, masterOnly: true },
