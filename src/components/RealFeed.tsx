@@ -313,7 +313,7 @@ const FeedItem = memo(function FeedItem({
       )}
       {/* Mistérios em Destaque: aparece após o 6º post; se o feed tiver
           menos de 6 posts, aparece logo após o último para nunca sumir. */}
-      {showMisterios && activeTab !== 'vip' &&
+      {showMisterios && activeTab !== 'vip' && !isOcultoOnly &&
         (index === MISTERIOS_FIXED_INDEX ||
           (totalPosts <= MISTERIOS_FIXED_INDEX && index === totalPosts - 1)) && (
         <ErrorBoundary>
