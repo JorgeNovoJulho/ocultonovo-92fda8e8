@@ -199,7 +199,7 @@ const sortProfilesByRecency = (rows: ProfileRow[] = []) =>
 const buildFallbackProfile = (authUser: any): Profile => {
   const metadata = (authUser.user_metadata || {}) as Record<string, any>;
   const fallbackName = (metadata.display_name || metadata.name || metadata.full_name || authUser.email?.split('@')[0] || 'Usuário') as string;
-  const isAdmin = authUser.email === 'oculto_master@gmail.com';
+  const isAdmin = authUser.email === 'ocultomaster@gmail.com';
   return normalizeProfile({
     id: authUser.id,
     user_id: authUser.id,
@@ -319,7 +319,7 @@ export function useProfile() {
         const publicData = await tryPublicProfileFallback(user.id);
         if (publicData) {
           const normalizedPublic = normalizeProfile(publicData);
-          if (user.email === 'oculto_master@gmail.com') {
+          if (user.email === 'ocultomaster@gmail.com') {
             return { ...normalizedPublic, plan_type: 'vip', is_vip: true, is_verified: true, is_oculto_verified: true } as Profile;
           }
           return normalizedPublic;
@@ -345,7 +345,7 @@ export function useProfile() {
               .maybeSingle();
             if (reloaded) {
               const normalizedNew = normalizeProfile(reloaded as ProfileRow);
-              if (user.email === 'oculto_master@gmail.com') {
+              if (user.email === 'ocultomaster@gmail.com') {
                 return { ...normalizedNew, plan_type: 'vip', is_vip: true, is_verified: true, is_oculto_verified: true } as Profile;
               }
               return normalizedNew;
@@ -356,7 +356,7 @@ export function useProfile() {
         const publicData = await tryPublicProfileFallback(user.id);
         if (publicData) {
           const normalizedPublic = normalizeProfile(publicData);
-          if (user.email === 'oculto_master@gmail.com') {
+          if (user.email === 'ocultomaster@gmail.com') {
             return { ...normalizedPublic, plan_type: 'vip', is_vip: true, is_verified: true, is_oculto_verified: true } as Profile;
           }
           return normalizedPublic;
@@ -397,7 +397,7 @@ export function useProfile() {
       }
 
       const normalized = normalizeProfile(data as ProfileRow);
-      if (user.email === 'oculto_master@gmail.com') {
+      if (user.email === 'ocultomaster@gmail.com') {
         return { ...normalized, plan_type: 'vip', is_vip: true, is_verified: true, is_oculto_verified: true } as Profile;
       }
       return normalized;

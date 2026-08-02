@@ -414,7 +414,7 @@ export function useIdentityUsers(filter: 'all' | 'verified' | 'unverified' | 'ky
   return useQuery({
     queryKey: ['admin-identity-users', filter, user?.id],
     queryFn: async (): Promise<IdentityVerificationUser[]> => {
-      const MASTER_EMAIL = 'oculto_master@gmail.com';
+      const MASTER_EMAIL = 'ocultomaster@gmail.com';
       const MASTER_USERNAME = 'ocultomaster';
 
       let query = supabase
