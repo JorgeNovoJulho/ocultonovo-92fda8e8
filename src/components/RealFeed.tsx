@@ -334,7 +334,7 @@ const FeedItem = memo(function FeedItem({
         </ErrorBoundary>
       )}
       {/* Últimos vídeos do Oculto Play — movido para logo acima de Salas Ocultas. */}
-      {activeTab !== 'vip' && !isAdultOnly &&
+      {activeTab !== 'vip' && !isAdultOnly && !isOcultoOnly &&
         (index === COMMUNITIES_FEED_FIXED_INDEX ||
           (totalPosts <= COMMUNITIES_FEED_FIXED_INDEX && index === totalPosts - 1)) && (
         <ErrorBoundary>
@@ -344,7 +344,7 @@ const FeedItem = memo(function FeedItem({
         </ErrorBoundary>
       )}
       {/* Salas Ocultas: posicionado logo abaixo de "Últimos vídeos do Oculto Play". */}
-      {showHiddenRoomsInline && activeTab !== 'vip' &&
+      {showHiddenRoomsInline && activeTab !== 'vip' && !isOcultoOnly &&
         (index === COMMUNITIES_FEED_FIXED_INDEX ||
           (totalPosts <= COMMUNITIES_FEED_FIXED_INDEX && index === totalPosts - 1)) && (
         <ErrorBoundary>
@@ -355,7 +355,7 @@ const FeedItem = memo(function FeedItem({
       )}
       {/* Filmes no Oculto Play (azul) — logo abaixo de Comunidades Ocultas.
           Apenas no Universo Completo (não aparece em "Apenas +18"). */}
-      {activeTab !== 'vip' && !isAdultOnly &&
+      {activeTab !== 'vip' && !isAdultOnly && !isOcultoOnly &&
         (index === LATEST_MOVIES_BIG_FIXED_INDEX ||
           (totalPosts <= LATEST_MOVIES_BIG_FIXED_INDEX && index === totalPosts - 1)) && (
         <ErrorBoundary>
