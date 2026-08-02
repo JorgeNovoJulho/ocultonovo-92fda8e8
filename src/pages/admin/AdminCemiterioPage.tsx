@@ -83,7 +83,7 @@ export default function AdminCemiterioPage() {
           <ShieldAlert className="mx-auto mb-3 h-10 w-10 text-destructive" />
           <h2 className="text-lg font-bold text-destructive">Acesso restrito</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Apenas o administrador master pode acessar o Cemitério de Contas.
+            Apenas o administrador master (@oculto_master) pode acessar o Cemitério de Contas.
           </p>
         </div>
       </div>
