@@ -64,6 +64,8 @@ $$;
 GRANT EXECUTE ON FUNCTION public.soft_delete_account(uuid, text) TO authenticated, service_role;
 
 -- 3) RPC: restore_account — APENAS master admin pode restaurar
+DROP FUNCTION IF EXISTS public.restore_account(uuid);
+
 CREATE OR REPLACE FUNCTION public.restore_account(p_user_id uuid)
 RETURNS jsonb
 LANGUAGE plpgsql
