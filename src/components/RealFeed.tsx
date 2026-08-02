@@ -1582,7 +1582,7 @@ export const RealFeed = memo(function RealFeed() {
       </ErrorBoundary>
 
       {/* Flash Stories Bar — agora acima da sessão "Boas-vindas aos novos do OCULTO". */}
-      {feedModeShows('stories') && storiesReady && !isAdultOnly && (
+      {feedModeShows('stories') && storiesReady && !isAdultOnly && !isOcultoOnly && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             <FlashStoriesBar />
@@ -1604,7 +1604,7 @@ export const RealFeed = memo(function RealFeed() {
       <DataSaverBadge />
 
       {/* Universo Social — Noite Oculta ativa (se houver) */}
-      {feedModeShows('noiteOculta') && socialStripsReady && (
+      {feedModeShows('noiteOculta') && socialStripsReady && !isOcultoOnly && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             <div className="px-3 pt-2">
@@ -1621,7 +1621,7 @@ export const RealFeed = memo(function RealFeed() {
           <Suspense fallback={null}>
             <div className="px-3 pt-3 space-y-3">
               {/* === Início Inteligente (Retenção) === */}
-              {feedModeShows('retentionBlock') && (
+              {feedModeShows('retentionBlock') && !isOcultoOnly && (
                 <section
                   aria-label="Início Inteligente"
                   className="rounded-2xl border border-pink-500/20 bg-gradient-to-b from-pink-500/[0.06] to-transparent p-3 space-y-2.5"
@@ -1655,7 +1655,7 @@ export const RealFeed = memo(function RealFeed() {
 
 
       {/* Widget de Matches Ativos */}
-      {feedModeShows('matches') && sidebarWidgetsReady && (
+      {feedModeShows('matches') && sidebarWidgetsReady && !isOcultoOnly && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             <RecentMatchesWidget />
@@ -1663,7 +1663,7 @@ export const RealFeed = memo(function RealFeed() {
         </ErrorBoundary>
       )}
 
-      {feedModeShows('discoveryUniverse') && showRequiredAdultSections && activeTab !== 'vip' && (
+      {feedModeShows('discoveryUniverse') && showRequiredAdultSections && activeTab !== 'vip' && !isOcultoOnly && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             <DiscoveryUniverseCarousel />
@@ -1671,7 +1671,7 @@ export const RealFeed = memo(function RealFeed() {
         </ErrorBoundary>
       )}
 
-      {feedModeShows('shareLink') && activeTab !== 'vip' && (
+      {feedModeShows('shareLink') && activeTab !== 'vip' && !isOcultoOnly && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             <div className="mb-3 px-3">
@@ -1681,7 +1681,7 @@ export const RealFeed = memo(function RealFeed() {
         </ErrorBoundary>
       )}
 
-      {feedModeShows('vipCreators') && showHeavyCarousels && (
+      {feedModeShows('vipCreators') && showHeavyCarousels && !isOcultoOnly && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             <VipCreatorsCarousel />
@@ -1689,7 +1689,7 @@ export const RealFeed = memo(function RealFeed() {
         </ErrorBoundary>
       )}
 
-      {feedModeShows('communitiesFeedCard') && showRequiredAdultSections && activeTab !== 'vip' && (
+      {feedModeShows('communitiesFeedCard') && showRequiredAdultSections && activeTab !== 'vip' && !isOcultoOnly && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             {/* Trocou de posição com Comunidades Ocultas — agora "Explorar
@@ -1702,7 +1702,7 @@ export const RealFeed = memo(function RealFeed() {
       )}
 
 
-      {feedModeShows('events') && activeTab !== 'vip' && (
+      {feedModeShows('events') && activeTab !== 'vip' && !isOcultoOnly && (
         <ErrorBoundary>
           <Suspense fallback={<div className="my-4 h-[60px]" aria-hidden />}>
             <EventsFeedStrip />
