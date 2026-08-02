@@ -1663,7 +1663,7 @@ export const RealFeed = memo(function RealFeed() {
         </ErrorBoundary>
       )}
 
-      {feedModeShows('discoveryUniverse') && showRequiredAdultSections && activeTab !== 'vip' && !isOcultoOnly && (
+      {feedModeShows('discoveryUniverse') && showRequiredAdultSections && activeTab !== 'vip' && (
         <ErrorBoundary>
           <Suspense fallback={null}>
             <DiscoveryUniverseCarousel />
