@@ -72,6 +72,7 @@ SET search_path = public
 AS $$
 DECLARE
   v_is_master boolean := false;
+  v_profile_id uuid;
 BEGIN
   -- Checa master admin via has_role
   BEGIN
@@ -88,8 +89,14 @@ BEGIN
      SET is_deleted   = false,
          deleted_at   = NULL,
          deleted_reason = NULL,
+         deleted_by   = NULL,
          is_invisible = false
-   WHERE user_id = p_user_id;
+   WHERE user_id = p_user_id
+   RETURNING id INTO v_profile_id;
+
+  IF v_profile_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Perfil não encontrado');
+  END IF;
 
   -- Reabilita auth.user
   BEGIN
@@ -99,7 +106,12 @@ BEGIN
      WHERE id = p_user_id;
   EXCEPTION WHEN OTHERS THEN NULL; END;
 
-  RETURN jsonb_build_object('ok', true);
+  RETURN jsonb_build_object(
+    'ok', true,
+    'profile_id', v_profile_id,
+    'is_deleted', false,
+    'access_restored', true
+  );
 END;
 $$;
 
