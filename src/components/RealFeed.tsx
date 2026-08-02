@@ -367,7 +367,7 @@ const FeedItem = memo(function FeedItem({
       {/* Descubra no OCULTO PLAY — 5 vídeos aleatórios por sessão.
           Aparece 5 postagens depois de Salas Ocultas (index 6+5 = 11). Se o
           feed for menor, ancora ao último post para nunca sumir. */}
-      {activeTab !== 'vip' && !isAdultOnly &&
+      {activeTab !== 'vip' && !isAdultOnly && !isOcultoOnly &&
         (index === OCULTO_PLAY_RANDOM_FIXED_INDEX ||
           (totalPosts <= OCULTO_PLAY_RANDOM_FIXED_INDEX && index === totalPosts - 1)) && (
         <ErrorBoundary>
@@ -376,7 +376,7 @@ const FeedItem = memo(function FeedItem({
           </Suspense>
         </ErrorBoundary>
       )}
-      {showAuctions && index === AUCTIONS_FIXED_INDEX && activeTab !== 'vip' && (
+      {showAuctions && index === AUCTIONS_FIXED_INDEX && activeTab !== 'vip' && !isOcultoOnly && (
         <ErrorBoundary>
           <Suspense fallback={<div className="my-4 h-[180px]" aria-hidden />}>
             <AuctionsFeedStrip />
