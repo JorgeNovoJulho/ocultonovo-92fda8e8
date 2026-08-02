@@ -331,13 +331,15 @@ export function CommunidadesOcultasFeedSection() {
     }
   };
 
+  const { isOcultoOnly } = useFeedExperienceMode();
   const eligible = useMemo<Community[]>(() => {
-    const list = (communities ?? []).filter((c) => c.status === 'active' && c.visibility !== 'private');
-    if (user?.id) {
-      // Logic for filtering could be added here if we need to filter communities by is_adult
-    }
+    const list = (communities ?? []).filter((c) => {
+      const active = c.status === 'active' && c.visibility !== 'private';
+      if (isOcultoOnly && c.is_adult) return false;
+      return active;
+    });
     return Number.isFinite(MAX_CARDS) ? list.slice(0, MAX_CARDS) : list;
-  }, [communities]);
+  }, [communities, isOcultoOnly]);
 
   // Garante que, no primeiro acesso pós-cadastro, a comunidade
   // "Alienígenas e Mistérios" apareça em primeiro lugar.
