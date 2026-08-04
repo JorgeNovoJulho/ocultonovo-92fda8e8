@@ -639,9 +639,9 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
       if (!isMounted) return;
       
       const now = Date.now();
-      // Proteção contra loops de refetch: ignorar se houve um refetch há menos de 10 segundos
-      if (now - lastRefetchAt < 10000) {
-        addDebugLog('stale', 'Refetch ignorado (cooldown ativo)', { diff: now - lastRefetchAt });
+      // Proteção contra loops de refetch: aumentar o cooldown para 45 segundos para estabilidade total
+      if (now - lastRefetchAt < 45000) {
+        addDebugLog('stale', 'Refetch ignorado (cooldown de 45s ativo)', { diff: now - lastRefetchAt });
         return;
       }
 
@@ -667,12 +667,13 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
       pendingRefetch = true;
       if (throttleTimer) return;
       
+      // Janela de coalescência aumentada para 30s para evitar piscadas constantes em ambiente mobile
       throttleTimer = setTimeout(() => {
         throttleTimer = null;
         if (!isMounted || !pendingRefetch) return;
         pendingRefetch = false;
         doRefetch();
-      }, 15000); // Janela de coalescência aumentada para 15s para evitar piscadas
+      }, 30000); 
     };
 
     const onPostsChange = (payload: any) => {
