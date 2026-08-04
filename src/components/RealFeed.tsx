@@ -1212,7 +1212,7 @@ export const RealFeed = memo(function RealFeed() {
   ]);
 
   const topActionButtons = (
-    <div className="sticky top-0 z-[70] flex flex-nowrap overflow-x-auto no-scrollbar sm:grid sm:grid-cols-7 gap-1.5 px-2 pt-2 pb-1.5 bg-background/95 backdrop-blur-md border-b border-border/20 shadow-sm items-center">
+    <div className="sticky top-0 z-[70] flex flex-nowrap overflow-x-auto no-scrollbar sm:grid sm:grid-cols-7 gap-2 px-2 pt-2 pb-1.5 bg-background/95 backdrop-blur-md border-b border-border/20 shadow-sm items-center">
       <TooltipProvider delayDuration={150}>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -1220,7 +1220,7 @@ export const RealFeed = memo(function RealFeed() {
               variant="ghost"
               size="sm"
               onClick={() => setShowFeedFilterModal(true)}
-              className="h-10 sm:h-9 w-12 flex-shrink-0 sm:w-full gap-1 px-0 sm:px-2 text-[10px] sm:text-[11px] font-bold touch-manipulation bg-gradient-to-r from-fuchsia-500 via-pink-500 to-orange-400 text-white border border-pink-500/60 shadow-sm hover:brightness-110 hover:text-white transition flex items-center justify-center"
+              className="h-10 sm:h-11 w-12 flex-shrink-0 sm:w-full gap-1.5 px-0 sm:px-3 text-[10px] sm:text-[12px] font-bold touch-manipulation bg-gradient-to-r from-fuchsia-500 via-pink-500 to-orange-400 text-white border border-pink-500/60 shadow-sm hover:brightness-110 hover:text-white transition flex items-center justify-center text-center"
               aria-label="Alterar filtro de gênero do feed"
             >
               <SlidersHorizontal className="h-4.5 w-4.5 sm:h-4 sm:w-4" />
@@ -1236,7 +1236,7 @@ export const RealFeed = memo(function RealFeed() {
               variant="ghost"
               size="sm"
               onClick={openSidebarSearch}
-              className="h-10 sm:h-9 w-12 flex-shrink-0 sm:w-full gap-1 px-0 sm:px-2 text-[10px] sm:text-[11px] font-bold touch-manipulation bg-gradient-to-r from-violet-500 via-indigo-500 to-blue-500 text-white border border-indigo-500/60 shadow-sm hover:brightness-110 hover:text-white transition flex items-center justify-center"
+              className="h-10 sm:h-11 w-12 flex-shrink-0 sm:w-full gap-1.5 px-0 sm:px-3 text-[10px] sm:text-[12px] font-bold touch-manipulation bg-gradient-to-r from-violet-500 via-indigo-500 to-blue-500 text-white border border-indigo-500/60 shadow-sm hover:brightness-110 hover:text-white transition flex items-center justify-center text-center"
               aria-label="Abrir página de pesquisa"
             >
               <Search className="h-4.5 w-4.5 sm:h-4 sm:w-4" />
@@ -1253,7 +1253,7 @@ export const RealFeed = memo(function RealFeed() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowFeedContentTypeModal(true)}
-                className="h-10 sm:h-9 w-full gap-1 px-0 sm:px-2 text-[10px] sm:text-[11px] font-bold touch-manipulation bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 text-black border border-amber-500/80 shadow-sm hover:brightness-110 hover:text-black transition flex items-center justify-center"
+                className="h-10 sm:h-11 w-full gap-1.5 px-0 sm:px-3 text-[10px] sm:text-[12px] font-bold touch-manipulation bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 text-black border border-amber-500/80 shadow-sm hover:brightness-110 hover:text-black transition flex items-center justify-center text-center"
                 aria-label="Escolher tipo de conteúdo do feed (+18 ou completa)"
               >
                 <Flame className="h-4.5 w-4.5 sm:h-4 sm:w-4" strokeWidth={2.5} />
@@ -1276,7 +1276,7 @@ export const RealFeed = memo(function RealFeed() {
               aria-pressed={auraOpen}
               aria-label={auraOpen ? 'Recolher Aura IA' : 'Abrir Aura IA'}
               className={[
-                'relative h-10 sm:h-9 w-12 flex-shrink-0 sm:w-full gap-1 px-0 sm:px-2 text-[10px] sm:text-[11px] font-bold touch-manipulation flex items-center justify-center',
+                'relative h-10 sm:h-11 w-12 flex-shrink-0 sm:w-full gap-1.5 px-0 sm:px-3 text-[10px] sm:text-[12px] font-bold touch-manipulation flex items-center justify-center text-center',
                 'bg-[linear-gradient(115deg,#ff1aa8_0%,#d946ef_28%,#a855f7_55%,#22d3ee_100%)] text-white',
                 'border border-white/40 shadow-sm',
                 'hover:brightness-125 hover:text-white transition-all',
@@ -1301,7 +1301,7 @@ export const RealFeed = memo(function RealFeed() {
                 const next = themeMode === 'light' ? 'dark' : themeMode === 'dark' ? 'auto' : 'light';
                 setThemeMode(next);
               }}
-              className="h-10 sm:h-9 w-12 flex-shrink-0 sm:w-full gap-1 px-0 sm:px-2 text-[10px] sm:text-[11px] font-bold touch-manipulation bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500 text-white border border-orange-500/60 shadow-sm hover:brightness-110 hover:text-white transition flex items-center justify-center"
+              className="h-10 sm:h-11 w-12 flex-shrink-0 sm:w-full gap-1.5 px-0 sm:px-3 text-[10px] sm:text-[12px] font-bold touch-manipulation bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500 text-white border border-orange-500/60 shadow-sm hover:brightness-110 hover:text-white transition flex items-center justify-center text-center"
               aria-label={`Alternar tema (atual: ${themeMode === 'light' ? 'Claro' : themeMode === 'dark' ? 'Escuro' : 'Auto'})`}
             >
               {themeMode === 'light' ? <Sun className="h-4.5 w-4.5 sm:h-4 sm:w-4" /> : themeMode === 'dark' ? <Moon className="h-4.5 w-4.5 sm:h-4 sm:w-4" /> : <MonitorSmartphone className="h-4.5 w-4.5 sm:h-4 sm:w-4" />}
@@ -1326,7 +1326,7 @@ export const RealFeed = memo(function RealFeed() {
             safeBlurPendingTimer.current = window.setTimeout(() => setSafeBlurPending(false), 350);
           }}
           className={cn(
-            "h-10 sm:h-9 w-12 flex-shrink-0 sm:w-full gap-1 px-0 sm:px-2 text-[10px] sm:text-[11px] font-bold touch-manipulation bg-gradient-to-r from-slate-700 via-zinc-700 to-stone-800 text-white border border-zinc-600/60 shadow-sm hover:brightness-110 hover:text-white transition-all duration-300 active:scale-95 flex items-center justify-center",
+            "h-10 sm:h-11 w-12 flex-shrink-0 sm:w-full gap-1.5 px-0 sm:px-3 text-[10px] sm:text-[12px] font-bold touch-manipulation bg-gradient-to-r from-slate-700 via-zinc-700 to-stone-800 text-white border border-zinc-600/60 shadow-sm hover:brightness-110 hover:text-white transition-all duration-300 active:scale-95 flex items-center justify-center text-center",
             safeBlurPending && "opacity-90",
             safeBlurOn ? "ring-1 ring-rose-400/40" : "ring-1 ring-emerald-400/30"
           )}
@@ -1347,8 +1347,8 @@ export const RealFeed = memo(function RealFeed() {
           </span>
         </Button>
 
-        <div className="w-12 flex-shrink-0 sm:w-full flex items-center justify-center">
-          <FeedModeSelector className="w-full" compact />
+        <div className="w-12 h-10 sm:h-11 flex-shrink-0 sm:w-full flex items-center justify-center">
+          <FeedModeSelector className="w-full h-full" compact />
         </div>
       </TooltipProvider>
 
