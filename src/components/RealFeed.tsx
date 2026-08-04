@@ -379,7 +379,6 @@ const FeedItem = memo(function FeedItem({
 });
 
 export const RealFeed = memo(function RealFeed() {
-  const addDebugLog = useFeedDebugStore((s) => s.addLog);
   console.log('[FeedDebug] RealFeed rendered');
 
   const [showCreateModal, setShowCreateModal] = useState(false);
