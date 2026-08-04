@@ -1187,6 +1187,7 @@ export const RealFeed = memo(function RealFeed() {
 
   const topActionButtons = (
     <div className="sticky top-0 z-[70] flex justify-center sm:justify-end items-center gap-2 px-2 pt-2 pb-1 flex-wrap bg-background/95 backdrop-blur-md border-b border-border/20 shadow-sm">
+      <FeedSyncStatusChip className="hidden sm:flex" />
       <TooltipProvider delayDuration={150}>
         <Tooltip>
           <TooltipTrigger asChild>
