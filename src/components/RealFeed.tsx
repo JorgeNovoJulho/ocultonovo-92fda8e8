@@ -156,6 +156,9 @@ import { FeedSyncStatusChip } from "@/components/feed/FeedSyncStatusChip";
 import { prefetchFeedMedia } from "@/lib/imageLoadCache";
 import { isVideoUrl } from "@/lib/mediaType";
 import { useFeedDebugStore } from "@/store/useFeedDebugStore";
+import { useFeedCacheStore } from "@/store/useFeedCacheStore";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 
 // Bridge: chaves usadas no RealFeed → chaves canônicas em HOME_SECTIONS
 // (src/config/homeSections.ts). Usado pelo gate granular isSectionEnabled().
@@ -565,9 +568,17 @@ export const RealFeed = memo(function RealFeed() {
   const queryClient = useQueryClient();
 
 
+  const hasValidCache = useFeedCacheStore(s => !!s.posts?.length && (Date.now() - s.updatedAt < 24 * 60 * 60 * 1000));
+  const [showRenderWarning, setShowRenderWarning] = useState(false);
+
   useEffect(() => {
     addDebugLog('render', 'RealFeed montado/remontado');
-  }, [addDebugLog]);
+    if (hasValidCache) {
+      setShowRenderWarning(true);
+      const t = setTimeout(() => setShowRenderWarning(false), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [addDebugLog, hasValidCache]);
 
   const {
     data: infiniteData,
@@ -1581,7 +1592,15 @@ export const RealFeed = memo(function RealFeed() {
       <FeedModeSyncIndicator />
       <div className="flex flex-col gap-2 p-3">
         {topActionButtons}
-        <FeedSyncStatusChip className="self-start" />
+        <div className="flex items-center justify-between">
+          <FeedSyncStatusChip />
+          {isDebugEnabled && showRenderWarning && (
+            <Alert variant="destructive" className="py-1 px-3 w-auto bg-amber-500/10 border-amber-500/30 text-amber-500 animate-pulse">
+              <AlertTriangle className="h-3 w-3 mr-2" />
+              <AlertDescription className="text-[10px] font-bold">RE-RENDER COM CACHE ATIVO</AlertDescription>
+            </Alert>
+          )}
+        </div>
       </div>
 
       {/* Feed Tabs — fixo ao grid superior, acima dos stories. */}
