@@ -13,8 +13,12 @@ export type OcultoFeedNewsItem = {
 export function useOcultoFeedNews(limit = 4) {
   return useQuery({
     queryKey: ['oculto-feed-news', limit],
-    staleTime: 600_000,
-    gcTime: 1200_000,
+    staleTime: 60 * 60 * 1000, // 1h
+    gcTime: 2 * 60 * 60 * 1000, // 2h
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+
     queryFn: async (): Promise<OcultoFeedNewsItem[]> => {
       const { data, error } = await supabase
         .from('oculto_feed_news')
@@ -48,8 +52,12 @@ export function useOcultoFeedNewsAdmin() {
 export function useLatestPlayTitles(kind: 'audio' | 'link', limit = 4) {
   return useQuery({
     queryKey: ['oculto-play-latest-titles', kind, limit],
-    staleTime: 600_000,
-    gcTime: 1200_000,
+    staleTime: 60 * 60 * 1000,
+    gcTime: 2 * 60 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+
     queryFn: async (): Promise<{ id: string; title: string }[]> => {
       const { data, error } = await supabase
         .from('oculto_play_items')
@@ -98,8 +106,12 @@ async function fetchFeedCards(): Promise<OcultoFeedCard[]> {
 export function useOcultoFeedCards() {
   return useQuery({
     queryKey: ['oculto-feed-cards'],
-    staleTime: 600_000,
-    gcTime: 1200_000,
+    staleTime: 60 * 60 * 1000,
+    gcTime: 2 * 60 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+
     queryFn: fetchFeedCards,
   });
 }
@@ -128,8 +140,13 @@ export type OcultoFeedPlayPick = {
 export function useOcultoFeedPlayPicks(kind: 'audio' | 'link', limit = 4) {
   return useQuery({
     queryKey: ['oculto-feed-play-picks', kind, limit],
-    staleTime: 600_000,
-    gcTime: 1200_000,
+    staleTime: 60 * 60 * 1000,
+    gcTime: 2 * 60 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+
+    
     queryFn: async (): Promise<OcultoFeedPlayPick[]> => {
       const { data, error } = await supabase
         .from('oculto_feed_play_picks')

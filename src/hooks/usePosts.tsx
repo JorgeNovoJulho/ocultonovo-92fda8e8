@@ -347,15 +347,17 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
 
   const query = useQuery({
     queryKey: ['posts', options?.userId, options?.limit, isEnabled, showAll, maxPosts, startDate, profile?.id],
-    staleTime: 600_000,          // Aumentado para 10m para evitar saltos visuais durante navegação
-    gcTime: 60 * 60_000,         // Cache por 1h
+    staleTime: 60 * 60 * 1000,   // 1h
+    gcTime: 2 * 60 * 60 * 1000,  // 2h
+
     retry: 2,
     refetchOnWindowFocus: false, 
     refetchOnMount: false,       
-    refetchOnReconnect: false,   // Evita recarregar ao oscilar rede
-    refetchInterval: false,      // Desabilita polling automático para estabilidade total
+    refetchOnReconnect: false,   
+    refetchInterval: false,      
     refetchIntervalInBackground: false,
-    placeholderData: (previousData) => previousData, // Mantém dados anteriores durante a revalidação para evitar piscadas (keepPreviousData)
+    placeholderData: (previousData: any) => previousData, 
+
 
 
     enabled: authReady && !!user?.id,
@@ -771,7 +773,7 @@ export function useInfinitePosts(
   // Cache antigo (de horas/dias atrás) servido como initialData + refetchOnMount:false
   // fazia usuários que logavam verem feed desatualizado SEM refetch — a causa raiz
   // do bug "logo após login, posts de 1-2 dias atrás aparecem como mais recentes".
-  const FEED_FRESH_MS = 120_000;
+  const FEED_FRESH_MS = 60 * 60 * 1000; // 1h
   const cacheIsFresh =
     !explicitAdultOnly &&
     !!cachedFeed?.updatedAt &&
@@ -790,8 +792,9 @@ export function useInfinitePosts(
   const query = useInfiniteQuery({
     queryKey: ['posts-infinite', 'v18-complete-includes-adult-posts', isEnabled, profile?.id, pageSize, genderFilterKey, explicitAdultOnly],
     initialPageParam: 0,
-    staleTime: 600_000, 
-    gcTime: 60 * 60_000,
+    staleTime: 60 * 60 * 1000, 
+    gcTime: 2 * 60 * 60 * 1000,
+
     retry: (failureCount, err: any) => {
       if (failureCount >= 3) return false;
       const msg = String(err?.message || err || '');
@@ -803,8 +806,9 @@ export function useInfinitePosts(
     refetchOnReconnect: false, 
     refetchInterval: false,
     refetchIntervalInBackground: false,
-    placeholderData: (previousData) => previousData, 
+    placeholderData: (previousData: any) => previousData, 
     enabled: feedIdentityReady,
+
 
     queryFn: async ({ pageParam = 0 }) => {
       if (!isEnabled) return { posts: [] as Post[], nextOffset: null as number | null };

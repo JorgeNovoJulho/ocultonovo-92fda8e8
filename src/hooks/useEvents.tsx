@@ -42,8 +42,12 @@ async function ensureEventsSchema() {
 export function useEvents() {
   return useQuery({
     queryKey: ["events"],
-    staleTime: 60_000,
+    staleTime: 30 * 60 * 1000, // 30m
+    gcTime: 60 * 60 * 1000,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+
     queryFn: async () => {
       // Decoupled fetch (sem JOIN — evita PGRST200 em DB externo sem FK declarada)
       let { data, error } = await supabase
