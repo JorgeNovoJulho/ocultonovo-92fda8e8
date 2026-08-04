@@ -1853,15 +1853,16 @@ export const RealFeed = memo(function RealFeed() {
       {activeTab !== 'card' && activeTab !== 'vip' && (
 
         <Virtuoso
+          key={`feed-virtuoso-${activeTab}-${mounted ? 'm' : 'u'}`}
           ref={virtuosoRef}
           useWindowScroll
           data={filteredPosts}
           computeItemKey={(index, post: any) => post?.id ?? `post-${index}`}
-          overscan={isOcultoOnly || dataSaver ? 1500 : 2500}
+          overscan={isOcultoOnly || dataSaver ? 2500 : 4000}
           increaseViewportBy={dataSaver ? { top: 500, bottom: 1000 } : { top: 1000, bottom: 2000 }}
 
           // Histerese de prefetch: dispara cedo para esconder a latência de rede.
-          atBottomThreshold={dataSaver ? 1500 : 1000}
+          atBottomThreshold={dataSaver ? 2000 : 1500}
           endReached={handleFeedEndReached}
           rangeChanged={handleFeedRangeChanged}
           itemContent={renderFeedItem}
