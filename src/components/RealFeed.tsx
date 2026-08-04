@@ -381,7 +381,7 @@ const FeedItem = memo(function FeedItem({
 export const RealFeed = memo(function RealFeed() {
   const lastRenderRef = useRef(Date.now());
   const renderCountRef = useRef(0);
-  const { isDebugEnabled, addLog: addDebugLog } = useFeedDebugStore();
+  const { isDebugEnabled: isDebugEnabledGlobal, addLog: addDebugLog } = useFeedDebugStore();
   const cachedFeedLength = useFeedCacheStore(s => s.posts?.length ?? 0);
 
   useEffect(() => {
@@ -402,6 +402,21 @@ export const RealFeed = memo(function RealFeed() {
   }, [addDebugLog, cachedFeedLength]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showFeedContentTypeModal, setShowFeedContentTypeModal] = useState(false);
+  const [showFeedFilterModal, setShowFeedFilterModal] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showSubscribeModal, setShowSubscribeModal] = useState(false);
+  const [showVitrineModal, setShowVitrineModal] = useState(false);
+  const [expandedPost, setExpandedPost] = useState<any | null>(null);
+  const [activeTab, setActiveTab] = useState<FeedTab>('foryou');
+  const { shows: legacyFeedModeShows, forcesCardLayout, mode: legacyMode } = useFeedMode();
+  const { isSectionEnabled, viewMode: granularMode } = useViewModePreferences();
+  const { isAdultOnly, isOcultoOnly } = useFeedExperienceMode();
+  const { mode: themeMode, setMode: setThemeMode } = useTheme();
+  const { isDebugEnabled, clearLogs } = useFeedDebugStore();
+  const { safeBlurOn, toggleSafeBlur } = useSafeBlur();
+  const [safeBlurPending, setSafeBlurPending] = useState(false);
+  const safeBlurPendingTimer = useRef<number | null>(null);
 
 
   // Gate combinado:
@@ -1526,9 +1541,22 @@ export const RealFeed = memo(function RealFeed() {
           </Suspense>
         )}
         <FeedContentTypeModal open={showFeedContentTypeModal} onOpenChange={setShowFeedContentTypeModal} />
+        {isHardRefreshing && (
+          <div className="fixed inset-0 z-[60] bg-background/20 backdrop-blur-[2px] pointer-events-none flex items-center justify-center">
+            <div className="bg-background/80 border rounded-full px-4 py-2 shadow-2xl animate-in fade-in zoom-in duration-300">
+              <div className="flex items-center gap-2 text-primary font-bold text-sm">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Sincronizando feed...
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
+
+  // Sincronizando feed (overlay visual opcional)
+  const isRefreshingSync = isHardRefreshing;
 
   // Empty state para abas específicas
   const emptyTabContent = (() => {
