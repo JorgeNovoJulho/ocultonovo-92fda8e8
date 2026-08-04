@@ -1638,8 +1638,6 @@ export const RealFeed = memo(function RealFeed() {
         )}
       </div>
 
-      {/* Feed Tabs — fixo ao grid superior, acima dos stories. */}
-      <FeedTabs activeTab={activeTab} onTabChange={setActiveTab} onCreatePost={() => setShowCreateModal(true)} onScrollTop={() => { virtuosoRef.current?.scrollToIndex({ index: 0, align: "start", behavior: "smooth" }); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
 
       {auraModalMount}
 
