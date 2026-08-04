@@ -623,6 +623,8 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
       lastRefetchAt = Date.now();
       queryClient.invalidateQueries({ queryKey: ['posts'], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ['posts-infinite'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['oculto-feed-news'] });
+      queryClient.invalidateQueries({ queryKey: ['oculto-feed-cards'] });
     };
 
     const throttledRefetch = (immediate = false) => {
