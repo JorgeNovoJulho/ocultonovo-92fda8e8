@@ -777,7 +777,7 @@ export function useInfinitePosts(
   // Cache antigo (de horas/dias atrás) servido como initialData + refetchOnMount:false
   // fazia usuários que logavam verem feed desatualizado SEM refetch — a causa raiz
   // do bug "logo após login, posts de 1-2 dias atrás aparecem como mais recentes".
-  const FEED_FRESH_MS = 60 * 60 * 1000; // 1h
+  const FEED_FRESH_MS = 24 * 60 * 60 * 1000; // 24h
   const cacheIsFresh =
     !explicitAdultOnly &&
     !!cachedFeed?.updatedAt &&
