@@ -5,12 +5,12 @@ interface FeedDebugState {
   isDebugEnabled: boolean;
   logs: {
     timestamp: number;
-    type: 'query' | 'cache_expire' | 'stale' | 'render';
+    type: 'query' | 'cache_expire' | 'stale' | 'render' | 'fresh';
     message: string;
     details?: any;
   }[];
   toggleDebug: () => void;
-  addLog: (type: 'query' | 'cache_expire' | 'stale' | 'render', message: string, details?: any) => void;
+  addLog: (type: 'query' | 'cache_expire' | 'stale' | 'render' | 'fresh', message: string, details?: any) => void;
   clearLogs: () => void;
 }
 

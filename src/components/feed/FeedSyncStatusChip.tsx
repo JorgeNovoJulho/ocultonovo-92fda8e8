@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useIsFetching } from "@tanstack/react-query";
 import { CheckCircle2, RefreshCw, Database } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useFeedCacheStore } from "@/store/useFeedCacheStore";
 import { useFeedDebugStore } from "@/store/useFeedDebugStore";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
