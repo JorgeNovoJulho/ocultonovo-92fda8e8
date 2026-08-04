@@ -86,35 +86,25 @@ export function FeedSyncStatusChip({ className = "" }: { className?: string }) {
   const s = phase !== "idle" ? styles[phase] : null;
 
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      {s && phase !== "fresh" && (
-        <div
-          aria-live="polite"
-          className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-opacity ${s.cls}`}
-        >
-          {s.icon}
-          <span>{s.label}</span>
-        </div>
-      )}
-
+    <div className={cn("fixed bottom-24 right-4 z-[100] flex flex-col gap-2", className)}>
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={toggleDebug}
               className={cn(
-                "flex h-6 w-6 items-center justify-center rounded-full border transition-colors",
+                "flex h-10 w-10 items-center justify-center rounded-full border shadow-lg transition-all active:scale-95",
                 isDebugEnabled
                   ? "bg-red-500/10 text-red-500 border-red-500/30"
-                  : "bg-muted text-muted-foreground border-transparent hover:bg-muted/80"
+                  : "bg-background/80 backdrop-blur text-muted-foreground border-border hover:bg-muted/80"
               )}
             >
-              <Database className="h-3 w-3" />
+              <Database className={cn("h-5 w-5", fetching > 0 && "animate-pulse")} />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="bottom" className="w-64 p-0 z-[100]">
+          <TooltipContent side="left" className="w-64 p-0 z-[110]">
             <div className="flex items-center justify-between border-b p-2">
-              <span className="text-xs font-bold">Debug do Feed</span>
+              <span className="text-xs font-bold">Diagnóstico Master</span>
               <div className="flex items-center gap-2">
                 <button 
                   onClick={exportLogs}
@@ -133,7 +123,7 @@ export function FeedSyncStatusChip({ className = "" }: { className?: string }) {
             </div>
             <div className="max-h-48 overflow-y-auto p-1">
               {logs.length === 0 ? (
-                <div className="py-4 text-center text-[10px] text-muted-foreground">Sem logs</div>
+                <div className="py-4 text-center text-[10px] text-muted-foreground">Sem atividade</div>
               ) : (
                 logs.map((log, i) => (
                   <div key={i} className="mb-1 rounded bg-muted/30 p-1 text-[9px] leading-tight">
