@@ -98,16 +98,11 @@ type WelcomeSettingsRow = Partial<Settings>;
 type MetricRow = { created_at: string };
 
 const DEFAULT_TEMPLATE =
-  '👋 *Olá, seja bem-vindo(a) @{{username}} ao OCULTO!*\n\n' +
-  'Esperamos que goste e experimente todas as nossas novidades. ' +
-  'Fique à vontade para responder esta mensagem e nos dizer o que achou — ' +
-  'suas *sugestões* e *reclamações* são sempre bem-vindas.\n\n' +
-  '⚠️ Se tiver qualquer problema, acesse no menu principal a opção *PROBLEMAS* e informe o ocorrido.\n\n' +
-  '💸 *Divulgue para seus contatos* através do seu link exclusivo abaixo. ' +
-  'Quando a monetização for ativada, você recebe *5% do valor da primeira assinatura* de cada indicado. ' +
-  'Ganhe dinheiro ajudando a divulgar o OCULTO!\n\n' +
-  '🔗 Seu link de divulgação:\n{{referral_link}}\n\n' +
-  'Agradecemos a oportunidade de nos apresentar e desejamos *boa sorte em seus encontros*! 💕';
+  '🎉 *PARABÉNS!*\n\n' +
+  'Você foi selecionado(a) por @{{username}} para se tornar membro da nova Plataforma de Rede Social exclusiva, ' +
+  'com a possibilidade de ser monetizado(a) por tudo que criar e postar dentro da plataforma OCULTO. ' +
+  'Não perca essa oportunidade que ainda é fechada para poucos\n\n' +
+  'Aproveite essa oportunidade! 🚀';
 
 const EMPTY_SUMMARY: MetricSummary = { copy: 0, share: 0, view: 0 };
 const METRIC_KEYS: MetricAction[] = ['copy', 'share', 'view'];
