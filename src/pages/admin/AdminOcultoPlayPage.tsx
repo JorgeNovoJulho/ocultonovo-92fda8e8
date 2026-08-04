@@ -3,11 +3,12 @@
  * Tabs: Configurações | Moderação | Estatísticas.
  */
 import { useEffect, useRef, useState } from 'react';
-
-import { Loader2, Play, ShieldAlert, Sparkles, BarChart3, Settings2, Flag, Star, EyeOff, TrendingUp, Calendar, ListMusic, LayoutDashboard, Film, Trophy, RotateCcw, FileText, Music, ArrowUpRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Loader2, Play, ShieldAlert, Sparkles, BarChart3, Settings2, Flag, Star, EyeOff, TrendingUp, Calendar, ListMusic, LayoutDashboard, Film, Trophy, RotateCcw, FileText, Music, ArrowUpRight, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseExternal';
+
 import { useOcultoPlayConfig, type OcultoPlayConfig } from '@/hooks/useOcultoPlayAccess';
 import { useOcultoPlayAdminStats } from '@/hooks/useOcultoPlayModeration';
 import { AdminOcultoPlayModerationPanel } from '@/components/admin/AdminOcultoPlayModerationPanel';
@@ -59,7 +60,9 @@ const SECTIONS: { key: ToggleKey; label: string }[] = [
 ];
 
 export default function AdminOcultoPlayPage() {
+  const navigate = useNavigate();
   const { data: cfg, isLoading } = useOcultoPlayConfig();
+
   const qc = useQueryClient();
   const [draft, setDraft] = useState<OcultoPlayConfig | null>(null);
   const [saving, setSaving] = useState(false);
@@ -167,7 +170,19 @@ export default function AdminOcultoPlayPage() {
 
         {/* CONFIG */}
         <TabsContent value="config" className="space-y-6 mt-4">
+          <div className="flex justify-end">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-2 border-primary/30 text-primary hover:bg-primary/5"
+              onClick={() => navigate('/admin/play-share-editor')}
+            >
+              <Share2 className="h-4 w-4" />
+              Configurar Página de Compartilhamento (Public)
+            </Button>
+          </div>
           <AdminOcultoPlayLaunchCard />
+
 
           <Card className="border-amber-500/30 bg-amber-500/5">
             <CardContent className="pt-5 flex gap-3 text-sm">

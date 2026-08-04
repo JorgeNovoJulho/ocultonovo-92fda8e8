@@ -250,6 +250,8 @@ const AdminPushCampaignsPage = lazy(() => import("./pages/admin/AdminPushCampaig
 const AdminReferralPage = lazy(() => import("./pages/admin/AdminReferralPage"));
 const AdminInvoicesPage = lazy(() => import("./pages/admin/AdminInvoicesPage"));
 const AdminAdvancedAnalyticsPage = lazy(() => import("./pages/admin/AdminAdvancedAnalyticsPage"));
+const AdminPlayShareEditorPage = lazy(() => import("./pages/admin/AdminPlayShareEditorPage"));
+
 const AdminWebhooksPage = lazy(() => import("./pages/admin/AdminWebhooksPage"));
 const AdminWebhookEventsPage = lazy(() => import("./pages/admin/AdminWebhookEventsPage"));
 const AdminBackupPage = lazy(() => import("./pages/admin/AdminBackupPage"));
@@ -633,8 +635,10 @@ const App = () => {
                   <Route path="/admin/room-chat-logs" element={<Suspense fallback={<PageFallback />}><MasterAdminRoute><AdminRoomChatLogsPage /></MasterAdminRoute></Suspense>} />
                   <Route path="/admin/site-editor" element={<Suspense fallback={<PageFallback />}><AdminSiteEditorPage /></Suspense>} />
                   <Route path="/admin/landing-editor" element={<Suspense fallback={<PageFallback />}><AdminLandingEditorPage /></Suspense>} />
-                  <Route path="/admin/invite-editor" element={<Suspense fallback={<PageFallback />}><AdminInviteEditorPage /></Suspense>} />
-                  <Route path="/admin/share-landing-editor" element={<Suspense fallback={<PageFallback />}><AdminShareLandingEditorPage /></Suspense>} />
+                   <Route path="/admin/invite-editor" element={<Suspense fallback={<PageFallback />}><AdminInviteEditorPage /></Suspense>} />
+                   <Route path="/admin/play-share-editor" element={<MasterAdminRoute><Suspense fallback={<PageFallback />}><AdminPlayShareEditorPage /></Suspense></MasterAdminRoute>} />
+                   <Route path="/admin/share-landing-editor" element={<Suspense fallback={<PageFallback />}><AdminShareLandingEditorPage /></Suspense>} />
+
                   <Route path="/admin/hero-settings" element={<Suspense fallback={<PageFallback />}><AdminHeroSettingsPage /></Suspense>} />
                   <Route path="/admin/ads" element={<Suspense fallback={<PageFallback />}><AdminAdsPage /></Suspense>} />
                   <Route path="/admin/marketplace-ads" element={<Suspense fallback={<PageFallback />}><AdminMarketplaceAdsPage /></Suspense>} />
