@@ -646,7 +646,7 @@ export const RealFeed = memo(function RealFeed() {
     return cachedFeedPosts as any[];
   }, [cachedFeedPosts, cachedFeedUpdatedAt, cachedFeedOwner, user?.id]);
   const postsFiltered = useMemo(() => {
-    let live = posts;
+    let live = (infiniteData?.pages || []).flatMap((p: any) => p?.posts || []);
     if (isOcultoOnly) {
       live = live.filter((p: any) => p?.is_adult !== true);
     }
@@ -669,7 +669,7 @@ export const RealFeed = memo(function RealFeed() {
       return deduped;
     }
     return isAdultOnly ? [] : cachedFeedFallback;
-  }, [posts, cachedFeedFallback, isAdultOnly, isOcultoOnly]);
+  }, [infiniteData, cachedFeedFallback, isAdultOnly, isOcultoOnly]);
 
   // Se uma página do banco vier cheia, mas todos os itens forem descartados por
   // filtros de tipo/visibilidade/modo (+18), não podemos mostrar "Nenhum post".
@@ -794,7 +794,7 @@ export const RealFeed = memo(function RealFeed() {
 
   // Filtrar posts baseado na aba ativa
   const filteredPosts = useMemo(() => {
-    if (!posts) return [];
+    if (!postsFiltered) return [];
 
     const sortPinnedPostsFirst = (items: any[]) =>
       items.slice().sort((a: any, b: any) => {
@@ -825,7 +825,7 @@ export const RealFeed = memo(function RealFeed() {
       post?.content_format === 'narrative' ||
       (post?.section_type && NARRATIVE_SECTIONS.has(String(post.section_type).toLowerCase()));
 
-    const visiblePosts = posts.filter((post: any) => {
+    const visiblePosts = postsFiltered.filter((post: any) => {
       if (post?.is_hidden === true || post?.privacy_level === 'hidden') return false;
 
       // Modo "Apenas +18": mostra somente publicações criadas com a chave
@@ -1357,7 +1357,7 @@ export const RealFeed = memo(function RealFeed() {
   );
 
   // Loading state
-  if (((isLoading && posts.length === 0) || isFillingFilteredEmptyFeed) && !skeletonTimedOut) {
+  if (((isLoading && postsFiltered.length === 0) || isFillingFilteredEmptyFeed) && !skeletonTimedOut) {
     return (
       <div className="flex flex-col">
         {topActionButtons}
