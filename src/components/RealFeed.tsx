@@ -157,7 +157,7 @@ import { prefetchFeedMedia } from "@/lib/imageLoadCache";
 import { isVideoUrl } from "@/lib/mediaType";
 import { useFeedDebugStore } from "@/store/useFeedDebugStore";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Info } from "lucide-react";
 
 // Bridge: chaves usadas no RealFeed → chaves canônicas em HOME_SECTIONS
 // (src/config/homeSections.ts). Usado pelo gate granular isSectionEnabled().
@@ -393,7 +393,7 @@ export const RealFeed = memo(function RealFeed() {
   const { isSectionEnabled, viewMode: granularMode } = useViewModePreferences();
   const { isAdultOnly, isOcultoOnly } = useFeedExperienceMode();
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
-  const { isDebugEnabled, addLog: addDebugLog } = useFeedDebugStore();
+  const { isDebugEnabled, addLog: addDebugLog, clearLogs } = useFeedDebugStore();
   const { safeBlurOn, toggleSafeBlur } = useSafeBlur();
   const [safeBlurPending, setSafeBlurPending] = useState(false);
   const safeBlurPendingTimer = useRef<number | null>(null);
@@ -574,10 +574,14 @@ export const RealFeed = memo(function RealFeed() {
     addDebugLog('render', 'RealFeed montado/remontado');
     if (hasValidCache) {
       setShowRenderWarning(true);
+      // Limpar logs antigos se o feed está remontando sem motivo aparente
+      if (isDebugEnabled) {
+        addDebugLog('stale', 'ALERTA: Remontagem inesperada detectada');
+      }
       const t = setTimeout(() => setShowRenderWarning(false), 3000);
       return () => clearTimeout(t);
     }
-  }, [addDebugLog, hasValidCache]);
+  }, [addDebugLog, hasValidCache, isDebugEnabled]);
 
   const {
     data: infiniteData,
@@ -1183,6 +1187,7 @@ export const RealFeed = memo(function RealFeed() {
 
   const topActionButtons = (
     <div className="sticky top-0 z-[70] flex justify-center sm:justify-end items-center gap-2 px-2 pt-2 pb-1 flex-wrap bg-background/95 backdrop-blur-md border-b border-border/20 shadow-sm">
+      <FeedSyncStatusChip className="hidden sm:flex" />
       <TooltipProvider delayDuration={150}>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -1593,11 +1598,19 @@ export const RealFeed = memo(function RealFeed() {
         {topActionButtons}
         <div className="flex items-center justify-between">
           <FeedSyncStatusChip />
-          {isDebugEnabled && showRenderWarning && (
-            <Alert variant="destructive" className="py-1 px-3 w-auto bg-amber-500/10 border-amber-500/30 text-amber-500 animate-pulse">
-              <AlertTriangle className="h-3 w-3 mr-2" />
-              <AlertDescription className="text-[10px] font-bold">RE-RENDER COM CACHE ATIVO</AlertDescription>
-            </Alert>
+          {isDebugEnabled && (
+            <div className="flex flex-col gap-1 items-start">
+              {showRenderWarning && (
+                <Alert variant="destructive" className="py-1 px-3 w-auto bg-amber-500/10 border-amber-500/30 text-amber-500 animate-pulse">
+                  <AlertTriangle className="h-3 w-3 mr-2" />
+                  <AlertDescription className="text-[10px] font-bold uppercase">Re-render inesperado</AlertDescription>
+                </Alert>
+              )}
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[9px] font-mono">
+                <Info className="h-2.5 w-2.5" />
+                <span>DEBUG: Monitoring v18.5 Active</span>
+              </div>
+            </div>
           )}
         </div>
       </div>
