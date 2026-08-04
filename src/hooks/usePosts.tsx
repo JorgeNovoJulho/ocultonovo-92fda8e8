@@ -345,24 +345,24 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
   const isEnabled = feedSettings?.is_enabled !== false;
   const showAll = feedSettings?.show_all === true;
   const maxPosts = feedSettings?.max_posts ?? 200;
-  // Feed principal precisa ser realmente infinito: não aplicar corte por data
-  // vindo de feed_settings.start_date, pois isso escondia publicações antigas em
-  // mobile e desktop mesmo com o scroll carregando novas páginas.
   const startDate = null;
 
   const query = useQuery({
     queryKey: ['posts', options?.userId, options?.limit, isEnabled, showAll, maxPosts, startDate, profile?.id],
-    staleTime: 24 * 60 * 60 * 1000,   // 24h
-    gcTime: 48 * 60 * 60 * 1000,  // 48h
+    // Cache de longa duração: 24h stale, 48h GC
+    staleTime: 24 * 60 * 60 * 1000,
+    gcTime: 48 * 60 * 60 * 1000,
 
-
+    // Desabilitar todas as atualizações automáticas
     retry: 2,
-    refetchOnWindowFocus: false, 
-    refetchOnMount: false,       
-    refetchOnReconnect: false,   
-    refetchInterval: false,      
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchInterval: false,
     refetchIntervalInBackground: false,
-    placeholderData: (previousData: any) => previousData, 
+    // Garante que o usuário veja os dados do cache imediatamente ao entrar
+    placeholderData: (previousData: any) => previousData,
+
 
 
 
@@ -834,9 +834,16 @@ export function useInfinitePosts(
   const query = useInfiniteQuery({
     queryKey: ['posts-infinite', 'v18-complete-includes-adult-posts', isEnabled, profile?.id, pageSize, genderFilterKey, explicitAdultOnly],
     initialPageParam: 0,
+    // Cache de longa duração (24h stale, 48h GC) para estabilizar o feed
     staleTime: 24 * 60 * 60 * 1000, 
     gcTime: 48 * 60 * 60 * 1000, 
 
+    // Bloqueio de refetchs automáticos (piscadas)
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false, 
+    refetchInterval: false,
+    refetchIntervalInBackground: false,
 
     retry: (failureCount, err: any) => {
       if (failureCount >= 3) return false;
@@ -844,13 +851,9 @@ export function useInfinitePosts(
       return /abort|aborted|network|fetch|timeout|failed to fetch|load failed/i.test(msg);
     },
     retryDelay: (attempt) => Math.min(500 * 2 ** attempt, 4000),
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    refetchOnReconnect: false, 
-    refetchInterval: false,
-    refetchIntervalInBackground: false,
     placeholderData: (previousData: any) => previousData, 
     enabled: feedIdentityReady,
+
 
 
     queryFn: async ({ pageParam = 0 }) => {
@@ -1305,21 +1308,18 @@ export function useInfinitePosts(
     if (lastBootRefetchRef.current === user.id) return;
     lastBootRefetchRef.current = user.id;
 
-    // COALESCÊNCIA AGRESSIVA: se já houve refetch nos últimos 10s, ignora o boot.
+    // LOGIN BOOT: Única vez que o feed atualiza agressivamente ao entrar
     const now = Date.now();
-    const lastRefetch = (window as any)._OCULTO_LAST_REFETCH || 0;
-    if (now - lastRefetch < 10000) {
-      addDebugLog('stale', 'Ignorando boot refetch (cooldown ativo)', { diff: now - lastRefetch });
-      return;
-    }
     (window as any)._OCULTO_LAST_REFETCH = now;
 
-    addDebugLog('query', 'Disparando refetch de boot');
+    addDebugLog('query', 'Atualizando feed no login (boot inicial)');
     queryClient.invalidateQueries({ queryKey: ['posts-infinite'], refetchType: 'active' });
     queryClient.invalidateQueries({ queryKey: ['posts'], refetchType: 'active' });
-    // Marca cache como sujo para forçar re-render no feed sem sumir com posts atuais
+    
+    // Hidratação imediata via cache store
     useFeedCacheStore.getState().setPosts(useFeedCacheStore.getState().posts || [], user.id);
   }, [feedIdentityReady, user?.id, queryClient, addDebugLog]);
+
 
   // ============================================================
   // Fallback de aba oculta: se o usuário deixou a aba aberta por
@@ -2064,4 +2064,32 @@ export function useDeletePost() {
       queryClient.invalidateQueries({ queryKey: ['misterios-destaque'] });
     },
   });
+
+  const { user: authUser, authReady: authIsReady } = useAuth();
+  const addLogToDebug = useFeedDebugStore((s) => s.addLog);
+  const { data: feedSettingsConfig } = useFeedSettings();
+  const isFeedEnabled = feedSettingsConfig?.is_enabled !== false;
+
+
+  // Realtime: Silenciado para manter a estabilidade visual conforme pedido.
+  useEffect(() => {
+    if (!isFeedEnabled || !authIsReady || !authUser?.id) return;
+
+    const subscription = subscribeTable('posts', (payload) => {
+      if (payload.eventType === 'INSERT') {
+        addLogToDebug('query', 'Nova postagem detectada em segundo plano');
+      }
+    });
+
+
+    return () => {
+      if (typeof subscription === 'function') {
+        (subscription as any)();
+      } else if (subscription && typeof (subscription as any).unsubscribe === 'function') {
+        (subscription as any).unsubscribe();
+      }
+    };
+  }, [isFeedEnabled, authIsReady, authUser?.id, addLogToDebug]);
 }
+
+

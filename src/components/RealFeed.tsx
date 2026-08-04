@@ -380,6 +380,9 @@ const FeedItem = memo(function FeedItem({
 
 export const RealFeed = memo(function RealFeed() {
   const queryClient = useQueryClient();
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
   const lastRenderRef = useRef(0);
   const renderCountRef = useRef(0);
   const { isDebugEnabled: isDebugEnabledGlobal, addLog: addDebugLog } = useFeedDebugStore();
@@ -433,6 +436,7 @@ export const RealFeed = memo(function RealFeed() {
     refetch,
   } = useInfinitePosts(FEED_PAGE_SIZE, { explicitAdultOnly: isAdultOnly });
 
+
   const pagesLoaded = infiniteData?.pages?.length ?? 0;
   const hasNextPage = !!rawHasNextPage;
 
@@ -443,6 +447,28 @@ export const RealFeed = memo(function RealFeed() {
     const t = window.setTimeout(() => setSkeletonTimedOut(true), 6000);
     return () => window.clearTimeout(t);
   }, [isLoading]);
+
+  // Monitoramento de retorno ao feed: atualiza em segundo plano ao mudar de função
+  useEffect(() => {
+    if (mounted && location.pathname === '/feed') {
+      const lastPath = (window as any)._OCULTO_LAST_PATH;
+      if (lastPath && lastPath !== '/feed') {
+        addDebugLog('query', 'Retorno ao feed: buscando atualizações em background');
+        queryClient.invalidateQueries({ 
+          queryKey: ['posts-infinite'], 
+          refetchType: 'active' 
+        });
+      }
+      (window as any)._OCULTO_LAST_PATH = '/feed';
+    }
+    return () => {
+      if (location.pathname !== '/feed') {
+        (window as any)._OCULTO_LAST_PATH = location.pathname;
+      }
+    };
+  }, [location.pathname, mounted, queryClient, addDebugLog]);
+
+
 
   const [isHardRefreshing, setIsHardRefreshing] = useState(false);
   const handleHardRefresh = useCallback(async () => {
@@ -460,9 +486,6 @@ export const RealFeed = memo(function RealFeed() {
   const { user } = useAuth();
   const feedIdentityReady = !!user?.id;
 
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
-  const location = useLocation();
-  const navigate = useNavigate();
 
   // Gate combinado:
   // - O seletor legado (Completo/Social/Descoberta/Limpo/Card) é a fonte
