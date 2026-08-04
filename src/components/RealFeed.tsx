@@ -458,7 +458,7 @@ export const RealFeed = memo(function RealFeed() {
 
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const location = useLocation();
-  
+  const navigate = useNavigate();
 
   // Gate combinado:
   // - O seletor legado (Completo/Social/Descoberta/Limpo/Card) é a fonte
