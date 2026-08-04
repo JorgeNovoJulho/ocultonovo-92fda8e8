@@ -350,8 +350,9 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
 
   const query = useQuery({
     queryKey: ['posts', options?.userId, options?.limit, isEnabled, showAll, maxPosts, startDate, profile?.id],
-    staleTime: 60 * 60 * 1000,   // 1h
-    gcTime: 2 * 60 * 60 * 1000,  // 2h
+    staleTime: 24 * 60 * 60 * 1000,   // 24h
+    gcTime: 48 * 60 * 60 * 1000,  // 48h
+
 
     retry: 2,
     refetchOnWindowFocus: false, 
@@ -776,7 +777,7 @@ export function useInfinitePosts(
   // Cache antigo (de horas/dias atrás) servido como initialData + refetchOnMount:false
   // fazia usuários que logavam verem feed desatualizado SEM refetch — a causa raiz
   // do bug "logo após login, posts de 1-2 dias atrás aparecem como mais recentes".
-  const FEED_FRESH_MS = 60 * 60 * 1000; // 1h
+  const FEED_FRESH_MS = 24 * 60 * 60 * 1000; // 24h
   const cacheIsFresh =
     !explicitAdultOnly &&
     !!cachedFeed?.updatedAt &&
@@ -795,8 +796,9 @@ export function useInfinitePosts(
   const query = useInfiniteQuery({
     queryKey: ['posts-infinite', 'v18-complete-includes-adult-posts', isEnabled, profile?.id, pageSize, genderFilterKey, explicitAdultOnly],
     initialPageParam: 0,
-    staleTime: 60 * 60 * 1000, 
-    gcTime: 2 * 60 * 60 * 1000,
+    staleTime: 24 * 60 * 60 * 1000, 
+    gcTime: 48 * 60 * 60 * 1000, 
+
 
     retry: (failureCount, err: any) => {
       if (failureCount >= 3) return false;

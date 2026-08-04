@@ -221,7 +221,8 @@ export const RealPostCard = memo(function RealPostCard({ post: rawPost, onSubscr
       media_duration_seconds: duration || (rawPost as any).media_duration_seconds || null,
       video_duration_seconds: duration || (rawPost as any).video_duration_seconds || null,
     };
-  }, [rawPost.id, rawPost.updated_at, rawPost.likes_count, rawPost.comments_count, rawPost.is_liked]);
+  }, [rawPost.id, rawPost.updated_at]);
+
   
   const isAdult = (post as any).is_adult === true;
   if (isOcultoOnly && isAdult) return null;

@@ -266,7 +266,7 @@ const FeedItem = memo(function FeedItem({
   const isCommunityTopic =
     post?.post_type === "community_topic" || !!parseCommunityTopicSnapshot(post?.content_text);
   return (
-    <div className="feed-post-item" style={{ contain: showSuggestions ? 'style paint' : 'content' }}>
+    <div className="feed-post-item" style={{ contain: 'layout style', minHeight: '400px' }}>
       {isCommunityTopic
         ? <CommunityTopicFeedCard post={post} />
         : isNarrative
@@ -376,6 +376,8 @@ const FeedItem = memo(function FeedItem({
 });
 
 export const RealFeed = memo(function RealFeed() {
+  console.log('[FeedDebug] RealFeed rendered');
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showFeedContentTypeModal, setShowFeedContentTypeModal] = useState(false);
   const [showFeedFilterModal, setShowFeedFilterModal] = useState(false);
