@@ -32,12 +32,14 @@ import {
   BarChart3,
   Check,
   ChevronsUpDown,
+  Copy,
   Eye,
   Loader2,
   RefreshCw,
   RotateCcw,
   Save,
   Send,
+  Sparkles,
   UserRound,
 } from 'lucide-react';
 import {
