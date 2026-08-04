@@ -380,7 +380,7 @@ const FeedItem = memo(function FeedItem({
 
 export const RealFeed = memo(function RealFeed() {
   const queryClient = useQueryClient();
-  const lastRenderRef = useRef(Date.now());
+  const lastRenderRef = useRef(0);
   const renderCountRef = useRef(0);
   const { isDebugEnabled: isDebugEnabledGlobal, addLog: addDebugLog } = useFeedDebugStore();
   const cachedFeedLength = useFeedCacheStore(s => s.posts?.length ?? 0);
@@ -388,20 +388,22 @@ export const RealFeed = memo(function RealFeed() {
 
   useEffect(() => {
     setMounted(true);
-    renderCountRef.current += 1;
     const now = Date.now();
     const diff = now - lastRenderRef.current;
-    lastRenderRef.current = now;
-
-    if (renderCountRef.current > 1 && diff < 2000) {
-      addDebugLog('render', `Piscada detectada! Re-render em ${diff}ms`, { 
+    
+    // Ignoramos o primeiro render do mount
+    if (renderCountRef.current > 0 && diff < 1500) {
+      addDebugLog('render', `Piscada evitada: Re-render em ${diff}ms`, { 
         count: renderCountRef.current,
         hasCache: cachedFeedLength > 0 
       });
-      console.warn(`[FeedDebug] Rapid re-render detected: ${diff}ms`);
+      console.warn(`[FeedDebug] Rapid re-render detected and suppressed: ${diff}ms`);
     } else {
-      addDebugLog('render', 'Feed montado/renderizado', { diff });
+      addDebugLog('render', 'Feed montado/estabilizado', { diff });
     }
+    
+    renderCountRef.current += 1;
+    lastRenderRef.current = now;
   }, [addDebugLog, cachedFeedLength]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -822,7 +824,7 @@ export const RealFeed = memo(function RealFeed() {
       );
     }, [vipAccess.subscribedCreatorUserIds, vipAccess.subscribedCreatorProfileIds]);
 
-    const followingSet = new Set(followingIds ?? []);
+    const followingSet = useMemo(() => new Set(followingIds ?? []), [followingIds]);
 
     const NARRATIVE_SECTIONS = new Set(['story','chapter','diary','article','series','text_post','backstage','narrative']);
     const isNarrativePost = useCallback((post: any) =>
@@ -852,37 +854,39 @@ export const RealFeed = memo(function RealFeed() {
       return true;
     });
 
-    switch (activeTab) {
-      case 'following':
-        if (!followingIds || followingIds.length === 0) return [];
-        return sortPinnedPostsFirst(visiblePosts.filter(post => followingSet.has(post.user_id) || followingSet.has((post as any).author_id)));
+    const items = (() => {
+      switch (activeTab) {
+        case 'following':
+          if (!followingIds || followingIds.length === 0) return [];
+          return visiblePosts.filter(post => followingSet.has(post.user_id) || followingSet.has((post as any).author_id));
 
-      case 'vip': {
-        // 1) Posts VIP que já vieram no feed (raros — view oculta a maioria)
-        const fromFeed = visiblePosts.filter((post: any) => {
-          const isVipPost =
-            post?.privacy_level === 'vip' ||
-            post?.privacy_level === 'subscribers' ||
-            post?.is_paid === true ||
-            isNarrativePost(post);
-          if (!isVipPost) return false;
-          const purchased = vipAccess.purchasedPostIds.has(post.id);
-          const subscribed = hasVipSubscriptionForPost(post);
-          const ownNarrativeFromSubscribedCreator = isNarrativePost(post) && subscribed;
-          return purchased || subscribed || ownNarrativeFromSubscribedCreator;
-        });
-        // 2) Mescla com os posts buscados diretamente dos criadores assinados.
-        const seen = new Set(fromFeed.map((p: any) => p.id));
-        const extras = (subscribedVipPosts as any[]).filter((p) => !seen.has(p.id));
-        return sortPinnedPostsFirst([...fromFeed, ...extras]);
+        case 'vip': {
+          const fromFeed = visiblePosts.filter((post: any) => {
+            const isVipPost =
+              post?.privacy_level === 'vip' ||
+              post?.privacy_level === 'subscribers' ||
+              post?.is_paid === true ||
+              isNarrativePost(post);
+            if (!isVipPost) return false;
+            const purchased = vipAccess.purchasedPostIds.has(post.id);
+            const subscribed = hasVipSubscriptionForPost(post);
+            const ownNarrativeFromSubscribedCreator = isNarrativePost(post) && subscribed;
+            return purchased || subscribed || ownNarrativeFromSubscribedCreator;
+          });
+          const seen = new Set(fromFeed.map((p: any) => p.id));
+          const extras = (subscribedVipPosts as any[]).filter((p) => !seen.has(p.id));
+          return [...fromFeed, ...extras];
+        }
+
+        case 'card':
+        case 'foryou':
+        default:
+          return visiblePosts;
       }
+    })();
 
-      case 'card':
-      case 'foryou':
-      default:
-        return sortPinnedPostsFirst(visiblePosts);
-    }
-  }, [postsFiltered, activeTab, followingIds, vipAccess.purchasedPostIds, vipAccess.subscribedCreatorUserIds, vipAccess.subscribedCreatorProfileIds, user?.id, subscribedVipPosts, isAdultOnly]);
+    return sortPinnedPostsFirst(items);
+  }, [visiblePosts, activeTab, followingIds, followingSet, vipAccess.purchasedPostIds, hasVipSubscriptionForPost, isNarrativePost, subscribedVipPosts, sortPinnedPostsFirst]);
 
   const activeExpandedPost = useMemo(() => {
     if (!expandedPost?.id) return null;
