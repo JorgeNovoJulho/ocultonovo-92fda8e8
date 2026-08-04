@@ -57,7 +57,7 @@ function CardShell({
   );
 }
 
-export function NovidadesDoOcultoCarousel() {
+export const NovidadesDoOcultoCarousel = memo(function NovidadesDoOcultoCarousel() {
   const navigate = useNavigate();
   const link = useInviteLink();
   const { data: news = [] } = useOcultoFeedNews(4);
@@ -269,6 +269,6 @@ export function NovidadesDoOcultoCarousel() {
       </div>
     </section>
   );
-}
+});
 
 export default NovidadesDoOcultoCarousel;
