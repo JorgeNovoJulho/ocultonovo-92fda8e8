@@ -1019,16 +1019,22 @@ export default function OcultoPlayPublicItemPage() {
 
         {/* Banner +18 / convite cadastro (somente visitante) */}
         {!user && item && (settings?.show_signup_cta !== false) && (
-          <div className="rounded-xl border border-fuchsia-500/30 bg-gradient-to-br from-fuchsia-500/10 via-pink-500/5 to-rose-500/10 p-3 text-sm text-white">
-            <p className="flex items-center gap-1.5 font-semibold text-fuchsia-200">
-              <ShieldCheck className="h-4 w-4" /> {settings?.cta_title || "OCULTO é uma rede social adulta +18"}
-            </p>
-            <p className="text-white/80 text-xs mt-1">
-              {settings?.cta_text || "Crie sua conta gratuita para curtir, comentar, salvar em coleções, mandar mensagens e explorar todo o universo do OCULTO PLAY."}
-            </p>
-            <Link to={`/signup?from=play${resolvedItemId ? `&item=${resolvedItemId}` : ''}`}>
+          <div className="rounded-2xl border border-fuchsia-500/30 bg-card/40 p-5 sm:p-6 text-center shadow-xl space-y-4">
+            <div className="space-y-2">
+              <h3 className="text-lg sm:text-xl font-bold text-primary flex items-center justify-center gap-2">
+                <ShieldCheck className="h-5 w-5" />
+                {settings?.cta_title || "OCULTO é uma rede social adulta +18"}
+              </h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {settings?.cta_text || "Crie sua conta gratuita para curtir, comentar, salvar em coleções, mandar mensagens e explorar todo o universo do OCULTO PLAY."}
+              </p>
+            </div>
+            <Link 
+              to={`/signup?from=play${resolvedItemId ? `&item=${resolvedItemId}` : ''}`}
+              className="block"
+            >
               <Button 
-                className="mt-3 w-full"
+                className="w-full h-12 rounded-full font-bold text-base shadow-[0_0_20px_rgba(236,72,153,0.3)] transition-all hover:scale-[1.02]"
                 style={{ backgroundColor: settings?.accent_color || undefined }}
               >
                 {settings?.cta_button_text || "Criar minha conta grátis"}
