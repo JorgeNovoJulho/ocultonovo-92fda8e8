@@ -81,13 +81,27 @@ function playOgImageUrl(itemId: string, version?: string | number | null): strin
   return `https://ocultoswing.com.br/play/og-image/${encodeURIComponent(itemId)}.png${suffix}`;
 }
 
+interface PlayShareSettings {
+  show_logo: boolean;
+  show_author_card: boolean;
+  show_player: boolean;
+  show_stats: boolean;
+  show_signup_cta: boolean;
+  cta_title: string;
+  cta_text: string;
+  cta_button_text: string;
+  bg_color: string;
+  accent_color: string;
+  footer_text: string;
+}
+
 export default function OcultoPlayPublicItemPage() {
   const { id } = useParams<{ id: string }>();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
 
-
+  const [settings, setSettings] = useState<PlayShareSettings | null>(null);
   const [item, setItem] = useState<GuestItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [playing, setPlaying] = useState(false);
