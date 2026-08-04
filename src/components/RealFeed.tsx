@@ -418,19 +418,41 @@ export const RealFeed = memo(function RealFeed() {
   const [safeBlurPending, setSafeBlurPending] = useState(false);
   const safeBlurPendingTimer = useRef<number | null>(null);
   const {
-    posts,
+    data: infiniteData,
     isLoading,
-    hasNextPage,
+    error,
+    hasNextPage: rawHasNextPage,
     isFetchingNextPage,
     fetchNextPage,
     refetch,
-    isHardRefreshing,
-    handleHardRefresh,
-    pagesLoaded,
-    skeletonTimedOut,
-    isFillingFilteredEmptyFeed,
-    feedIdentityReady,
   } = useInfinitePosts(FEED_PAGE_SIZE, { explicitAdultOnly: isAdultOnly });
+
+  const pagesLoaded = infiniteData?.pages?.length ?? 0;
+  const hasNextPage = !!rawHasNextPage;
+
+  // Fail-safe: nunca deixar o skeleton infinito.
+  const [skeletonTimedOut, setSkeletonTimedOut] = useState(false);
+  useEffect(() => {
+    if (!isLoading) { setSkeletonTimedOut(false); return; }
+    const t = window.setTimeout(() => setSkeletonTimedOut(true), 6000);
+    return () => window.clearTimeout(t);
+  }, [isLoading]);
+
+  const [isHardRefreshing, setIsHardRefreshing] = useState(false);
+  const handleHardRefresh = useCallback(async () => {
+    if (isHardRefreshing) return;
+    setIsHardRefreshing(true);
+    try {
+      await queryClient.invalidateQueries({ queryKey: ['posts-infinite'], exact: false, refetchType: 'active' });
+      await queryClient.invalidateQueries({ queryKey: ['posts'], exact: false, refetchType: 'active' });
+      try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch {}
+    } finally {
+      setIsHardRefreshing(false);
+    }
+  }, [isHardRefreshing, queryClient]);
+
+  const { user } = useAuth();
+  const feedIdentityReady = !!user?.id;
 
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const location = useLocation();
@@ -665,14 +687,13 @@ export const RealFeed = memo(function RealFeed() {
     void fetchNextPage();
   }, [feedAutofillKey, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, postsFiltered.length]);
 
-  const isFillingFilteredEmptyFeed = posts.length === 0 && (hasNextPage || isFetchingNextPage);
+  const isFillingFilteredEmptyFeed = postsFiltered.length === 0 && (hasNextPage || isFetchingNextPage);
   useEffect(() => {
     const live = (infiniteData?.pages || []).flatMap((p: any) => p?.posts || []);
     if (live.length && !isAdultOnly) {
       useFeedCacheStore.getState().setPosts(live, user?.id || null);
     }
   }, [infiniteData, user?.id, isAdultOnly]);
-  const navigate = useNavigate();
   const openSidebarSearch = useCallback(() => {
     navigate('/pesquisar');
   }, [navigate]);
