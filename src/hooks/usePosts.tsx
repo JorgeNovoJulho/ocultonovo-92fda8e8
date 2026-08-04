@@ -633,10 +633,21 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
     let pendingRefetch = false;
     let isMounted = true;
     let lastRefetchAt = 0;
+    const addDebugLog = useFeedDebugStore.getState().addLog;
 
     const doRefetch = () => {
       if (!isMounted) return;
-      lastRefetchAt = Date.now();
+      
+      const now = Date.now();
+      // Proteção contra loops de refetch: ignorar se houve um refetch há menos de 10 segundos
+      if (now - lastRefetchAt < 10000) {
+        addDebugLog('stale', 'Refetch ignorado (cooldown ativo)', { diff: now - lastRefetchAt });
+        return;
+      }
+
+      lastRefetchAt = now;
+      addDebugLog('query', 'Disparando refetch controlado via Realtime/Visibility');
+      
       queryClient.invalidateQueries({ queryKey: ['posts'], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ['posts-infinite'], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ['oculto-feed-news'] });
@@ -644,24 +655,35 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
     };
 
     const throttledRefetch = (immediate = false) => {
+      if (!isMounted) return;
+      
       if (immediate) {
         if (throttleTimer) { clearTimeout(throttleTimer); throttleTimer = null; }
         pendingRefetch = false;
         doRefetch();
         return;
       }
+      
       pendingRefetch = true;
       if (throttleTimer) return;
+      
       throttleTimer = setTimeout(() => {
         throttleTimer = null;
         if (!isMounted || !pendingRefetch) return;
         pendingRefetch = false;
         doRefetch();
-      }, 5000); // Aumentado para 5s para evitar piscadas constantes por eventos realtime
+      }, 15000); // Janela de coalescência aumentada para 15s para evitar piscadas
     };
 
-    const onPostsChange = (_payload: any) => throttledRefetch(true);
-    const onSecondaryChange = (_payload: any) => throttledRefetch(false);
+    const onPostsChange = (payload: any) => {
+      addDebugLog('stale', 'Evento Realtime detectado: posts', { type: payload.eventType });
+      throttledRefetch(false); // Nunca imediato para alterações de posts via realtime
+    };
+    
+    const onSecondaryChange = (payload: any) => {
+      addDebugLog('stale', `Evento Realtime secundário: ${payload.table}`, { type: payload.eventType });
+      throttledRefetch(false);
+    };
 
     const unsubs: Array<() => void> = [
       subscribeTable('posts', onPostsChange),
@@ -672,14 +694,21 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
       subscribeTable('post_shares', onSecondaryChange),
     ];
 
-    // Visibility: refetch só se passou >5s desde o último — sem isso,
-    // mobile dispara refetch a cada toque de "voltar" e o feed pisca.
     const onVisibility = () => {
       if (typeof document === 'undefined') return;
       if (document.visibilityState !== 'visible') return;
-      if (Date.now() - lastRefetchAt < 30000) return; // Aumentado para 30s para evitar piscadas ao alternar apps
+      
+      const now = Date.now();
+      // Só refetch se ficou fora por mais de 5 minutos
+      if (now - lastRefetchAt < 300000) {
+        addDebugLog('stale', 'Visibility ignorado (cache recente)', { diff: now - lastRefetchAt });
+        return;
+      }
+      
+      addDebugLog('query', 'Retorno de visibilidade detectado');
       throttledRefetch(true);
     };
+    
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', onVisibility);
     }
