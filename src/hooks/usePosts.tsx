@@ -355,6 +355,8 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
     refetchOnReconnect: false,   // Evita recarregar ao oscilar rede
     refetchInterval: false,      // Desabilita polling automático para estabilidade total
     refetchIntervalInBackground: false,
+    placeholderData: (previousData) => previousData, // Mantém dados anteriores durante a revalidação para evitar piscadas (keepPreviousData)
+
 
     enabled: authReady && !!user?.id,
     queryFn: async () => {
@@ -808,11 +810,13 @@ export function useInfinitePosts(
     // para preservar bateria, scroll e responsividade no Realme C55 e similares.
     refetchOnWindowFocus: explicitAdultOnly ? 'always' : false,
     refetchOnMount: explicitAdultOnly ? 'always' : false,
-    refetchOnReconnect: true,
+    refetchOnReconnect: false, // Alterado para false para estabilidade
     // Sem polling: realtime cuida disso. Polling de 30s é caro em mobile fraco.
     refetchInterval: false,
     refetchIntervalInBackground: false,
+    placeholderData: (previousData) => previousData, // Garante que o Virtuoso não perca os dados anteriores enquanto o refetch corre
     enabled: feedIdentityReady,
+
     queryFn: async ({ pageParam = 0 }) => {
       if (!isEnabled) return { posts: [] as Post[], nextOffset: null as number | null };
 

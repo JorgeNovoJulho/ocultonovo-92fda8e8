@@ -401,6 +401,14 @@ export const RealFeed = memo(function RealFeed() {
   const [safeBlurPending, setSafeBlurPending] = useState(false);
   const safeBlurPendingTimer = useRef<number | null>(null);
 
+  // Debug de montagem do feed principal
+  useEffect(() => {
+    (window as any).OCULTO_DEBUG_FEED = true;
+    console.log('[FeedDebug] RealFeed mounted', { timestamp: new Date().toISOString() });
+    return () => console.log('[FeedDebug] RealFeed unmounted');
+  }, []);
+
+
   // Gate combinado:
   // - O seletor legado (Completo/Social/Descoberta/Limpo/Card) é a fonte
   //   primária — mudanças têm efeito imediato no feed.
@@ -928,8 +936,17 @@ export const RealFeed = memo(function RealFeed() {
   }, [filteredPosts, location, navigate, activeTab, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const handleRefresh = useCallback(async () => {
-    await refetch();
-  }, [refetch]);
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    console.log('[FeedDebug] PullToRefresh started');
+    try {
+      await refetch();
+    } finally {
+      setIsRefreshing(false);
+      console.log('[FeedDebug] PullToRefresh finished');
+    }
+  }, [refetch, isRefreshing]);
+
 
   // Prefetch antecipado em idle: assim que a 1ª página chega e o usuário
   // ainda não rolou, pré-carrega a próxima para que o scroll infinito não
@@ -1779,16 +1796,19 @@ export const RealFeed = memo(function RealFeed() {
           ref={virtuosoRef}
           useWindowScroll
           data={filteredPosts}
-          computeItemKey={(index, post: any) => post?.id ?? index}
-          overscan={dataSaver ? { main: 60, reverse: 30 } : { main: 120, reverse: 60 }}
-          increaseViewportBy={dataSaver ? { top: 30, bottom: 200 } : { top: 60, bottom: 300 }}
+          computeItemKey={(index, post: any) => post?.id ?? `post-${index}`}
+          overscan={dataSaver ? { main: 400, reverse: 200 } : { main: 1000, reverse: 500 }}
+          increaseViewportBy={dataSaver ? { top: 200, bottom: 600 } : { top: 400, bottom: 1200 }}
           // Histerese de prefetch: dispara cedo para esconder a latência de rede.
-          atBottomThreshold={dataSaver ? 1200 : 800}
+          atBottomThreshold={dataSaver ? 1500 : 1000}
           endReached={handleFeedEndReached}
           rangeChanged={handleFeedRangeChanged}
           itemContent={renderFeedItem}
           components={virtuosoComponents}
+          style={{ minHeight: '100vh' }}
         />
+
+
       )}
 
       {activeExpandedPost && (
