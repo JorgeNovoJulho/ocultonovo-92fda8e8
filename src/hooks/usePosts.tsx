@@ -1210,7 +1210,21 @@ export function useInfinitePosts(
             return matchesSelectedCategories(raw, selectedGenderCategories, { allowUnknown: true });
           });
 
-      const posts = genderFiltered;
+      // ORDENAÇÃO DETERMINÍSTICA (IMPORTANTE PARA EVITAR PISCADAS):
+      // 1. Fixados (is_pinned) primeiro.
+      // 2. Data de criação (created_at) decrescente.
+      // 3. ID como critério de desempate final.
+      const posts = [...genderFiltered].sort((a: any, b: any) => {
+        const ap = a?.is_pinned ? 1 : 0;
+        const bp = b?.is_pinned ? 1 : 0;
+        if (ap !== bp) return bp - ap;
+
+        const dateA = new Date(a.created_at).getTime();
+        const dateB = new Date(b.created_at).getTime();
+        if (dateA !== dateB) return dateB - dateA;
+
+        return String(b.id).localeCompare(String(a.id));
+      });
 
       // Use rawData length (pré-filtro) para decidir se há próxima página.
       // Se a página inteira veio cheia mas foi filtrada por post_type/gênero, ainda
