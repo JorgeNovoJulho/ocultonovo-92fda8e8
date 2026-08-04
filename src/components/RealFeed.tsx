@@ -618,7 +618,6 @@ export const RealFeed = memo(function RealFeed() {
   useEffect(() => {
     if (!feedAccess.checking && !feedAccess.allowed) setFeedLimitOpen(true);
   }, [feedAccess.checking, feedAccess.allowed]);
-  const queryClient = useQueryClient();
 
 
   const hasValidCache = useFeedCacheStore(s => !!s.posts?.length && (Date.now() - s.updatedAt < 24 * 60 * 60 * 1000));
@@ -879,15 +878,13 @@ export const RealFeed = memo(function RealFeed() {
       default:
         return sortPinnedPostsFirst(visiblePosts);
     }
-  }, [posts, activeTab, followingIds, vipAccess.purchasedPostIds, vipAccess.subscribedCreatorUserIds, vipAccess.subscribedCreatorProfileIds, user?.id, subscribedVipPosts, isAdultOnly]);
+  }, [postsFiltered, activeTab, followingIds, vipAccess.purchasedPostIds, vipAccess.subscribedCreatorUserIds, vipAccess.subscribedCreatorProfileIds, user?.id, subscribedVipPosts, isAdultOnly]);
 
   const activeExpandedPost = useMemo(() => {
     if (!expandedPost?.id) return null;
     return filteredPosts.find((p: any) => p?.id === expandedPost.id) || expandedPost;
   }, [expandedPost, filteredPosts]);
 
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
-  const location = useLocation();
 
   // Scroll até post + foco em comments/saved/likes vindo de notificações.
   // Se o post-alvo não estiver nas páginas carregadas, tentamos carregar
@@ -1441,7 +1438,7 @@ export const RealFeed = memo(function RealFeed() {
   }
 
   // Empty state — preserva Stories + Sugestões mesmo sem posts
-  const shouldShowGlobalEmptyState = (!posts || posts.length === 0) && !isFillingFilteredEmptyFeed && !(
+  const shouldShowGlobalEmptyState = (!postsFiltered || postsFiltered.length === 0) && !isFillingFilteredEmptyFeed && !(
     activeTab === 'vip' && (vipAccess.isLoading || vipAccess.hasAnyAccess || subscribedVipPosts.length > 0)
   );
 
