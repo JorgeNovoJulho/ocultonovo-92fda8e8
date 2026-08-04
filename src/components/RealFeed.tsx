@@ -417,7 +417,24 @@ export const RealFeed = memo(function RealFeed() {
   const { safeBlurOn, toggleSafeBlur } = useSafeBlur();
   const [safeBlurPending, setSafeBlurPending] = useState(false);
   const safeBlurPendingTimer = useRef<number | null>(null);
+  const {
+    posts,
+    isLoading,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    refetch,
+    isHardRefreshing,
+    handleHardRefresh,
+    pagesLoaded,
+    skeletonTimedOut,
+    isFillingFilteredEmptyFeed,
+    feedIdentityReady,
+  } = useInfinitePosts(FEED_PAGE_SIZE, { explicitAdultOnly: isAdultOnly });
 
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // Gate combinado:
   // - O seletor legado (Completo/Social/Descoberta/Limpo/Card) é a fonte
