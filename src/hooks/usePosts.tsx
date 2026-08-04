@@ -277,7 +277,10 @@ const applyBaseFeedFilters = (
   // parecer vazio/incompleto no mobile e desktop. A priorização visual de fixados
   // já é feita no frontend (RealFeed), então a consulta principal deve buscar
   // por recência pura para garantir que todas as publicações apareçam.
-  return chain.order('created_at', { ascending: false });
+  // Adicionado `id` secundário para garantir ordenação determinística entre páginas.
+  return chain
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false });
 };
 
 const selectFeedSource = (preferView: boolean = true, publicClient: boolean = false) =>
@@ -1207,7 +1210,21 @@ export function useInfinitePosts(
             return matchesSelectedCategories(raw, selectedGenderCategories, { allowUnknown: true });
           });
 
-      const posts = genderFiltered;
+      // ORDENAÇÃO DETERMINÍSTICA (IMPORTANTE PARA EVITAR PISCADAS):
+      // 1. Fixados (is_pinned) primeiro.
+      // 2. Data de criação (created_at) decrescente.
+      // 3. ID como critério de desempate final.
+      const posts = [...genderFiltered].sort((a: any, b: any) => {
+        const ap = a?.is_pinned ? 1 : 0;
+        const bp = b?.is_pinned ? 1 : 0;
+        if (ap !== bp) return bp - ap;
+
+        const dateA = new Date(a.created_at).getTime();
+        const dateB = new Date(b.created_at).getTime();
+        if (dateA !== dateB) return dateB - dateA;
+
+        return String(b.id).localeCompare(String(a.id));
+      });
 
       // Use rawData length (pré-filtro) para decidir se há próxima página.
       // Se a página inteira veio cheia mas foi filtrada por post_type/gênero, ainda
