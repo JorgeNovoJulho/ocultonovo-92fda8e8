@@ -19,7 +19,6 @@ export function useOcultoFeedNews(limit = 4) {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
 
-    gcTime: 1200_000,
     queryFn: async (): Promise<OcultoFeedNewsItem[]> => {
       const { data, error } = await supabase
         .from('oculto_feed_news')
@@ -59,7 +58,6 @@ export function useLatestPlayTitles(kind: 'audio' | 'link', limit = 4) {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
 
-    gcTime: 1200_000,
     queryFn: async (): Promise<{ id: string; title: string }[]> => {
       const { data, error } = await supabase
         .from('oculto_play_items')
@@ -114,7 +112,6 @@ export function useOcultoFeedCards() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
 
-    gcTime: 1200_000,
     queryFn: fetchFeedCards,
   });
 }
@@ -149,7 +146,7 @@ export function useOcultoFeedPlayPicks(kind: 'audio' | 'link', limit = 4) {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
 
-    gcTime: 1200_000,
+    
     queryFn: async (): Promise<OcultoFeedPlayPick[]> => {
       const { data, error } = await supabase
         .from('oculto_feed_play_picks')
