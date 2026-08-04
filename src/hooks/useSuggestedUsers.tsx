@@ -434,24 +434,3 @@ export function useDiscoveryPreferences() {
   });
 }
 
-/**
- * Hook para recuperar as preferências globais de descoberta do usuário.
- * Usado para invalidar o cache do carrossel quando os filtros mudam.
- */
-export function useDiscoveryPreferences() {
-  const { user } = useAuth();
-  return useQuery({
-    queryKey: ['discovery-preferences', user?.id],
-    queryFn: async () => {
-      if (!user?.id) return {};
-      const { data } = await supabase
-        .from('oculto_discovery_preferences')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      return data || {};
-    },
-    enabled: !!user?.id,
-    staleTime: 5 * 60 * 1000,
-  });
-}
