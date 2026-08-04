@@ -673,6 +673,49 @@ export default function AdminWelcomeMessagePage() {
           )}
         </div>
 
+        <Card className="p-4 bg-muted/30 border-dashed">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium flex items-center gap-2">
+              <Eye className="h-4 w-4 text-primary" />
+              Prévia do Chat (Simulação)
+            </h3>
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Ao vivo</span>
+            </div>
+          </div>
+          
+          <div className="bg-background/50 rounded-xl p-4 border shadow-inner min-h-[200px] flex flex-col gap-4">
+            <div className="flex justify-start">
+              <div className="max-w-[85%] bg-muted rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-border/50">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[9px] font-bold border border-amber-500/20">
+                    <Sparkles className="h-2.5 w-2.5" /> {data.badge_text}
+                  </span>
+                </div>
+                <div className="text-sm whitespace-pre-wrap leading-relaxed">
+                  {preview || 'Digite algo para ver a prévia...'}
+                </div>
+                
+                <div className="mt-4 pt-3 border-t border-border/50 flex flex-wrap gap-2">
+                  <Button size="sm" variant="secondary" className="h-8 text-[11px] font-bold gap-1.5 bg-amber-500 text-black hover:bg-amber-400 border-0">
+                    <Copy className="h-3 w-3" /> {data.copy_button_label}
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-8 text-[11px] font-bold gap-1.5 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10">
+                    <Send className="h-3 w-3" /> {data.share_button_label}
+                  </Button>
+                </div>
+              </div>
+            </div>
+            
+            <div className="text-center">
+              <span className="text-[10px] text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full italic">
+                Esta é uma simulação de como o novo membro verá a mensagem
+              </span>
+            </div>
+          </div>
+        </Card>
+
         <div className="grid gap-3 border-t pt-2 md:grid-cols-3">
           <div>
             <Label>Texto do badge</Label>
