@@ -87,7 +87,7 @@ export function FeedSyncStatusChip({ className = "" }: { className?: string }) {
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      {s && (
+      {s && phase !== "fresh" && (
         <div
           aria-live="polite"
           className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-opacity ${s.cls}`}
