@@ -936,8 +936,17 @@ export const RealFeed = memo(function RealFeed() {
   }, [filteredPosts, location, navigate, activeTab, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const handleRefresh = useCallback(async () => {
-    await refetch();
-  }, [refetch]);
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    console.log('[FeedDebug] PullToRefresh started');
+    try {
+      await refetch();
+    } finally {
+      setIsRefreshing(false);
+      console.log('[FeedDebug] PullToRefresh finished');
+    }
+  }, [refetch, isRefreshing]);
+
 
   // Prefetch antecipado em idle: assim que a 1ª página chega e o usuário
   // ainda não rolou, pré-carrega a próxima para que o scroll infinito não
