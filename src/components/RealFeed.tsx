@@ -1598,11 +1598,19 @@ export const RealFeed = memo(function RealFeed() {
         {topActionButtons}
         <div className="flex items-center justify-between">
           <FeedSyncStatusChip />
-          {isDebugEnabled && showRenderWarning && (
-            <Alert variant="destructive" className="py-1 px-3 w-auto bg-amber-500/10 border-amber-500/30 text-amber-500 animate-pulse">
-              <AlertTriangle className="h-3 w-3 mr-2" />
-              <AlertDescription className="text-[10px] font-bold">RE-RENDER COM CACHE ATIVO</AlertDescription>
-            </Alert>
+          {isDebugEnabled && (
+            <div className="flex flex-col gap-1 items-start">
+              {showRenderWarning && (
+                <Alert variant="destructive" className="py-1 px-3 w-auto bg-amber-500/10 border-amber-500/30 text-amber-500 animate-pulse">
+                  <AlertTriangle className="h-3 w-3 mr-2" />
+                  <AlertDescription className="text-[10px] font-bold uppercase">Re-render inesperado</AlertDescription>
+                </Alert>
+              )}
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[9px] font-mono">
+                <Info className="h-2.5 w-2.5" />
+                <span>DEBUG: Monitoring v18.5 Active</span>
+              </div>
+            </div>
           )}
         </div>
       </div>
