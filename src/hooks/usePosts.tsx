@@ -2078,7 +2078,7 @@ export function useDeletePost() {
 
     const subscription = subscribeTable('posts', (payload) => {
       if (payload.eventType === 'INSERT') {
-        addLogToDebug('realtime', 'Nova postagem detectada em segundo plano');
+        addLogToDebug('query', 'Nova postagem detectada em segundo plano');
       }
     });
 
