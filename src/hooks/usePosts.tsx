@@ -347,12 +347,12 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
 
   const query = useQuery({
     queryKey: ['posts', options?.userId, options?.limit, isEnabled, showAll, maxPosts, startDate, profile?.id],
-    staleTime: 60_000,           // 1m: evita re-carregamentos desnecessários
-    gcTime: 15 * 60_000,
+    staleTime: 300_000,          // 5m: evita re-carregamentos desnecessários
+    gcTime: 30 * 60_000,
     retry: 2,
     refetchOnWindowFocus: false, // desabilitado para evitar "pisca" ao trocar de app
     refetchOnMount: false,       
-    refetchInterval: 120_000,    // polling a cada 2m como fallback
+    refetchInterval: 600_000,    // polling a cada 10m como fallback
     refetchIntervalInBackground: false,
 
     enabled: authReady && !!user?.id,
@@ -641,7 +641,7 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
         if (!isMounted || !pendingRefetch) return;
         pendingRefetch = false;
         doRefetch();
-      }, 1500);
+      }, 5000); // Aumentado para 5s para evitar piscadas constantes por eventos realtime
     };
 
     const onPostsChange = (_payload: any) => throttledRefetch(true);
@@ -661,7 +661,7 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
     const onVisibility = () => {
       if (typeof document === 'undefined') return;
       if (document.visibilityState !== 'visible') return;
-      if (Date.now() - lastRefetchAt < 5000) return;
+      if (Date.now() - lastRefetchAt < 30000) return; // Aumentado para 30s para evitar piscadas ao alternar apps
       throttledRefetch(true);
     };
     if (typeof document !== 'undefined') {
