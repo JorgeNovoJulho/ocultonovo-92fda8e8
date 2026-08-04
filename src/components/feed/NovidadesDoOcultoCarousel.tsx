@@ -67,6 +67,12 @@ export const NovidadesDoOcultoCarousel = memo(function NovidadesDoOcultoCarousel
   const { data: pickedMovies = [] } = useOcultoFeedPlayPicks('link', 4);
   const { data: cards = DEFAULT_FEED_CARDS } = useOcultoFeedCards();
 
+  // Use keys para forçar re-render apenas quando os dados realmente mudarem
+  const newsKey = JSON.stringify(news.map(n => n.id));
+  const musicsKey = JSON.stringify(pickedMusics.length > 0 ? pickedMusics.map(m => m.id) : latestMusics.map(m => m.id));
+  const moviesKey = JSON.stringify(pickedMovies.length > 0 ? pickedMovies.map(m => m.id) : latestMovies.map(m => m.id));
+  const cardsKey = JSON.stringify(cards.map(c => c.card_key + c.is_active));
+
   // Curadoria do painel tem prioridade; se vazia, cai no automático.
   const musics = pickedMusics.length > 0 ? pickedMusics : latestMusics;
   const movies = pickedMovies.length > 0 ? pickedMovies : latestMovies;
@@ -178,7 +184,7 @@ export const NovidadesDoOcultoCarousel = memo(function NovidadesDoOcultoCarousel
       .sort((a, b) => a.position - b.position)
       .map((c) => byKey[c.card_key])
       .filter(Boolean) as React.ReactNode[];
-  }, [link, copied, handleCopy, news, musics, movies, navigate, cards]);
+  }, [link, copied, handleCopy, newsKey, musicsKey, moviesKey, navigate, cardsKey]);
 
   const onTouchStart = (e: TouchEvent) => {
     touchEndRef.current = null;
