@@ -667,12 +667,13 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
       pendingRefetch = true;
       if (throttleTimer) return;
       
+      // Janela de coalescência aumentada para 30s para evitar piscadas constantes em ambiente mobile
       throttleTimer = setTimeout(() => {
         throttleTimer = null;
         if (!isMounted || !pendingRefetch) return;
         pendingRefetch = false;
         doRefetch();
-      }, 15000); // Janela de coalescência aumentada para 15s para evitar piscadas
+      }, 30000); 
     };
 
     const onPostsChange = (payload: any) => {
