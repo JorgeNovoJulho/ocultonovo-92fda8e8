@@ -388,6 +388,7 @@ export const RealFeed = memo(function RealFeed() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showFeedContentTypeModal, setShowFeedContentTypeModal] = useState(false);
   const [showFeedFilterModal, setShowFeedFilterModal] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [showSubscribeModal, setShowSubscribeModal] = useState(false);
   const [showVitrineModal, setShowVitrineModal] = useState(false);
   const [expandedPost, setExpandedPost] = useState<any | null>(null);

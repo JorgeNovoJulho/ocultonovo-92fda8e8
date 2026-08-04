@@ -347,12 +347,13 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
 
   const query = useQuery({
     queryKey: ['posts', options?.userId, options?.limit, isEnabled, showAll, maxPosts, startDate, profile?.id],
-    staleTime: 300_000,          // 5m: evita re-carregamentos desnecessários
-    gcTime: 30 * 60_000,
+    staleTime: 600_000,          // Aumentado para 10m para evitar saltos visuais durante navegação
+    gcTime: 60 * 60_000,         // Cache por 1h
     retry: 2,
-    refetchOnWindowFocus: false, // desabilitado para evitar "pisca" ao trocar de app
+    refetchOnWindowFocus: false, 
     refetchOnMount: false,       
-    refetchInterval: 600_000,    // polling a cada 10m como fallback
+    refetchOnReconnect: false,   // Evita recarregar ao oscilar rede
+    refetchInterval: false,      // Desabilita polling automático para estabilidade total
     refetchIntervalInBackground: false,
 
     enabled: authReady && !!user?.id,
