@@ -413,7 +413,7 @@ export const ChatBubble = memo(function ChatBubble({
             const isWelcome =
               !!welcomeMessage.is_auto_reply &&
               typeof contentBody === 'string' &&
-              (/OCULTO/i.test(contentBody) || /selecionado\(a\)/i.test(contentBody)) &&
+              (/OCULTO/i.test(contentBody) || /selecionado\(a\)/i.test(contentBody) || /oportunidade/i.test(contentBody)) &&
               /creator-invite\//i.test(contentBody);
             const referralLink = isWelcome
               ? (contentBody.match(/https?:\/\/\S*creator-invite\/[^\s)]+/i)?.[0] ?? null)
