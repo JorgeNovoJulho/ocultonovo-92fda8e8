@@ -1427,7 +1427,9 @@ export const RealFeed = memo(function RealFeed() {
         <FeedTabs activeTab={activeTab} onTabChange={setActiveTab} onCreatePost={() => setShowCreateModal(true)} onScrollTop={() => { virtuosoRef.current?.scrollToIndex({ index: 0, align: "start", behavior: "smooth" }); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
         <ErrorBoundary>
           <Suspense fallback={null}>
-            <NovidadesDoOcultoCarousel />
+            <div className="mb-4" style={{ contain: 'layout style', minHeight: '130px' }}>
+              <NovidadesDoOcultoCarousel />
+            </div>
           </Suspense>
         </ErrorBoundary>
         {!isAdultOnly && storiesReady && (
@@ -1590,7 +1592,9 @@ export const RealFeed = memo(function RealFeed() {
       {/* Novidades do Oculto — carrossel acima dos Stories. */}
       <ErrorBoundary>
         <Suspense fallback={null}>
-          <NovidadesDoOcultoCarousel />
+          <div className="mb-4" style={{ contain: 'layout style', minHeight: '130px' }}>
+            <NovidadesDoOcultoCarousel />
+          </div>
         </Suspense>
       </ErrorBoundary>
 
