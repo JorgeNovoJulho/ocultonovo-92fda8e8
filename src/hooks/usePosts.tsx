@@ -2071,7 +2071,8 @@ export function useDeletePost() {
   const isFeedEnabled = feedSettingsConfig?.is_enabled !== false;
 
 
-  // Realtime: Silenciado para manter a estabilidade visual conforme pedido.
+  // Realtime: Silenciado para manter a estabilidade visual do Feed de posts conforme pedido.
+  // Note: Mensagens de chat, matches e presentes recebidos continuam em tempo real nos seus respectivos hooks (useChat, useNotifications, useMatchNotification, useGiftNotifications).
   useEffect(() => {
     if (!isFeedEnabled || !authIsReady || !authUser?.id) return;
 
@@ -2080,7 +2081,6 @@ export function useDeletePost() {
         addLogToDebug('query', 'Nova postagem detectada em segundo plano');
       }
     });
-
 
     return () => {
       if (typeof subscription === 'function') {
