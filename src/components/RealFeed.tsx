@@ -1071,7 +1071,6 @@ export const RealFeed = memo(function RealFeed() {
                 <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${isHardRefreshing ? 'animate-spin' : ''}`} />
                 Atualizar feed
               </Button>
-              <FeedSyncStatusChip />
             </div>
           </div>
         ) : (
@@ -1197,7 +1196,7 @@ export const RealFeed = memo(function RealFeed() {
 
   const topActionButtons = (
     <div className="sticky top-0 z-[70] flex justify-center sm:justify-end items-center gap-2 px-2 pt-2 pb-1 flex-wrap bg-background/95 backdrop-blur-md border-b border-border/20 shadow-sm">
-      <FeedSyncStatusChip className="hidden sm:flex" />
+      
       <TooltipProvider delayDuration={150}>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -1620,7 +1619,9 @@ export const RealFeed = memo(function RealFeed() {
       <div className="flex flex-col gap-2 p-3">
         {topActionButtons}
         <div className="flex items-center justify-between">
+          <FeedTabs activeTab={activeTab} setActiveTab={handleTabChange} />
           <FeedSyncStatusChip />
+        </div>
           {isDebugEnabled && (
             <div className="flex flex-col gap-1 items-start">
               {showRenderWarning && (
