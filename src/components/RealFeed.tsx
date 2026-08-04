@@ -188,20 +188,11 @@ const REAL_FEED_TO_HOME_SECTION: Record<string, string> = {
 const SUGGESTION_FIXED_INDEX = 2;
 const SUGGESTION_POSITIONS = new Set<number>([SUGGESTION_FIXED_INDEX]);
 
-// ── Sessões fixas no feed ───────────────────────────────────────────────
-// "Mistérios em Destaque": após a 6ª postagem (index 5).
-// "Comunidades Ocultas": logo abaixo de Mistérios (index 6).
-// "Leilões": 3 posts depois (index 8).
-// "Eventos" foi movido para fora do feed virtualizado (aparece logo após
-// "Explorar criadores VIP" — ver bloco principal abaixo).
 const MISTERIOS_FIXED_INDEX = 5;
 const COMMUNITIES_FEED_FIXED_INDEX = 6;
 const AUCTIONS_FIXED_INDEX = 8;
-// "Descubra no OCULTO PLAY" (5 vídeos aleatórios) — exibido 5 postagens
-// abaixo da posição anterior (era index 11; agora index 16).
 const OCULTO_PLAY_RANDOM_FIXED_INDEX = 16;
-// "Filmes no Oculto Play" — logo abaixo da sessão Comunidades Ocultas.
-const LATEST_MOVIES_BIG_FIXED_INDEX = SUGGESTION_FIXED_INDEX;
+const LATEST_MOVIES_BIG_FIXED_INDEX = 1; // Posição fixa após o primeiro post (índice 1)
 const EMPTY_MARKETPLACE_ADS: any[] = [];
 
 // ── Posições onde injetar o card do Marketplace ─────────────────────────

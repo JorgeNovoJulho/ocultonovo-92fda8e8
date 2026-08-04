@@ -277,7 +277,10 @@ const applyBaseFeedFilters = (
   // parecer vazio/incompleto no mobile e desktop. A priorização visual de fixados
   // já é feita no frontend (RealFeed), então a consulta principal deve buscar
   // por recência pura para garantir que todas as publicações apareçam.
-  return chain.order('created_at', { ascending: false });
+  // Adicionado `id` secundário para garantir ordenação determinística entre páginas.
+  return chain
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false });
 };
 
 const selectFeedSource = (preferView: boolean = true, publicClient: boolean = false) =>
