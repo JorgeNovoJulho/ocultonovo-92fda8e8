@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, memo, type TouchEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Copy, Check, Sparkles, Music2, Film, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
