@@ -401,6 +401,14 @@ export const RealFeed = memo(function RealFeed() {
   const [safeBlurPending, setSafeBlurPending] = useState(false);
   const safeBlurPendingTimer = useRef<number | null>(null);
 
+  // Debug de montagem do feed principal
+  useEffect(() => {
+    (window as any).OCULTO_DEBUG_FEED = true;
+    console.log('[FeedDebug] RealFeed mounted', { timestamp: new Date().toISOString() });
+    return () => console.log('[FeedDebug] RealFeed unmounted');
+  }, []);
+
+
   // Gate combinado:
   // - O seletor legado (Completo/Social/Descoberta/Limpo/Card) é a fonte
   //   primária — mudanças têm efeito imediato no feed.
