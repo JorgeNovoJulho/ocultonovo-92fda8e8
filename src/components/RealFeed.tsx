@@ -1212,9 +1212,7 @@ export const RealFeed = memo(function RealFeed() {
   ]);
 
   const topActionButtons = (
-    <div className="sticky top-0 z-[70] flex justify-center sm:justify-end items-center gap-2 px-2 pt-2 pb-1 flex-wrap bg-background/95 backdrop-blur-md border-b border-border/20 shadow-sm">
-      <FeedSyncStatusChip className="hidden sm:flex items-center" />
-      
+    <div className="sticky top-0 z-[70] grid grid-cols-4 sm:grid-cols-7 gap-1.5 px-2 pt-2 pb-1.5 bg-background/95 backdrop-blur-md border-b border-border/20 shadow-sm">
       <TooltipProvider delayDuration={150}>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -1222,10 +1220,10 @@ export const RealFeed = memo(function RealFeed() {
               variant="ghost"
               size="sm"
               onClick={() => setShowFeedFilterModal(true)}
-              className="h-10 sm:h-8 w-10 sm:w-auto sm:min-w-0 gap-1 px-0 sm:px-2 text-[11px] font-bold touch-manipulation bg-gradient-to-r from-fuchsia-500 via-pink-500 to-orange-400 text-white border border-pink-500/60 shadow-sm hover:brightness-110 hover:text-white transition"
+              className="h-10 sm:h-9 w-full gap-1 px-1 text-[11px] font-bold touch-manipulation bg-gradient-to-r from-fuchsia-500 via-pink-500 to-orange-400 text-white border border-pink-500/60 shadow-sm hover:brightness-110 hover:text-white transition"
               aria-label="Alterar filtro de gênero do feed"
             >
-              <SlidersHorizontal className="h-5 w-5 sm:h-3.5 sm:w-3.5" />
+              <SlidersHorizontal className="h-4.5 w-4.5 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Filtro</span>
             </Button>
           </TooltipTrigger>
@@ -1238,35 +1236,34 @@ export const RealFeed = memo(function RealFeed() {
               variant="ghost"
               size="sm"
               onClick={openSidebarSearch}
-              className="h-10 sm:h-8 w-10 sm:w-auto sm:min-w-0 gap-1 px-0 sm:px-2 text-[11px] font-bold touch-manipulation bg-gradient-to-r from-violet-500 via-indigo-500 to-blue-500 text-white border border-indigo-500/60 shadow-sm hover:brightness-110 hover:text-white transition"
+              className="h-10 sm:h-9 w-full gap-1 px-1 text-[11px] font-bold touch-manipulation bg-gradient-to-r from-violet-500 via-indigo-500 to-blue-500 text-white border border-indigo-500/60 shadow-sm hover:brightness-110 hover:text-white transition"
               aria-label="Abrir página de pesquisa"
             >
-              <Search className="h-5 w-5 sm:h-3.5 sm:w-3.5" />
+              <Search className="h-4.5 w-4.5 sm:h-4 sm:w-4" />
               <span className="hidden sm:inline">Pesquisar</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">Abrir a página de pesquisa</TooltipContent>
         </Tooltip>
 
-
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="relative inline-flex">
+            <div className="relative inline-flex w-full">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowFeedContentTypeModal(true)}
-                className="h-10 sm:h-8 w-10 sm:w-auto sm:min-w-0 gap-1 px-0 sm:px-2 text-[11px] font-bold touch-manipulation bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 text-black border border-amber-500/80 shadow-sm hover:brightness-110 hover:text-black transition"
+                className="h-10 sm:h-9 w-full gap-1 px-1 text-[11px] font-bold touch-manipulation bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 text-black border border-amber-500/80 shadow-sm hover:brightness-110 hover:text-black transition"
                 aria-label="Escolher tipo de conteúdo do feed (+18 ou completa)"
               >
-                <Flame className="h-5 w-5 sm:h-3.5 sm:w-3.5" strokeWidth={2.5} />
+                <Flame className="h-4.5 w-4.5 sm:h-4 sm:w-4" strokeWidth={2.5} />
                 <span className="hidden sm:inline">Conteúdo</span>
               </Button>
               <FeedExperienceModeIndicator onOpenSelector={() => setShowFeedContentTypeModal(true)} />
             </div>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-[240px] text-xs leading-snug text-center">
-            Tipo de conteúdo no feed — o ponto colorido mostra o modo ativo (âmbar = Apenas +18, fúcsia = Experiência completa).
+            Tipo de conteúdo no feed
           </TooltipContent>
         </Tooltip>
 
@@ -1279,22 +1276,19 @@ export const RealFeed = memo(function RealFeed() {
               aria-pressed={auraOpen}
               aria-label={auraOpen ? 'Recolher Aura IA' : 'Abrir Aura IA'}
               className={[
-                'relative h-12 sm:h-11 w-12 sm:w-auto sm:min-w-0 gap-1.5 px-0 sm:px-5 text-xs sm:text-[13px] font-extrabold touch-manipulation',
+                'relative h-10 sm:h-9 w-full gap-1 px-1 text-[11px] font-bold touch-manipulation',
                 'bg-[linear-gradient(115deg,#ff1aa8_0%,#d946ef_28%,#a855f7_55%,#22d3ee_100%)] text-white',
-                'border-2 border-white/70',
-                'shadow-[0_0_22px_rgba(217,70,239,1),0_0_44px_rgba(168,85,247,0.75),0_0_60px_rgba(34,211,238,0.55)]',
-                'ring-2 ring-fuchsia-300/80 ring-offset-2 ring-offset-background',
+                'border border-white/40 shadow-sm',
                 'hover:brightness-125 hover:text-white transition-all',
-                auraOpen ? 'ring-cyan-300 brightness-110' : '',
+                auraOpen ? 'ring-1 ring-cyan-300 brightness-110' : '',
               ].join(' ')}
             >
-              <BrainCircuit className="h-6 w-6 sm:h-5 sm:w-5 drop-shadow-[0_0_8px_rgba(255,255,255,1)]" strokeWidth={2.6} />
-              <span className="hidden sm:inline tracking-wider drop-shadow-[0_0_8px_rgba(255,255,255,0.85)]">Aura IA</span>
-              <span aria-hidden className="pointer-events-none absolute -inset-[4px] rounded-md ring-2 ring-fuchsia-400/70 blur-[5px] opacity-75" />
+              <BrainCircuit className="h-4.5 w-4.5 sm:h-4 sm:w-4" strokeWidth={2.6} />
+              <span className="hidden sm:inline tracking-wider">Aura IA</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-[240px] text-xs leading-snug text-center">
-            Abrir Aura IA — painel inteligente com sinais, oportunidades e missões.
+            Abrir Aura IA
           </TooltipContent>
         </Tooltip>
 
@@ -1307,23 +1301,16 @@ export const RealFeed = memo(function RealFeed() {
                 const next = themeMode === 'light' ? 'dark' : themeMode === 'dark' ? 'auto' : 'light';
                 setThemeMode(next);
               }}
-              className="h-10 sm:h-8 w-10 sm:w-auto sm:min-w-0 gap-1 px-0 sm:px-2 text-[11px] font-bold touch-manipulation bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500 text-white border border-orange-500/60 shadow-sm hover:brightness-110 hover:text-white transition"
+              className="h-10 sm:h-9 w-full gap-1 px-1 text-[11px] font-bold touch-manipulation bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500 text-white border border-orange-500/60 shadow-sm hover:brightness-110 hover:text-white transition"
               aria-label={`Alternar tema (atual: ${themeMode === 'light' ? 'Claro' : themeMode === 'dark' ? 'Escuro' : 'Auto'})`}
             >
-              {themeMode === 'light' ? <Sun className="h-5 w-5 sm:h-3.5 sm:w-3.5" /> : themeMode === 'dark' ? <Moon className="h-5 w-5 sm:h-3.5 sm:w-3.5" /> : <MonitorSmartphone className="h-5 w-5 sm:h-3.5 sm:w-3.5" />}
+              {themeMode === 'light' ? <Sun className="h-4.5 w-4.5 sm:h-4 sm:w-4" /> : themeMode === 'dark' ? <Moon className="h-4.5 w-4.5 sm:h-4 sm:w-4" /> : <MonitorSmartphone className="h-4.5 w-4.5 sm:h-4 sm:w-4" />}
               <span className="hidden sm:inline">{themeMode === 'light' ? 'Claro' : themeMode === 'dark' ? 'Escuro' : 'Auto'}</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom">Alternar tema</TooltipContent>
         </Tooltip>
 
-        {/*
-          IMPORTANTE: Sem Tooltip aqui. Em mobile (iOS/Android) o Radix Tooltip
-          intercepta o primeiro toque para abrir o balão e o clique do botão
-          não dispara — o blur não ligava/desligava. Mantemos title nativo +
-          aria-label para acessibilidade. Também removemos o lock `disabled`
-          durante o "pending" — toggles rápidos agora são sempre respondidos.
-        */}
         <Button
           type="button"
           variant="ghost"
@@ -1332,45 +1319,39 @@ export const RealFeed = memo(function RealFeed() {
             e.preventDefault();
             e.stopPropagation();
             const next = !safeBlurOn;
-            // Feedback visual breve (não bloqueia novos cliques).
             setSafeBlurPending(true);
             void toggleSafeBlur();
-            toast.success(next ? '🔒 Blur Seguro ativado' : '👁 Blur Seguro desativado', {
-              description: next
-                ? 'Cobrindo postagens +18 com animação suave.'
-                : 'Revelando postagens +18 sem recarregar o feed.',
-              duration: 1800,
-            });
+            toast.success(next ? '🔒 Blur Seguro ativado' : '👁 Blur Seguro desativado', { duration: 1800 });
             if (safeBlurPendingTimer.current) window.clearTimeout(safeBlurPendingTimer.current);
             safeBlurPendingTimer.current = window.setTimeout(() => setSafeBlurPending(false), 350);
           }}
           className={cn(
-            "h-10 sm:h-8 w-10 sm:w-auto sm:min-w-0 gap-1 px-0 sm:px-2 text-[11px] font-bold touch-manipulation bg-gradient-to-r from-slate-700 via-zinc-700 to-stone-800 text-white border border-zinc-600/60 shadow-sm hover:brightness-110 hover:text-white transition-all duration-300 active:scale-95",
+            "h-10 sm:h-9 w-full gap-1 px-1 text-[11px] font-bold touch-manipulation bg-gradient-to-r from-slate-700 via-zinc-700 to-stone-800 text-white border border-zinc-600/60 shadow-sm hover:brightness-110 hover:text-white transition-all duration-300 active:scale-95",
             safeBlurPending && "opacity-90",
-            safeBlurOn ? "ring-1 ring-rose-400/40" : "ring-1 ring-emerald-400/30",
+            safeBlurOn ? "ring-1 ring-rose-400/40" : "ring-1 ring-emerald-400/30"
           )}
           aria-label={safeBlurOn ? 'Desligar Modo Blur Seguro (mostrar +18)' : 'Ligar Modo Blur Seguro (cobrir +18)'}
           aria-pressed={safeBlurOn}
-          title={safeBlurOn
-            ? 'Modo Blur Seguro LIGADO — toque para revelar postagens +18'
-            : 'Modo Blur Seguro DESLIGADO — toque para cobrir postagens +18'}
         >
           <span key={safeBlurOn ? 'on' : 'off'} className="inline-flex items-center gap-1 animate-scale-in pointer-events-none">
             {safeBlurPending ? (
-              <Loader2 className="h-5 w-5 sm:h-3.5 sm:w-3.5 animate-spin" />
+              <Loader2 className="h-4.5 w-4.5 sm:h-4 sm:w-4 animate-spin" />
             ) : safeBlurOn ? (
-              <EyeOff className="h-5 w-5 sm:h-3.5 sm:w-3.5" />
+              <EyeOff className="h-4.5 w-4.5 sm:h-4 sm:w-4" />
             ) : (
-              <Eye className="h-5 w-5 sm:h-3.5 sm:w-3.5" />
+              <Eye className="h-4.5 w-4.5 sm:h-4 sm:w-4" />
             )}
             <span className="hidden sm:inline">
               {safeBlurOn ? 'Blur' : 'Aberto'}
             </span>
           </span>
         </Button>
+
+        <div className="w-full flex items-center justify-center">
+          <FeedModeSelector />
+        </div>
       </TooltipProvider>
 
-      <FeedModeSelector />
       <FeedContentTypeModal open={showFeedContentTypeModal} onOpenChange={setShowFeedContentTypeModal} />
     </div>
   );
