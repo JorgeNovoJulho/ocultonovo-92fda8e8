@@ -1788,9 +1788,9 @@ export const RealFeed = memo(function RealFeed() {
           rangeChanged={handleFeedRangeChanged}
           itemContent={renderFeedItem}
           components={virtuosoComponents}
-          restoreScrollState={true}
           style={{ minHeight: '100vh' }}
         />
+
 
       )}
 
