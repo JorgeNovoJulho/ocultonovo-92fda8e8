@@ -3,11 +3,12 @@
  * Tabs: Configurações | Moderação | Estatísticas.
  */
 import { useEffect, useRef, useState } from 'react';
-
-import { Loader2, Play, ShieldAlert, Sparkles, BarChart3, Settings2, Flag, Star, EyeOff, TrendingUp, Calendar, ListMusic, LayoutDashboard, Film, Trophy, RotateCcw, FileText, Music, ArrowUpRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Loader2, Play, ShieldAlert, Sparkles, BarChart3, Settings2, Flag, Star, EyeOff, TrendingUp, Calendar, ListMusic, LayoutDashboard, Film, Trophy, RotateCcw, FileText, Music, ArrowUpRight, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseExternal';
+
 import { useOcultoPlayConfig, type OcultoPlayConfig } from '@/hooks/useOcultoPlayAccess';
 import { useOcultoPlayAdminStats } from '@/hooks/useOcultoPlayModeration';
 import { AdminOcultoPlayModerationPanel } from '@/components/admin/AdminOcultoPlayModerationPanel';
@@ -59,7 +60,9 @@ const SECTIONS: { key: ToggleKey; label: string }[] = [
 ];
 
 export default function AdminOcultoPlayPage() {
+  const navigate = useNavigate();
   const { data: cfg, isLoading } = useOcultoPlayConfig();
+
   const qc = useQueryClient();
   const [draft, setDraft] = useState<OcultoPlayConfig | null>(null);
   const [saving, setSaving] = useState(false);

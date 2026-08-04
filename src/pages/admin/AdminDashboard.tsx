@@ -24,7 +24,9 @@ import {
   Info, 
   Calculator,
   Eye,
+  Share2,
 } from "lucide-react";
+
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
