@@ -796,61 +796,49 @@ export const RealFeed = memo(function RealFeed() {
     }
   }, [refetchVipPosts]);
 
+  const sortPinnedPostsFirst = useCallback((items: any[]) =>
+    [...items].sort((a: any, b: any) => {
+      const ap = a?.is_pinned ? 1 : 0;
+      const bp = b?.is_pinned ? 1 : 0;
+      if (ap !== bp) return bp - ap;
+
+      const pinnedAtA = a?.pinned_at ? new Date(a.pinned_at).getTime() : 0;
+      const pinnedAtB = b?.pinned_at ? new Date(b.pinned_at).getTime() : 0;
+      if (pinnedAtA !== pinnedAtB) return pinnedAtB - pinnedAtA;
+
+      const createdAtA = a?.created_at ? new Date(a.created_at).getTime() : 0;
+      const createdAtB = b?.created_at ? new Date(b.created_at).getTime() : 0;
+      if (createdAtA !== createdAtB) return createdAtB - createdAtA;
+      
+      return String(b.id || "").localeCompare(String(a.id || ""));
+    }), []);
+
+  const hasVipSubscriptionForPost = useCallback((post: any) => {
+    const ownerIds = [post?.user_id, post?.author_id, post?.creator_id].filter(Boolean);
+    return ownerIds.some(
+      (id) => vipAccess.subscribedCreatorUserIds.has(id) || vipAccess.subscribedCreatorProfileIds.has(id)
+    );
+  }, [vipAccess.subscribedCreatorUserIds, vipAccess.subscribedCreatorProfileIds]);
+
+  const followingSet = useMemo(() => new Set(followingIds ?? []), [followingIds]);
+
+  const NARRATIVE_SECTIONS_STATIC = useMemo(() => new Set(['story','chapter','diary','article','series','text_post','backstage','narrative']), []);
+  const isNarrativePost = useCallback((post: any) =>
+    post?.content_format === 'narrative' ||
+    (post?.section_type && NARRATIVE_SECTIONS_STATIC.has(String(post.section_type).toLowerCase())), [NARRATIVE_SECTIONS_STATIC]);
+
   // Filtrar posts baseado na aba ativa
   const filteredPosts = useMemo(() => {
     if (!postsFiltered) return [];
 
-    const sortPinnedPostsFirst = useCallback((items: any[]) =>
-      [...items].sort((a: any, b: any) => {
-        const ap = a?.is_pinned ? 1 : 0;
-        const bp = b?.is_pinned ? 1 : 0;
-        if (ap !== bp) return bp - ap;
-
-        const pinnedAtA = a?.pinned_at ? new Date(a.pinned_at).getTime() : 0;
-        const pinnedAtB = b?.pinned_at ? new Date(b.pinned_at).getTime() : 0;
-        if (pinnedAtA !== pinnedAtB) return pinnedAtB - pinnedAtA;
-
-        const createdAtA = a?.created_at ? new Date(a.created_at).getTime() : 0;
-        const createdAtB = b?.created_at ? new Date(b.created_at).getTime() : 0;
-        if (createdAtA !== createdAtB) return createdAtB - createdAtA;
-        
-        return String(b.id || "").localeCompare(String(a.id || ""));
-      }), []);
-
-    const hasVipSubscriptionForPost = useCallback((post: any) => {
-      const ownerIds = [post?.user_id, post?.author_id, post?.creator_id].filter(Boolean);
-      return ownerIds.some(
-        (id) => vipAccess.subscribedCreatorUserIds.has(id) || vipAccess.subscribedCreatorProfileIds.has(id)
-      );
-    }, [vipAccess.subscribedCreatorUserIds, vipAccess.subscribedCreatorProfileIds]);
-
-    const followingSet = useMemo(() => new Set(followingIds ?? []), [followingIds]);
-
-    const NARRATIVE_SECTIONS = new Set(['story','chapter','diary','article','series','text_post','backstage','narrative']);
-    const isNarrativePost = useCallback((post: any) =>
-      post?.content_format === 'narrative' ||
-      (post?.section_type && NARRATIVE_SECTIONS.has(String(post.section_type).toLowerCase())), []);
-
     const visiblePosts = postsFiltered.filter((post: any) => {
       if (post?.is_hidden === true || post?.privacy_level === 'hidden') return false;
 
-      // Modo "Apenas +18": mostra somente publicações criadas com a chave
-      // Conteúdo +18 ligada (posts.is_adult=true). Conteúdo legado/nulo e
-      // embeds do OCULTO PLAY ficam só no modo completo.
       if (isAdultOnly) {
-        // STRICT: só publicações criadas com o botão +18 ATIVO (is_adult=true).
-        // Posts legados/null e não-adultos ficam fora.
         if (post?.is_adult !== true) return false;
-        // Stories (is_flash) nunca aparecem como post no feed.
         if ((post as any)?.is_flash === true) return false;
-        // Compartilhamentos do OCULTO PLAY só na experiência completa.
         if ((post as any)?.oculto_play_item_id) return false;
       }
-
-      // A view do backend já devolve apenas o que pode aparecer no feed do
-      // usuário. O frontend não deve reaplicar filtros de friends/VIP/pago aqui,
-      // pois isso escondia cards válidos em “Experiência completa”. Paywall/blur
-      // continuam sendo tratados no próprio card.
       return true;
     });
 
@@ -886,7 +874,7 @@ export const RealFeed = memo(function RealFeed() {
     })();
 
     return sortPinnedPostsFirst(items);
-  }, [visiblePosts, activeTab, followingIds, followingSet, vipAccess.purchasedPostIds, hasVipSubscriptionForPost, isNarrativePost, subscribedVipPosts, sortPinnedPostsFirst]);
+  }, [postsFiltered, activeTab, followingIds, followingSet, vipAccess.purchasedPostIds, hasVipSubscriptionForPost, isNarrativePost, subscribedVipPosts, sortPinnedPostsFirst, isAdultOnly]);
 
   const activeExpandedPost = useMemo(() => {
     if (!expandedPost?.id) return null;
