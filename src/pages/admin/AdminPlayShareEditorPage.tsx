@@ -19,6 +19,7 @@ interface PlayShareSettings {
   show_player: boolean;
   show_stats: boolean;
   show_signup_cta: boolean;
+  cta_title: string;
   cta_text: string;
   cta_button_text: string;
   bg_color: string;
@@ -33,7 +34,8 @@ const DEFAULT_PLAY_SETTINGS: PlayShareSettings = {
   show_player: true,
   show_stats: true,
   show_signup_cta: true,
-  cta_text: "Gostou deste conteúdo? Crie sua conta grátis para ver muito mais no OCULTO PLAY.",
+  cta_title: "OCULTO é uma rede social adulta +18",
+  cta_text: "Crie sua conta gratuita para curtir, comentar, salvar em coleções, mandar mensagens e explorar todo o universo do OCULTO PLAY.",
   cta_button_text: "Criar minha conta grátis",
   bg_color: "#0a0a0a",
   accent_color: "#ec4899",
