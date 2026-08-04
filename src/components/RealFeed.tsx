@@ -574,10 +574,14 @@ export const RealFeed = memo(function RealFeed() {
     addDebugLog('render', 'RealFeed montado/remontado');
     if (hasValidCache) {
       setShowRenderWarning(true);
+      // Limpar logs antigos se o feed está remontando sem motivo aparente
+      if (isDebugEnabled) {
+        addDebugLog('stale', 'ALERTA: Remontagem inesperada detectada');
+      }
       const t = setTimeout(() => setShowRenderWarning(false), 3000);
       return () => clearTimeout(t);
     }
-  }, [addDebugLog, hasValidCache]);
+  }, [addDebugLog, hasValidCache, isDebugEnabled]);
 
   const {
     data: infiniteData,
