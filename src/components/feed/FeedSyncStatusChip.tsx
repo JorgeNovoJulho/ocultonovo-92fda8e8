@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useIsFetching } from "@tanstack/react-query";
-import { CheckCircle2, RefreshCw, Database } from "lucide-react";
+import { CheckCircle2, RefreshCw, Database, Download, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFeedCacheStore } from "@/store/useFeedCacheStore";
 import { useFeedDebugStore } from "@/store/useFeedDebugStore";
@@ -29,6 +29,19 @@ export function FeedSyncStatusChip({ className = "" }: { className?: string }) {
   );
   const { isDebugEnabled, logs, toggleDebug, clearLogs } = useFeedDebugStore();
   const addDebugLog = useFeedDebugStore(s => s.addLog);
+
+  const exportLogs = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (logs.length === 0) return;
+    
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(logs, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", `feed_debug_logs_${format(Date.now(), 'yyyy-MM-dd_HH-mm')}.json`);
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
 
   useEffect(() => {
     if (fetching > 0) {
@@ -98,12 +111,21 @@ export function FeedSyncStatusChip({ className = "" }: { className?: string }) {
           <TooltipContent side="bottom" className="w-64 p-0">
             <div className="flex items-center justify-between border-b p-2">
               <span className="text-xs font-bold">Debug do Feed</span>
-              <button 
-                onClick={(e) => { e.stopPropagation(); clearLogs(); }}
-                className="text-[10px] text-muted-foreground hover:text-foreground"
-              >
-                Limpar
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={exportLogs}
+                  title="Exportar JSON"
+                  className="text-[10px] text-muted-foreground hover:text-blue-400"
+                >
+                  <Download className="h-3 w-3" />
+                </button>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); clearLogs(); }}
+                  className="text-[10px] text-muted-foreground hover:text-foreground"
+                >
+                  Limpar
+                </button>
+              </div>
             </div>
             <div className="max-h-48 overflow-y-auto p-1">
               {logs.length === 0 ? (

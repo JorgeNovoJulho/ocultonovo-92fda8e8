@@ -10,6 +10,7 @@ interface FeedDebugState {
     details?: any;
   }[];
   toggleDebug: () => void;
+  setDebug: (enabled: boolean) => void;
   addLog: (type: 'query' | 'cache_expire' | 'stale' | 'render' | 'fresh', message: string, details?: any) => void;
   clearLogs: () => void;
 }
@@ -20,6 +21,7 @@ export const useFeedDebugStore = create<FeedDebugState>()(
       isDebugEnabled: false,
       logs: [],
       toggleDebug: () => set((state) => ({ isDebugEnabled: !state.isDebugEnabled })),
+      setDebug: (enabled) => set({ isDebugEnabled: enabled }),
       addLog: (type, message, details) =>
         set((state) => {
           const newLog = { timestamp: Date.now(), type, message, details };
