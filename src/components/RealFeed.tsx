@@ -392,7 +392,7 @@ export const RealFeed = memo(function RealFeed() {
     const diff = now - lastRenderRef.current;
     
     // Ignoramos o primeiro render do mount
-    if (renderCountRef.current > 0 && diff < 1500) {
+    if (renderCountRef.current > 0 && diff < 3000) {
       addDebugLog('render', `Piscada evitada: Re-render em ${diff}ms`, { 
         count: renderCountRef.current,
         hasCache: cachedFeedLength > 0 
