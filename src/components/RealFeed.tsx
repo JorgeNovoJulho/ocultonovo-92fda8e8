@@ -380,7 +380,7 @@ const FeedItem = memo(function FeedItem({
 
 export const RealFeed = memo(function RealFeed() {
   const queryClient = useQueryClient();
-  const lastRenderRef = useRef(Date.now());
+  const lastRenderRef = useRef(0);
   const renderCountRef = useRef(0);
   const { isDebugEnabled: isDebugEnabledGlobal, addLog: addDebugLog } = useFeedDebugStore();
   const cachedFeedLength = useFeedCacheStore(s => s.posts?.length ?? 0);
@@ -388,20 +388,22 @@ export const RealFeed = memo(function RealFeed() {
 
   useEffect(() => {
     setMounted(true);
-    renderCountRef.current += 1;
     const now = Date.now();
     const diff = now - lastRenderRef.current;
-    lastRenderRef.current = now;
-
-    if (renderCountRef.current > 1 && diff < 2000) {
-      addDebugLog('render', `Piscada detectada! Re-render em ${diff}ms`, { 
+    
+    // Ignoramos o primeiro render do mount
+    if (renderCountRef.current > 0 && diff < 1500) {
+      addDebugLog('render', `Piscada evitada: Re-render em ${diff}ms`, { 
         count: renderCountRef.current,
         hasCache: cachedFeedLength > 0 
       });
-      console.warn(`[FeedDebug] Rapid re-render detected: ${diff}ms`);
+      console.warn(`[FeedDebug] Rapid re-render detected and suppressed: ${diff}ms`);
     } else {
-      addDebugLog('render', 'Feed montado/renderizado', { diff });
+      addDebugLog('render', 'Feed montado/estabilizado', { diff });
     }
+    
+    renderCountRef.current += 1;
+    lastRenderRef.current = now;
   }, [addDebugLog, cachedFeedLength]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -794,93 +796,85 @@ export const RealFeed = memo(function RealFeed() {
     }
   }, [refetchVipPosts]);
 
+  const sortPinnedPostsFirst = useCallback((items: any[]) =>
+    [...items].sort((a: any, b: any) => {
+      const ap = a?.is_pinned ? 1 : 0;
+      const bp = b?.is_pinned ? 1 : 0;
+      if (ap !== bp) return bp - ap;
+
+      const pinnedAtA = a?.pinned_at ? new Date(a.pinned_at).getTime() : 0;
+      const pinnedAtB = b?.pinned_at ? new Date(b.pinned_at).getTime() : 0;
+      if (pinnedAtA !== pinnedAtB) return pinnedAtB - pinnedAtA;
+
+      const createdAtA = a?.created_at ? new Date(a.created_at).getTime() : 0;
+      const createdAtB = b?.created_at ? new Date(b.created_at).getTime() : 0;
+      if (createdAtA !== createdAtB) return createdAtB - createdAtA;
+      
+      return String(b.id || "").localeCompare(String(a.id || ""));
+    }), []);
+
+  const hasVipSubscriptionForPost = useCallback((post: any) => {
+    const ownerIds = [post?.user_id, post?.author_id, post?.creator_id].filter(Boolean);
+    return ownerIds.some(
+      (id) => vipAccess.subscribedCreatorUserIds.has(id) || vipAccess.subscribedCreatorProfileIds.has(id)
+    );
+  }, [vipAccess.subscribedCreatorUserIds, vipAccess.subscribedCreatorProfileIds]);
+
+  const followingSet = useMemo(() => new Set(followingIds ?? []), [followingIds]);
+
+  const NARRATIVE_SECTIONS_STATIC = useMemo(() => new Set(['story','chapter','diary','article','series','text_post','backstage','narrative']), []);
+  const isNarrativePost = useCallback((post: any) =>
+    post?.content_format === 'narrative' ||
+    (post?.section_type && NARRATIVE_SECTIONS_STATIC.has(String(post.section_type).toLowerCase())), [NARRATIVE_SECTIONS_STATIC]);
+
   // Filtrar posts baseado na aba ativa
   const filteredPosts = useMemo(() => {
     if (!postsFiltered) return [];
 
-    const sortPinnedPostsFirst = (items: any[]) =>
-      items.slice().sort((a: any, b: any) => {
-        const ap = a?.is_pinned ? 1 : 0;
-        const bp = b?.is_pinned ? 1 : 0;
-        if (ap !== bp) return bp - ap;
-
-        const pinnedAtA = a?.pinned_at ? new Date(a.pinned_at).getTime() : 0;
-        const pinnedAtB = b?.pinned_at ? new Date(b.pinned_at).getTime() : 0;
-        if (pinnedAtA !== pinnedAtB) return pinnedAtB - pinnedAtA;
-
-        const createdAtA = a?.created_at ? new Date(a.created_at).getTime() : 0;
-        const createdAtB = b?.created_at ? new Date(b.created_at).getTime() : 0;
-        return createdAtB - createdAtA;
-      });
-
-    const hasVipSubscriptionForPost = (post: any) => {
-      const ownerIds = [post?.user_id, post?.author_id, post?.creator_id].filter(Boolean);
-      return ownerIds.some(
-        (id) => vipAccess.subscribedCreatorUserIds.has(id) || vipAccess.subscribedCreatorProfileIds.has(id)
-      );
-    };
-
-    const followingSet = new Set(followingIds ?? []);
-
-    const NARRATIVE_SECTIONS = new Set(['story','chapter','diary','article','series','text_post','backstage','narrative']);
-    const isNarrativePost = (post: any) =>
-      post?.content_format === 'narrative' ||
-      (post?.section_type && NARRATIVE_SECTIONS.has(String(post.section_type).toLowerCase()));
-
     const visiblePosts = postsFiltered.filter((post: any) => {
       if (post?.is_hidden === true || post?.privacy_level === 'hidden') return false;
 
-      // Modo "Apenas +18": mostra somente publicações criadas com a chave
-      // Conteúdo +18 ligada (posts.is_adult=true). Conteúdo legado/nulo e
-      // embeds do OCULTO PLAY ficam só no modo completo.
       if (isAdultOnly) {
-        // STRICT: só publicações criadas com o botão +18 ATIVO (is_adult=true).
-        // Posts legados/null e não-adultos ficam fora.
         if (post?.is_adult !== true) return false;
-        // Stories (is_flash) nunca aparecem como post no feed.
         if ((post as any)?.is_flash === true) return false;
-        // Compartilhamentos do OCULTO PLAY só na experiência completa.
         if ((post as any)?.oculto_play_item_id) return false;
       }
-
-      // A view do backend já devolve apenas o que pode aparecer no feed do
-      // usuário. O frontend não deve reaplicar filtros de friends/VIP/pago aqui,
-      // pois isso escondia cards válidos em “Experiência completa”. Paywall/blur
-      // continuam sendo tratados no próprio card.
       return true;
     });
 
-    switch (activeTab) {
-      case 'following':
-        if (!followingIds || followingIds.length === 0) return [];
-        return sortPinnedPostsFirst(visiblePosts.filter(post => followingSet.has(post.user_id) || followingSet.has((post as any).author_id)));
+    const items = (() => {
+      switch (activeTab) {
+        case 'following':
+          if (!followingIds || followingIds.length === 0) return [];
+          return visiblePosts.filter(post => followingSet.has(post.user_id) || followingSet.has((post as any).author_id));
 
-      case 'vip': {
-        // 1) Posts VIP que já vieram no feed (raros — view oculta a maioria)
-        const fromFeed = visiblePosts.filter((post: any) => {
-          const isVipPost =
-            post?.privacy_level === 'vip' ||
-            post?.privacy_level === 'subscribers' ||
-            post?.is_paid === true ||
-            isNarrativePost(post);
-          if (!isVipPost) return false;
-          const purchased = vipAccess.purchasedPostIds.has(post.id);
-          const subscribed = hasVipSubscriptionForPost(post);
-          const ownNarrativeFromSubscribedCreator = isNarrativePost(post) && subscribed;
-          return purchased || subscribed || ownNarrativeFromSubscribedCreator;
-        });
-        // 2) Mescla com os posts buscados diretamente dos criadores assinados.
-        const seen = new Set(fromFeed.map((p: any) => p.id));
-        const extras = (subscribedVipPosts as any[]).filter((p) => !seen.has(p.id));
-        return sortPinnedPostsFirst([...fromFeed, ...extras]);
+        case 'vip': {
+          const fromFeed = visiblePosts.filter((post: any) => {
+            const isVipPost =
+              post?.privacy_level === 'vip' ||
+              post?.privacy_level === 'subscribers' ||
+              post?.is_paid === true ||
+              isNarrativePost(post);
+            if (!isVipPost) return false;
+            const purchased = vipAccess.purchasedPostIds.has(post.id);
+            const subscribed = hasVipSubscriptionForPost(post);
+            const ownNarrativeFromSubscribedCreator = isNarrativePost(post) && subscribed;
+            return purchased || subscribed || ownNarrativeFromSubscribedCreator;
+          });
+          const seen = new Set(fromFeed.map((p: any) => p.id));
+          const extras = (subscribedVipPosts as any[]).filter((p) => !seen.has(p.id));
+          return [...fromFeed, ...extras];
+        }
+
+        case 'card':
+        case 'foryou':
+        default:
+          return visiblePosts;
       }
+    })();
 
-      case 'card':
-      case 'foryou':
-      default:
-        return sortPinnedPostsFirst(visiblePosts);
-    }
-  }, [postsFiltered, activeTab, followingIds, vipAccess.purchasedPostIds, vipAccess.subscribedCreatorUserIds, vipAccess.subscribedCreatorProfileIds, user?.id, subscribedVipPosts, isAdultOnly]);
+    return sortPinnedPostsFirst(items);
+  }, [postsFiltered, activeTab, followingIds, followingSet, vipAccess.purchasedPostIds, hasVipSubscriptionForPost, isNarrativePost, subscribedVipPosts, sortPinnedPostsFirst, isAdultOnly]);
 
   const activeExpandedPost = useMemo(() => {
     if (!expandedPost?.id) return null;

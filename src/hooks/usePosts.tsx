@@ -1258,17 +1258,25 @@ export function useInfinitePosts(
         const bp = b?.is_pinned ? 1 : 0;
         if (ap !== bp) return bp - ap;
 
-        const dateA = new Date(a.created_at).getTime();
-        const dateB = new Date(b.created_at).getTime();
+        const dateA = new Date(a.created_at || 0).getTime();
+        const dateB = new Date(b.created_at || 0).getTime();
         if (dateA !== dateB) return dateB - dateA;
 
-        return String(b.id).localeCompare(String(a.id));
+        return String(b.id || "").localeCompare(String(a.id || ""));
       });
 
       // Use rawData length (pré-filtro) para decidir se há próxima página.
       // Se a página inteira veio cheia mas foi filtrada por post_type/gênero, ainda
       // queremos avançar o cursor para não travar o scroll.
       const nextOffset = rawData.length < pageSize ? null : from + (rawData.length || pageSize);
+      
+      // LOG DE ESTABILIDADE: Só emite se o feed mudou ou para debug de master
+      if (from === 0 && posts.length > 0) {
+        const firstId = posts[0].id;
+        const lastId = posts[posts.length - 1].id;
+        addDebugLog('query', `Página 0 processada: ${posts.length} posts [${firstId}...${lastId}]`);
+      }
+
       const result = { posts, nextOffset };
       // Cache só da primeira página (hidratação instantânea no próximo load)
       if (from === 0 && posts.length > 0) {
