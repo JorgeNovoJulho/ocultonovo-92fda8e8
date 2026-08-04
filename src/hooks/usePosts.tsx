@@ -345,24 +345,24 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
   const isEnabled = feedSettings?.is_enabled !== false;
   const showAll = feedSettings?.show_all === true;
   const maxPosts = feedSettings?.max_posts ?? 200;
-  // Feed principal precisa ser realmente infinito: não aplicar corte por data
-  // vindo de feed_settings.start_date, pois isso escondia publicações antigas em
-  // mobile e desktop mesmo com o scroll carregando novas páginas.
   const startDate = null;
 
   const query = useQuery({
     queryKey: ['posts', options?.userId, options?.limit, isEnabled, showAll, maxPosts, startDate, profile?.id],
-    staleTime: 24 * 60 * 60 * 1000,   // 24h
-    gcTime: 48 * 60 * 60 * 1000,  // 48h
+    // Cache de longa duração: 24h stale, 48h GC
+    staleTime: 24 * 60 * 60 * 1000,
+    gcTime: 48 * 60 * 60 * 1000,
 
-
+    // Desabilitar todas as atualizações automáticas
     retry: 2,
-    refetchOnWindowFocus: false, 
-    refetchOnMount: false,       
-    refetchOnReconnect: false,   
-    refetchInterval: false,      
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchInterval: false,
     refetchIntervalInBackground: false,
-    placeholderData: (previousData: any) => previousData, 
+    // Garante que o usuário veja os dados do cache imediatamente ao entrar
+    placeholderData: (previousData: any) => previousData,
+
 
 
 
