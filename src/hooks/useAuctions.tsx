@@ -71,8 +71,12 @@ export function useActiveAuctions() {
 
   const query = useQuery({
     queryKey: ["auctions", "active"],
-    staleTime: 15_000,
+    staleTime: 10 * 60 * 1000, // 10m
+    gcTime: 20 * 60 * 1000,
+    refetchOnMount: false,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+
     queryFn: async () => {
       const { data, error } = await supabase
         .from("auctions")

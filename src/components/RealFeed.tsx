@@ -1801,8 +1801,9 @@ export const RealFeed = memo(function RealFeed() {
           useWindowScroll
           data={filteredPosts}
           computeItemKey={(index, post: any) => post?.id ?? `post-${index}`}
-          overscan={dataSaver ? { main: 800, reverse: 400 } : { main: 1600, reverse: 800 }}
-          increaseViewportBy={dataSaver ? { top: 400, bottom: 800 } : { top: 800, bottom: 1600 }}
+          overscan={dataSaver ? { main: 1000, reverse: 500 } : { main: 2000, reverse: 1000 }}
+          increaseViewportBy={dataSaver ? { top: 500, bottom: 1000 } : { top: 1000, bottom: 2000 }}
+
           // Histerese de prefetch: dispara cedo para esconder a latência de rede.
           atBottomThreshold={dataSaver ? 1500 : 1000}
           endReached={handleFeedEndReached}

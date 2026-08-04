@@ -92,8 +92,13 @@ export function useSuggestedUsers(limit = 15, options?: { enabled?: boolean }) {
       return shuffled.slice(0, limit);
     },
     enabled,
-    staleTime: 2 * 60 * 1000,
+    staleTime: 15 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: 1,
+
     placeholderData: [],
   });
 }
@@ -138,8 +143,13 @@ export function useAnyRealSuggestedUsers(limit = 15) {
       const raw = (data || []) as SuggestedUser[];
       return raw.filter(u => !u.is_seed && !u.is_test_account).slice(0, limit);
     },
-    staleTime: 2 * 60 * 1000,
+    staleTime: 15 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: 1,
+
     placeholderData: [],
   });
 }
