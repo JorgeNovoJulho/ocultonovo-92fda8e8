@@ -156,7 +156,6 @@ import { FeedSyncStatusChip } from "@/components/feed/FeedSyncStatusChip";
 import { prefetchFeedMedia } from "@/lib/imageLoadCache";
 import { isVideoUrl } from "@/lib/mediaType";
 import { useFeedDebugStore } from "@/store/useFeedDebugStore";
-import { useFeedCacheStore } from "@/store/useFeedCacheStore";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
 
