@@ -215,16 +215,13 @@ export const RealPostCard = memo(function RealPostCard({ post: rawPost, onSubscr
     const duration = getPostDurationSeconds(rawPost);
     return {
       ...rawPost,
-      // +18 explícito: só recebe blur quando a publicação foi marcada como +18.
       is_adult: (rawPost as any).is_adult === true,
       content_text: rawPost.content_text ?? null,
       media_url: resolvedMediaUrl,
-      // Mantém os dois campos sincronizados — UI antiga lê `video_duration_seconds`,
-      // novas leituras usam `media_duration_seconds`.
       media_duration_seconds: duration || (rawPost as any).media_duration_seconds || null,
       video_duration_seconds: duration || (rawPost as any).video_duration_seconds || null,
-    } as typeof rawPost;
-  }, [rawPost]);
+    };
+  }, [rawPost.id, rawPost.updated_at, rawPost.likes_count, rawPost.comments_count, rawPost.is_liked]);
   
   const isAdult = (post as any).is_adult === true;
   if (isOcultoOnly && isAdult) return null;
