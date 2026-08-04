@@ -14,9 +14,7 @@ import { CommunityTopicFeedCard, parseCommunityTopicSnapshot } from "./feed/Comm
 import { SubscriptionModal } from "./SubscriptionModal";
 import { FeedTabs, FeedTab } from "./FeedTabs";
 import { FeedCardItem } from "./feed/FeedCardItem";
-const NovidadesDoOcultoCarousel = lazy(() =>
-  import("./feed/NovidadesDoOcultoCarousel").then((m) => ({ default: m.NovidadesDoOcultoCarousel }))
-);
+import { NovidadesDoOcultoCarousel } from "./feed/NovidadesDoOcultoCarousel";
 const FlashStoriesBar = lazy(() =>
   import("./stories").then((m) => ({ default: m.FlashStoriesBar }))
 );
@@ -110,12 +108,8 @@ const SocialCycleBadge = lazy(() =>
 );
 import { MarketplaceAdCard } from "./marketplace-ads/MarketplaceAdCard";
 import { MarketplaceAdSkeleton, MarketplaceAdEmpty } from "./marketplace-ads/MarketplaceAdSkeleton";
-const MisteriosEmDestaqueSection = lazy(() =>
-  import("./feed/MisteriosEmDestaqueSection").then((m) => ({ default: m.MisteriosEmDestaqueSection }))
-);
-const CommunidadesOcultasFeedSection = lazy(() =>
-  import("./feed/CommunidadesOcultasFeedSection").then((m) => ({ default: m.CommunidadesOcultasFeedSection }))
-);
+import { MisteriosEmDestaqueSection } from "./feed/MisteriosEmDestaqueSection";
+import { CommunidadesOcultasFeedSection } from "./feed/CommunidadesOcultasFeedSection";
 const LatestPlayVideosStrip = lazy(() =>
   import("./feed/LatestPlayVideosStrip").then((m) => ({ default: m.LatestPlayVideosStrip }))
 );
@@ -601,7 +595,8 @@ export const RealFeed = memo(function RealFeed() {
     if (isHardRefreshing) return;
     setIsHardRefreshing(true);
     try {
-      await queryClient.invalidateQueries({ queryKey: ['posts-infinite'], exact: false, refetchType: 'all' });
+      await queryClient.invalidateQueries({ queryKey: ['posts-infinite'], exact: false, refetchType: 'active' });
+      await queryClient.invalidateQueries({ queryKey: ['posts'], exact: false, refetchType: 'active' });
       try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch {}
     } finally {
       setIsHardRefreshing(false);
