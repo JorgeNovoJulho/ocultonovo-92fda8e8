@@ -613,47 +613,6 @@ export const RealFeed = memo(function RealFeed() {
     }
   }, [addDebugLog, hasValidCache, isDebugEnabled]);
 
-  const {
-    data: infiniteData,
-    isLoading,
-    error,
-    refetch,
-    fetchNextPage,
-    hasNextPage: rawHasNextPage,
-    isFetchingNextPage,
-  } = useInfinitePosts(feedPageSize, { explicitAdultOnly: isAdultOnly });
-
-  const pagesLoaded = infiniteData?.pages?.length ?? 0;
-  const hasNextPage = !!rawHasNextPage;
-
-
-  // Fail-safe: nunca deixar o skeleton infinito. Se em 6s não chegou data,
-  // libera a UI (mostra empty/error com botão de retry).
-  const [skeletonTimedOut, setSkeletonTimedOut] = useState(false);
-  useEffect(() => {
-    if (!isLoading) { setSkeletonTimedOut(false); return; }
-    const t = window.setTimeout(() => setSkeletonTimedOut(true), 6000);
-    return () => window.clearTimeout(t);
-  }, [isLoading]);
-
-  // "Atualizar feed" — revalida em background SEM remover o cache.
-  // CRÍTICO: usar `resetQueries` aqui zera `infiniteData` → `isLoading=true`
-  // → o early-return de skeleton dispara → árvore inteira do feed
-  // (Virtuoso, carrosséis, stories) desmonta e remonta, causando o
-  // "pisca/reinicia" relatado. `invalidateQueries({refetchType:'all'})`
-  // mantém os dados visíveis enquanto o refetch corre em background.
-  const [isHardRefreshing, setIsHardRefreshing] = useState(false);
-  const handleHardRefresh = useCallback(async () => {
-    if (isHardRefreshing) return;
-    setIsHardRefreshing(true);
-    try {
-      await queryClient.invalidateQueries({ queryKey: ['posts-infinite'], exact: false, refetchType: 'active' });
-      await queryClient.invalidateQueries({ queryKey: ['posts'], exact: false, refetchType: 'active' });
-      try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch {}
-    } finally {
-      setIsHardRefreshing(false);
-    }
-  }, [isHardRefreshing, queryClient]);
   const { user } = useAuth();
   const cachedFeedPosts = useFeedCacheStore((s) => s.posts);
   const cachedFeedOwner = useFeedCacheStore((s) => s.feedOwnerId);
@@ -664,8 +623,8 @@ export const RealFeed = memo(function RealFeed() {
     if (user?.id && cachedFeedOwner && cachedFeedOwner !== user.id) return [];
     return cachedFeedPosts as any[];
   }, [cachedFeedPosts, cachedFeedUpdatedAt, cachedFeedOwner, user?.id]);
-  const posts = useMemo(() => {
-    let live = (infiniteData?.pages || []).flatMap((p: any) => p?.posts || []);
+  const postsFiltered = useMemo(() => {
+    let live = posts;
     if (isOcultoOnly) {
       live = live.filter((p: any) => p?.is_adult !== true);
     }
@@ -688,7 +647,7 @@ export const RealFeed = memo(function RealFeed() {
       return deduped;
     }
     return isAdultOnly ? [] : cachedFeedFallback;
-  }, [infiniteData, cachedFeedFallback, isAdultOnly]);
+  }, [posts, cachedFeedFallback, isAdultOnly, isOcultoOnly]);
 
   // Se uma página do banco vier cheia, mas todos os itens forem descartados por
   // filtros de tipo/visibilidade/modo (+18), não podemos mostrar "Nenhum post".
@@ -700,11 +659,11 @@ export const RealFeed = memo(function RealFeed() {
     if (emptyPageAutofillRef.current.key !== feedAutofillKey) {
       emptyPageAutofillRef.current = { key: feedAutofillKey, attempts: 0 };
     }
-    if (isLoading || isFetchingNextPage || posts.length > 0 || !hasNextPage) return;
+    if (isLoading || isFetchingNextPage || postsFiltered.length > 0 || !hasNextPage) return;
     if (emptyPageAutofillRef.current.attempts >= 12) return;
     emptyPageAutofillRef.current.attempts += 1;
     void fetchNextPage();
-  }, [feedAutofillKey, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, posts.length]);
+  }, [feedAutofillKey, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, postsFiltered.length]);
 
   const isFillingFilteredEmptyFeed = posts.length === 0 && (hasNextPage || isFetchingNextPage);
   useEffect(() => {
