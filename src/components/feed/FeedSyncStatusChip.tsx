@@ -108,7 +108,7 @@ export function FeedSyncStatusChip({ className = "" }: { className?: string }) {
               <Database className="h-3 w-3" />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="bottom" className="w-64 p-0">
+          <TooltipContent side="bottom" className="w-64 p-0 z-[100]">
             <div className="flex items-center justify-between border-b p-2">
               <span className="text-xs font-bold">Debug do Feed</span>
               <div className="flex items-center gap-2">
