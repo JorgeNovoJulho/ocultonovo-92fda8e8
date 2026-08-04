@@ -155,6 +155,7 @@ import { useFeedCacheStore } from "@/store/useFeedCacheStore";
 import { FeedSyncStatusChip } from "@/components/feed/FeedSyncStatusChip";
 import { prefetchFeedMedia } from "@/lib/imageLoadCache";
 import { isVideoUrl } from "@/lib/mediaType";
+import { useFeedDebugStore } from "@/store/useFeedDebugStore";
 
 // Bridge: chaves usadas no RealFeed → chaves canônicas em HOME_SECTIONS
 // (src/config/homeSections.ts). Usado pelo gate granular isSectionEnabled().
@@ -390,6 +391,7 @@ export const RealFeed = memo(function RealFeed() {
   const { isSectionEnabled, viewMode: granularMode } = useViewModePreferences();
   const { isAdultOnly, isOcultoOnly } = useFeedExperienceMode();
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
+  const { isDebugEnabled, addLog: addDebugLog } = useFeedDebugStore();
   const { safeBlurOn, toggleSafeBlur } = useSafeBlur();
   const [safeBlurPending, setSafeBlurPending] = useState(false);
   const safeBlurPendingTimer = useRef<number | null>(null);
@@ -562,6 +564,10 @@ export const RealFeed = memo(function RealFeed() {
   }, [feedAccess.checking, feedAccess.allowed]);
   const queryClient = useQueryClient();
 
+
+  useEffect(() => {
+    addDebugLog('render', 'RealFeed montado/remontado');
+  }, [addDebugLog]);
 
   const {
     data: infiniteData,

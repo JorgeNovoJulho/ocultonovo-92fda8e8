@@ -15,6 +15,7 @@ import { resolveActorId } from '@/lib/ensureProfile';
 import { loadCache, saveCache } from '@/lib/persistentQueryCache';
 import { useFeedCacheStore } from '@/store/useFeedCacheStore';
 import { logger } from '@/lib/logger';
+import { useFeedDebugStore } from '@/store/useFeedDebugStore';
 import {
   sanitizeCategories,
   matchesSelectedCategories,
@@ -338,6 +339,7 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
   const { user, authReady } = useAuth();
   const { profile } = useProfile();
   const queryClient = useQueryClient();
+  const addDebugLog = useFeedDebugStore((s) => s.addLog);
   const { data: feedSettings } = useFeedSettings();
 
   const isEnabled = feedSettings?.is_enabled !== false;
@@ -366,6 +368,7 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
 
     enabled: authReady && !!user?.id,
     queryFn: async () => {
+      addDebugLog('query', 'Buscando posts do feed', { userId: options?.userId, limit: options?.limit });
       // Feed desativado para o plano? retorna vazio
       if (!isEnabled && !options?.userId) return [];
 
@@ -441,7 +444,11 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
         });
       }
 
-      if (allPosts.length === 0) return [];
+      if (allPosts.length === 0) {
+        addDebugLog('query', 'Nenhum post encontrado');
+        return [];
+      }
+      addDebugLog('query', `${allPosts.length} posts carregados`);
 
       // Para posts pagos bloqueados pela VIEW v_feed_posts (media_url=NULL),
       // usar preview_url como placeholder visual; o overlay paywall cobre.
