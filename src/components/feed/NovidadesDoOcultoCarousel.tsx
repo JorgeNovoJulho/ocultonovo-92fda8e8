@@ -16,7 +16,8 @@ import {
 import { getShareBaseUrl } from '@/lib/appConfig';
 import { cn } from '@/lib/utils';
 
-const ROTATE_MS = 4000;
+const ROTATE_MS = 6000;
+const STALE_TIME = 10 * 60_000; // 10 minutos de cache para novidades
 
 function useInviteLink() {
   const { profile } = useProfile();
