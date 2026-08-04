@@ -16,13 +16,14 @@ import {
   Sparkles,
   Loader2,
   Wifi,
-  ExternalLink,
-  RefreshCw,
-  MessageSquareHeart,
-  Trash2,
-  Clock,
-  Info,
+  ExternalLink, 
+  RefreshCw, 
+  MessageSquareHeart, 
+  Trash2, 
+  Clock, 
+  Info, 
   Calculator,
+  Eye,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -290,29 +291,57 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <Card className="border-border/50 bg-card">
-          <CardContent className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <Sparkles className="h-4 w-4 text-primary" /> Comunicação de boas-vindas
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Acesso direto para editar a mensagem automática, testar envio e acompanhar os cliques de divulgação.
-              </p>
-              <div className="flex flex-wrap gap-2 pt-1 text-xs text-muted-foreground">
-                <Badge variant="outline">Views landing: {landingPublicMetrics?.viewTotal ?? 0}</Badge>
-                <Badge variant="outline">Entrar: {landingPublicMetrics?.loginTotal ?? 0}</Badge>
-                <Badge variant="outline">Começar grátis: {landingPublicMetrics?.signupTotal ?? 0}</Badge>
-              </div>
-            </div>
+        <Card className="border-border/50 bg-card overflow-hidden">
+          <CardContent className="p-0">
+            <div className="flex flex-col md:flex-row">
+              <div className="flex-1 p-4 md:p-6 space-y-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-base font-bold text-foreground">
+                    <Sparkles className="h-5 w-5 text-primary" /> Comunicação de Boas-vindas
+                  </div>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Configure a mensagem automática que novos membros recebem. Inclui link de indicação, 
+                    contador de cliques e <span className="text-primary font-medium">prévia em tempo real</span>.
+                  </p>
+                </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={() => navigate('/admin/welcome-message')} className="gap-2">
-                <MessageSquareHeart className="h-4 w-4" /> Abrir configurações
-              </Button>
-              <Button variant="secondary" onClick={() => navigate('/admin/welcome-log')} className="gap-2">
-                <MessageSquareHeart className="h-4 w-4" /> Ver entregas
-              </Button>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Badge variant="secondary" className="bg-muted/50 font-medium">Views: {landingPublicMetrics?.viewTotal ?? 0}</Badge>
+                  <Badge variant="secondary" className="bg-muted/50 font-medium">Cliques: {landingPublicMetrics?.signupTotal ?? 0}</Badge>
+                </div>
+
+                <div className="flex flex-wrap gap-3 pt-2">
+                  <Button 
+                    onClick={() => navigate('/admin/welcome-message')} 
+                    className="gap-2 bg-primary hover:bg-primary/90 shadow-sm"
+                  >
+                    <MessageSquareHeart className="h-4 w-4" /> 
+                    Configurar e Ver Prévia
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => navigate('/admin/welcome-log')} 
+                    className="gap-2 border-border/60"
+                  >
+                    <Clock className="h-4 w-4" /> Ver Histórico de Entregas
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="hidden lg:flex w-72 bg-muted/30 border-l border-border/50 items-center justify-center p-6 text-center relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-2">
+                  <Badge variant="outline" className="text-[9px] uppercase tracking-tighter opacity-50">Preview Mode</Badge>
+                </div>
+                <div className="space-y-2 relative z-10">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
+                    <Eye className="h-6 w-6 text-primary" />
+                  </div>
+                  <p className="text-xs font-semibold text-foreground">Validação Visual</p>
+                  <p className="text-[10px] text-muted-foreground">Garanta que o texto e os botões fiquem perfeitos antes de publicar.</p>
+                </div>
+                {/* Visual decoration */}
+                <div className="absolute -bottom-4 -right-4 h-24 w-24 bg-primary/5 rounded-full blur-2xl" />
+              </div>
             </div>
           </CardContent>
         </Card>
