@@ -1555,6 +1555,12 @@ export function useCreatePost() {
         }, (old: any) => {
           if (!old?.pages?.length) return old;
           const firstPage = old.pages[0];
+          
+          const postWithAuthor = {
+            ...created,
+            author: profile || undefined
+          };
+
           // Estrutura padrão: { posts: Post[], nextOffset: number|null }
           if (firstPage && Array.isArray(firstPage.posts)) {
             const alreadyThere = firstPage.posts.some((p: any) => p?.id === created.id);
@@ -1562,7 +1568,7 @@ export function useCreatePost() {
             return {
               ...old,
               pages: [
-                { ...firstPage, posts: [created, ...firstPage.posts] },
+                { ...firstPage, posts: [postWithAuthor, ...firstPage.posts] },
                 ...old.pages.slice(1),
               ],
             };
@@ -1571,18 +1577,18 @@ export function useCreatePost() {
           if (Array.isArray(firstPage)) {
             const alreadyThere = firstPage.some((p: any) => p?.id === created.id);
             if (alreadyThere) return old;
-            return { ...old, pages: [[created, ...firstPage], ...old.pages.slice(1)] };
+            return { ...old, pages: [[postWithAuthor, ...firstPage], ...old.pages.slice(1)] };
           }
           return old;
         });
       }
-      queryClient.invalidateQueries({ queryKey: ['posts'], refetchType: 'all' });
-      queryClient.invalidateQueries({ queryKey: ['posts-infinite'], refetchType: 'all' });
-      queryClient.invalidateQueries({ queryKey: ['my-posts'], refetchType: 'all' });
-      queryClient.invalidateQueries({ queryKey: ['creator-posts'], refetchType: 'all' });
+      queryClient.invalidateQueries({ queryKey: ['posts'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['posts-infinite'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['my-posts'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['creator-posts'], refetchType: 'active' });
       if (variables.is_flash) {
-        queryClient.invalidateQueries({ queryKey: ['flash-stories'], refetchType: 'all' });
-        queryClient.invalidateQueries({ queryKey: ['my-flash-stories'], refetchType: 'all' });
+        queryClient.invalidateQueries({ queryKey: ['flash-stories'], refetchType: 'active' });
+        queryClient.invalidateQueries({ queryKey: ['my-flash-stories'], refetchType: 'active' });
       }
     },
   });
