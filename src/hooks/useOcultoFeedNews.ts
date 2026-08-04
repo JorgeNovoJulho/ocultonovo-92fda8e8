@@ -9,12 +9,15 @@ export type OcultoFeedNewsItem = {
   is_active: boolean;
 };
 
+const STALE_TIME = 24 * 60 * 60 * 1000; // 24h
+const GC_TIME = 48 * 60 * 60 * 1000;   // 48h
+
 /** Novidades do Oculto — geridas pelo admin master (tabela oculto_feed_news). */
 export function useOcultoFeedNews(limit = 4) {
   return useQuery({
     queryKey: ['oculto-feed-news', limit],
-    staleTime: 60 * 60 * 1000, // 1h
-    gcTime: 2 * 60 * 60 * 1000, // 2h
+    staleTime: STALE_TIME,
+    gcTime: GC_TIME,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -52,8 +55,8 @@ export function useOcultoFeedNewsAdmin() {
 export function useLatestPlayTitles(kind: 'audio' | 'link', limit = 4) {
   return useQuery({
     queryKey: ['oculto-play-latest-titles', kind, limit],
-    staleTime: 60 * 60 * 1000,
-    gcTime: 2 * 60 * 60 * 1000,
+    staleTime: STALE_TIME,
+    gcTime: GC_TIME,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -106,8 +109,8 @@ async function fetchFeedCards(): Promise<OcultoFeedCard[]> {
 export function useOcultoFeedCards() {
   return useQuery({
     queryKey: ['oculto-feed-cards'],
-    staleTime: 60 * 60 * 1000,
-    gcTime: 2 * 60 * 60 * 1000,
+    staleTime: STALE_TIME,
+    gcTime: GC_TIME,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -140,13 +143,12 @@ export type OcultoFeedPlayPick = {
 export function useOcultoFeedPlayPicks(kind: 'audio' | 'link', limit = 4) {
   return useQuery({
     queryKey: ['oculto-feed-play-picks', kind, limit],
-    staleTime: 60 * 60 * 1000,
-    gcTime: 2 * 60 * 60 * 1000,
+    staleTime: STALE_TIME,
+    gcTime: GC_TIME,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
 
-    
     queryFn: async (): Promise<OcultoFeedPlayPick[]> => {
       const { data, error } = await supabase
         .from('oculto_feed_play_picks')
