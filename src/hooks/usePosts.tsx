@@ -2065,8 +2065,12 @@ export function useDeletePost() {
     },
   });
 
+  const { user, authReady } = useAuth();
+  const addDebugLog = useFeedDebugStore((s) => s.addLog);
+  const { data: feedSettings } = useFeedSettings();
+  const isEnabled = feedSettings?.is_enabled !== false;
+
   // Realtime: Silenciado para manter a estabilidade visual conforme pedido.
-  // Novos posts são buscados apenas em navegação em background ou refresh manual.
   useEffect(() => {
     if (!isEnabled || !authReady || !user?.id) return;
 
@@ -2077,8 +2081,13 @@ export function useDeletePost() {
     });
 
     return () => {
-      subscription.unsubscribe();
+      if (typeof subscription === 'function') {
+        (subscription as any)();
+      } else if (subscription && typeof (subscription as any).unsubscribe === 'function') {
+        (subscription as any).unsubscribe();
+      }
     };
   }, [isEnabled, authReady, user?.id, addDebugLog]);
 }
+
 

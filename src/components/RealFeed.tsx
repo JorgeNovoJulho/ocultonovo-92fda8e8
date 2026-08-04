@@ -380,6 +380,9 @@ const FeedItem = memo(function FeedItem({
 
 export const RealFeed = memo(function RealFeed() {
   const queryClient = useQueryClient();
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
   const lastRenderRef = useRef(0);
   const renderCountRef = useRef(0);
   const { isDebugEnabled: isDebugEnabledGlobal, addLog: addDebugLog } = useFeedDebugStore();
@@ -432,6 +435,7 @@ export const RealFeed = memo(function RealFeed() {
     fetchNextPage,
     refetch,
   } = useInfinitePosts(FEED_PAGE_SIZE, { explicitAdultOnly: isAdultOnly });
+
 
   const pagesLoaded = infiniteData?.pages?.length ?? 0;
   const hasNextPage = !!rawHasNextPage;
