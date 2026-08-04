@@ -230,7 +230,7 @@ export const NovidadesDoOcultoCarousel = memo(function NovidadesDoOcultoCarousel
 
   return (
     <section
-      className="px-3 pt-2 pb-1"
+      className="px-3 pt-2 pb-1 relative z-0"
       aria-label="Novidades do Oculto"
       onMouseEnter={() => { pausedRef.current = true; }}
       onMouseLeave={() => { pausedRef.current = false; }}
