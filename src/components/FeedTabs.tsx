@@ -93,9 +93,9 @@ const TAB_THEME: Record<FeedTab, {
 /** Classes base padronizadas para TODOS os botões da barra (mesmo tamanho, padding, radius e tipografia). */
 export const FEED_BTN_BASE =
   "relative flex items-center justify-center text-center select-none transition-all " +
-  "h-9 md:h-11 px-2.5 md:px-3 rounded-lg md:rounded-xl " +
-  "md:flex-1 md:min-w-[6rem] " +
-  "text-[11px] md:text-[13px] font-extrabold uppercase tracking-[0.02em] leading-none whitespace-nowrap";
+  "h-10 sm:h-11 px-2.5 sm:px-3 rounded-lg sm:rounded-xl " +
+  "flex-1 sm:min-w-[6rem] " +
+  "text-[10px] sm:text-[13px] font-extrabold uppercase tracking-[0.02em] leading-none whitespace-nowrap";
 
 export function FeedTabs({ activeTab, onTabChange, onCreatePost }: FeedTabsProps) {
   const { t } = useI18n();
