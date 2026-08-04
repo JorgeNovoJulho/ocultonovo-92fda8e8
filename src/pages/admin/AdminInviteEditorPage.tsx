@@ -89,9 +89,10 @@ export default function AdminInviteEditorPage() {
     <div className="container mx-auto py-6 px-4 max-w-5xl space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Editor do Modal de Convite</h1>
-          <p className="text-sm text-muted-foreground">
-            Edite textos, cores, imagens e visibilidade das seções. Mudanças aplicam em tempo real para todos os usuários.
+          <h1 className="text-2xl font-bold text-amber-500">Editor da Página de Convite Externo</h1>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Aqui você edita o texto completo e o design da página que o usuário vê ao acessar seu link de indicação 
+            (ex: <code className="bg-muted px-1 rounded text-primary">/creator-invite/OCULTO_MASTER</code>).
           </p>
         </div>
         <div className="flex gap-2">
