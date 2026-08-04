@@ -285,8 +285,10 @@ function appendAutoplayParam(src: string): string {
   try {
     const u = new URL(src);
     u.searchParams.set('autoplay', '1');
-    // muted=1 é necessário para a maioria dos browsers permitirem autoplay.
+    // Para embeds de arquivos diretos via ModernVideoPlayer, passamos o muted
     if (!u.searchParams.has('muted')) u.searchParams.set('muted', '1');
+    // Forçar preload e buffering agressivo
+    u.searchParams.set('preload', 'auto');
     return u.toString();
   } catch {
     const sep = src.includes('?') ? '&' : '?';

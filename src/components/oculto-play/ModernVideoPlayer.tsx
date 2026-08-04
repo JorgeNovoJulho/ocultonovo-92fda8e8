@@ -433,7 +433,15 @@ export function ModernVideoPlayer({
         import('hls.js').then(({ default: Hls }) => {
           if (cancelled) return;
           if (!Hls.isSupported()) { attachNative(); return; }
-          const hls = new Hls({ enableWorker: true, lowLatencyMode: false });
+          const hls = new Hls({ 
+            enableWorker: true, 
+            lowLatencyMode: false,
+            // Otimização de carregamento
+            maxBufferLength: 30,
+            maxMaxBufferLength: 60,
+            capLevelToPlayerSize: true,
+            startLevel: -1, // auto
+          });
           backendRef.current = { kind: 'hls', instance: hls };
           hls.loadSource(src);
           hls.attachMedia(el);
