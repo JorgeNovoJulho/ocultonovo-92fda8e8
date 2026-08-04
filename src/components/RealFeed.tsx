@@ -379,7 +379,28 @@ const FeedItem = memo(function FeedItem({
 });
 
 export const RealFeed = memo(function RealFeed() {
-  console.log('[FeedDebug] RealFeed rendered');
+  const queryClient = useQueryClient();
+  const lastRenderRef = useRef(Date.now());
+  const renderCountRef = useRef(0);
+  const { isDebugEnabled: isDebugEnabledGlobal, addLog: addDebugLog } = useFeedDebugStore();
+  const cachedFeedLength = useFeedCacheStore(s => s.posts?.length ?? 0);
+
+  useEffect(() => {
+    renderCountRef.current += 1;
+    const now = Date.now();
+    const diff = now - lastRenderRef.current;
+    lastRenderRef.current = now;
+
+    if (renderCountRef.current > 1 && diff < 2000) {
+      addDebugLog('render', `Piscada detectada! Re-render em ${diff}ms`, { 
+        count: renderCountRef.current,
+        hasCache: cachedFeedLength > 0 
+      });
+      console.warn(`[FeedDebug] Rapid re-render detected: ${diff}ms`);
+    } else {
+      addDebugLog('render', 'Feed montado/renderizado', { diff });
+    }
+  }, [addDebugLog, cachedFeedLength]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showFeedContentTypeModal, setShowFeedContentTypeModal] = useState(false);
@@ -393,18 +414,51 @@ export const RealFeed = memo(function RealFeed() {
   const { isSectionEnabled, viewMode: granularMode } = useViewModePreferences();
   const { isAdultOnly, isOcultoOnly } = useFeedExperienceMode();
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
-  const { isDebugEnabled, addLog: addDebugLog, clearLogs } = useFeedDebugStore();
+  const { isDebugEnabled, clearLogs } = useFeedDebugStore();
   const { safeBlurOn, toggleSafeBlur } = useSafeBlur();
   const [safeBlurPending, setSafeBlurPending] = useState(false);
   const safeBlurPendingTimer = useRef<number | null>(null);
 
-  // Debug de montagem do feed principal
-  useEffect(() => {
-    (window as any).OCULTO_DEBUG_FEED = true;
-    console.log('[FeedDebug] RealFeed mounted', { timestamp: new Date().toISOString() });
-    return () => console.log('[FeedDebug] RealFeed unmounted');
-  }, []);
+  const {
+    data: infiniteData,
+    isLoading,
+    error,
+    hasNextPage: rawHasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    refetch,
+  } = useInfinitePosts(FEED_PAGE_SIZE, { explicitAdultOnly: isAdultOnly });
 
+  const pagesLoaded = infiniteData?.pages?.length ?? 0;
+  const hasNextPage = !!rawHasNextPage;
+
+  // Fail-safe: nunca deixar o skeleton infinito.
+  const [skeletonTimedOut, setSkeletonTimedOut] = useState(false);
+  useEffect(() => {
+    if (!isLoading) { setSkeletonTimedOut(false); return; }
+    const t = window.setTimeout(() => setSkeletonTimedOut(true), 6000);
+    return () => window.clearTimeout(t);
+  }, [isLoading]);
+
+  const [isHardRefreshing, setIsHardRefreshing] = useState(false);
+  const handleHardRefresh = useCallback(async () => {
+    if (isHardRefreshing) return;
+    setIsHardRefreshing(true);
+    try {
+      await queryClient.invalidateQueries({ queryKey: ['posts-infinite'], exact: false, refetchType: 'active' });
+      await queryClient.invalidateQueries({ queryKey: ['posts'], exact: false, refetchType: 'active' });
+      try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch {}
+    } finally {
+      setIsHardRefreshing(false);
+    }
+  }, [isHardRefreshing, queryClient]);
+
+  const { user } = useAuth();
+  const feedIdentityReady = !!user?.id;
+
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // Gate combinado:
   // - O seletor legado (Completo/Social/Descoberta/Limpo/Card) é a fonte
@@ -564,7 +618,6 @@ export const RealFeed = memo(function RealFeed() {
   useEffect(() => {
     if (!feedAccess.checking && !feedAccess.allowed) setFeedLimitOpen(true);
   }, [feedAccess.checking, feedAccess.allowed]);
-  const queryClient = useQueryClient();
 
 
   const hasValidCache = useFeedCacheStore(s => !!s.posts?.length && (Date.now() - s.updatedAt < 24 * 60 * 60 * 1000));
@@ -583,48 +636,6 @@ export const RealFeed = memo(function RealFeed() {
     }
   }, [addDebugLog, hasValidCache, isDebugEnabled]);
 
-  const {
-    data: infiniteData,
-    isLoading,
-    error,
-    refetch,
-    fetchNextPage,
-    hasNextPage: rawHasNextPage,
-    isFetchingNextPage,
-  } = useInfinitePosts(feedPageSize, { explicitAdultOnly: isAdultOnly });
-
-  const pagesLoaded = infiniteData?.pages?.length ?? 0;
-  const hasNextPage = !!rawHasNextPage;
-
-
-  // Fail-safe: nunca deixar o skeleton infinito. Se em 6s não chegou data,
-  // libera a UI (mostra empty/error com botão de retry).
-  const [skeletonTimedOut, setSkeletonTimedOut] = useState(false);
-  useEffect(() => {
-    if (!isLoading) { setSkeletonTimedOut(false); return; }
-    const t = window.setTimeout(() => setSkeletonTimedOut(true), 6000);
-    return () => window.clearTimeout(t);
-  }, [isLoading]);
-
-  // "Atualizar feed" — revalida em background SEM remover o cache.
-  // CRÍTICO: usar `resetQueries` aqui zera `infiniteData` → `isLoading=true`
-  // → o early-return de skeleton dispara → árvore inteira do feed
-  // (Virtuoso, carrosséis, stories) desmonta e remonta, causando o
-  // "pisca/reinicia" relatado. `invalidateQueries({refetchType:'all'})`
-  // mantém os dados visíveis enquanto o refetch corre em background.
-  const [isHardRefreshing, setIsHardRefreshing] = useState(false);
-  const handleHardRefresh = useCallback(async () => {
-    if (isHardRefreshing) return;
-    setIsHardRefreshing(true);
-    try {
-      await queryClient.invalidateQueries({ queryKey: ['posts-infinite'], exact: false, refetchType: 'active' });
-      await queryClient.invalidateQueries({ queryKey: ['posts'], exact: false, refetchType: 'active' });
-      try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch {}
-    } finally {
-      setIsHardRefreshing(false);
-    }
-  }, [isHardRefreshing, queryClient]);
-  const { user } = useAuth();
   const cachedFeedPosts = useFeedCacheStore((s) => s.posts);
   const cachedFeedOwner = useFeedCacheStore((s) => s.feedOwnerId);
   const cachedFeedUpdatedAt = useFeedCacheStore((s) => s.updatedAt);
@@ -634,7 +645,7 @@ export const RealFeed = memo(function RealFeed() {
     if (user?.id && cachedFeedOwner && cachedFeedOwner !== user.id) return [];
     return cachedFeedPosts as any[];
   }, [cachedFeedPosts, cachedFeedUpdatedAt, cachedFeedOwner, user?.id]);
-  const posts = useMemo(() => {
+  const postsFiltered = useMemo(() => {
     let live = (infiniteData?.pages || []).flatMap((p: any) => p?.posts || []);
     if (isOcultoOnly) {
       live = live.filter((p: any) => p?.is_adult !== true);
@@ -658,7 +669,7 @@ export const RealFeed = memo(function RealFeed() {
       return deduped;
     }
     return isAdultOnly ? [] : cachedFeedFallback;
-  }, [infiniteData, cachedFeedFallback, isAdultOnly]);
+  }, [infiniteData, cachedFeedFallback, isAdultOnly, isOcultoOnly]);
 
   // Se uma página do banco vier cheia, mas todos os itens forem descartados por
   // filtros de tipo/visibilidade/modo (+18), não podemos mostrar "Nenhum post".
@@ -670,20 +681,19 @@ export const RealFeed = memo(function RealFeed() {
     if (emptyPageAutofillRef.current.key !== feedAutofillKey) {
       emptyPageAutofillRef.current = { key: feedAutofillKey, attempts: 0 };
     }
-    if (isLoading || isFetchingNextPage || posts.length > 0 || !hasNextPage) return;
+    if (isLoading || isFetchingNextPage || postsFiltered.length > 0 || !hasNextPage) return;
     if (emptyPageAutofillRef.current.attempts >= 12) return;
     emptyPageAutofillRef.current.attempts += 1;
     void fetchNextPage();
-  }, [feedAutofillKey, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, posts.length]);
+  }, [feedAutofillKey, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, postsFiltered.length]);
 
-  const isFillingFilteredEmptyFeed = posts.length === 0 && (hasNextPage || isFetchingNextPage);
+  const isFillingFilteredEmptyFeed = postsFiltered.length === 0 && (hasNextPage || isFetchingNextPage);
   useEffect(() => {
     const live = (infiniteData?.pages || []).flatMap((p: any) => p?.posts || []);
     if (live.length && !isAdultOnly) {
       useFeedCacheStore.getState().setPosts(live, user?.id || null);
     }
   }, [infiniteData, user?.id, isAdultOnly]);
-  const navigate = useNavigate();
   const openSidebarSearch = useCallback(() => {
     navigate('/pesquisar');
   }, [navigate]);
@@ -784,7 +794,7 @@ export const RealFeed = memo(function RealFeed() {
 
   // Filtrar posts baseado na aba ativa
   const filteredPosts = useMemo(() => {
-    if (!posts) return [];
+    if (!postsFiltered) return [];
 
     const sortPinnedPostsFirst = (items: any[]) =>
       items.slice().sort((a: any, b: any) => {
@@ -815,7 +825,7 @@ export const RealFeed = memo(function RealFeed() {
       post?.content_format === 'narrative' ||
       (post?.section_type && NARRATIVE_SECTIONS.has(String(post.section_type).toLowerCase()));
 
-    const visiblePosts = posts.filter((post: any) => {
+    const visiblePosts = postsFiltered.filter((post: any) => {
       if (post?.is_hidden === true || post?.privacy_level === 'hidden') return false;
 
       // Modo "Apenas +18": mostra somente publicações criadas com a chave
@@ -868,15 +878,13 @@ export const RealFeed = memo(function RealFeed() {
       default:
         return sortPinnedPostsFirst(visiblePosts);
     }
-  }, [posts, activeTab, followingIds, vipAccess.purchasedPostIds, vipAccess.subscribedCreatorUserIds, vipAccess.subscribedCreatorProfileIds, user?.id, subscribedVipPosts, isAdultOnly]);
+  }, [postsFiltered, activeTab, followingIds, vipAccess.purchasedPostIds, vipAccess.subscribedCreatorUserIds, vipAccess.subscribedCreatorProfileIds, user?.id, subscribedVipPosts, isAdultOnly]);
 
   const activeExpandedPost = useMemo(() => {
     if (!expandedPost?.id) return null;
     return filteredPosts.find((p: any) => p?.id === expandedPost.id) || expandedPost;
   }, [expandedPost, filteredPosts]);
 
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
-  const location = useLocation();
 
   // Scroll até post + foco em comments/saved/likes vindo de notificações.
   // Se o post-alvo não estiver nas páginas carregadas, tentamos carregar
@@ -1349,7 +1357,7 @@ export const RealFeed = memo(function RealFeed() {
   );
 
   // Loading state
-  if (((isLoading && posts.length === 0) || isFillingFilteredEmptyFeed) && !skeletonTimedOut) {
+  if (((isLoading && postsFiltered.length === 0) || isFillingFilteredEmptyFeed) && !skeletonTimedOut) {
     return (
       <div className="flex flex-col">
         {topActionButtons}
@@ -1430,7 +1438,7 @@ export const RealFeed = memo(function RealFeed() {
   }
 
   // Empty state — preserva Stories + Sugestões mesmo sem posts
-  const shouldShowGlobalEmptyState = (!posts || posts.length === 0) && !isFillingFilteredEmptyFeed && !(
+  const shouldShowGlobalEmptyState = (!postsFiltered || postsFiltered.length === 0) && !isFillingFilteredEmptyFeed && !(
     activeTab === 'vip' && (vipAccess.isLoading || vipAccess.hasAnyAccess || subscribedVipPosts.length > 0)
   );
 
@@ -1528,9 +1536,22 @@ export const RealFeed = memo(function RealFeed() {
           </Suspense>
         )}
         <FeedContentTypeModal open={showFeedContentTypeModal} onOpenChange={setShowFeedContentTypeModal} />
+        {isHardRefreshing && (
+          <div className="fixed inset-0 z-[60] bg-background/20 backdrop-blur-[2px] pointer-events-none flex items-center justify-center">
+            <div className="bg-background/80 border rounded-full px-4 py-2 shadow-2xl animate-in fade-in zoom-in duration-300">
+              <div className="flex items-center gap-2 text-primary font-bold text-sm">
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Sincronizando feed...
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
+
+  // Sincronizando feed (overlay visual opcional)
+  const isRefreshingSync = isHardRefreshing;
 
   // Empty state para abas específicas
   const emptyTabContent = (() => {
@@ -1834,7 +1855,7 @@ export const RealFeed = memo(function RealFeed() {
           useWindowScroll
           data={filteredPosts}
           computeItemKey={(index, post: any) => post?.id ?? `post-${index}`}
-          overscan={dataSaver ? { main: 1000, reverse: 500 } : { main: 2000, reverse: 1000 }}
+          overscan={isOcultoOnly || dataSaver ? 1500 : 2500}
           increaseViewportBy={dataSaver ? { top: 500, bottom: 1000 } : { top: 1000, bottom: 2000 }}
 
           // Histerese de prefetch: dispara cedo para esconder a latência de rede.

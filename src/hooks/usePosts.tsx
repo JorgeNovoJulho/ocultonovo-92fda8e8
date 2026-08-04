@@ -739,6 +739,7 @@ export function useInfinitePosts(
   const { user, authReady } = useAuth();
   const { profile } = useProfile();
   const queryClient = useQueryClient();
+  const addDebugLog = useFeedDebugStore((s) => s.addLog);
   const { data: feedSettings } = useFeedSettings();
   const likedSavedHydrationReadyRef = useRef(false);
   // O feed público não pode depender do carregamento completo da linha em
@@ -1283,6 +1284,7 @@ export function useInfinitePosts(
     initialDataUpdatedAt: cacheIsFresh ? cachedFeed?.updatedAt : undefined,
   });
 
+
   // ============================================================
   // Login boot refetch — garante feed fresco logo após autenticar.
   // Sem isso, usuários que logam com cache antigo (24h TTL) viam
@@ -1293,15 +1295,25 @@ export function useInfinitePosts(
     if (!feedIdentityReady || !user?.id) return;
     if (lastBootRefetchRef.current === user.id) return;
     lastBootRefetchRef.current = user.id;
-    // Refetch ativo, sem tirar o cache da tela (refetchType:'active' mantém UI).
+
+    // COALESCÊNCIA AGRESSIVA: se já houve refetch nos últimos 10s, ignora o boot.
+    const now = Date.now();
+    const lastRefetch = (window as any)._OCULTO_LAST_REFETCH || 0;
+    if (now - lastRefetch < 10000) {
+      addDebugLog('stale', 'Ignorando boot refetch (cooldown ativo)', { diff: now - lastRefetch });
+      return;
+    }
+    (window as any)._OCULTO_LAST_REFETCH = now;
+
+    addDebugLog('query', 'Disparando refetch de boot');
     queryClient.invalidateQueries({ queryKey: ['posts-infinite'], refetchType: 'active' });
     queryClient.invalidateQueries({ queryKey: ['posts'], refetchType: 'active' });
-  }, [feedIdentityReady, user?.id, queryClient]);
+  }, [feedIdentityReady, user?.id, queryClient, addDebugLog]);
 
   // ============================================================
   // Fallback de aba oculta: se o usuário deixou a aba aberta por
   // horas/dias (laptop dormindo), o WebSocket pode ter caído sem
-  // reconectar. Ao voltar à aba após ≥2 min hidden, força refetch.
+  // reconectar. Ao voltar à aba após ≥5 min hidden, força refetch.
   // ============================================================
   useEffect(() => {
     if (!feedIdentityReady) return;
@@ -1310,15 +1322,24 @@ export function useInfinitePosts(
       if (typeof document === 'undefined') return;
       if (document.visibilityState === 'hidden') {
         hiddenSince = Date.now();
-      } else if (hiddenSince && Date.now() - hiddenSince > 2 * 60_000) {
+      } else if (hiddenSince && Date.now() - hiddenSince > 5 * 60_000) {
         hiddenSince = null;
+        // COALESCÊNCIA: ignora se atualizado nos últimos 5 min.
+        const now = Date.now();
+        const lastRefetch = (window as any)._OCULTO_LAST_REFETCH || 0;
+        if (now - lastRefetch < 300000) {
+          addDebugLog('stale', 'Ignorando visibilidade refetch (dados recentes)');
+          return;
+        }
+        (window as any)._OCULTO_LAST_REFETCH = now;
+        addDebugLog('query', 'Refetch por retorno de visibilidade');
         queryClient.invalidateQueries({ queryKey: ['posts-infinite'], refetchType: 'active' });
         queryClient.invalidateQueries({ queryKey: ['posts'], refetchType: 'active' });
       }
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
-  }, [feedIdentityReady, queryClient]);
+  }, [feedIdentityReady, queryClient, addDebugLog]);
 
   // Realtime local do infinite feed: só aplica DELETE no cache.
   // INSERT/UPDATE já são tratados por `usePostsRealtime` no RealFeed; duplicar
