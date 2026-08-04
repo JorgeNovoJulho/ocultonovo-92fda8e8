@@ -6,6 +6,7 @@ import { useFeedCacheStore } from "@/store/useFeedCacheStore";
 import { useFeedDebugStore } from "@/store/useFeedDebugStore";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format } from "date-fns";
+import { useAuth } from "@/hooks/useAuth";
 
 /**
  * Chip discreto mostrando o estado de sincronização do feed:
@@ -29,6 +30,8 @@ export function FeedSyncStatusChip({ className = "" }: { className?: string }) {
   );
   const { isDebugEnabled, logs, toggleDebug, clearLogs } = useFeedDebugStore();
   const addDebugLog = useFeedDebugStore(s => s.addLog);
+  const { user } = useAuth();
+  const isMaster = user?.email === 'ocultomaster@ocultoswing.com.br';
 
   const exportLogs = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -56,6 +59,7 @@ export function FeedSyncStatusChip({ className = "" }: { className?: string }) {
     }
   }, [fetching, phase]);
 
+  if (!isMaster) return null;
   if (phase === "idle" && !isDebugEnabled) return null;
 
   const styles: Record<
