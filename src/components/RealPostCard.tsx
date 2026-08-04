@@ -196,6 +196,16 @@ const getPlanLabel = (plan?: string) => {
 };
 
 export const RealPostCard = memo(function RealPostCard({ post: rawPost, onSubscribe, isDisliked = false, onOpenExpandedPost, isOcultoOnly }: RealPostCardProps) {
+  useEffect(() => {
+    if (window.OCULTO_DEBUG_FEED) {
+      console.log(`[FeedDebug] Render RealPostCard: ${rawPost.id}`, {
+        author: rawPost.author?.username,
+        isPinned: rawPost.is_pinned,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
   // Defensive normalization: aceita media_urls[] como fallback de media_url,
   // e garante que content_text nulo nunca quebre o render do card.
   const post = useMemo(() => {
