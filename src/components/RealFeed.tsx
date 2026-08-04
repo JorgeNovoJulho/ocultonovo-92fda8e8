@@ -1579,7 +1579,10 @@ export const RealFeed = memo(function RealFeed() {
   return (
     <PullToRefresh onRefresh={handleRefresh}>
       <FeedModeSyncIndicator />
-      {topActionButtons}
+      <div className="flex flex-col gap-2 p-3">
+        {topActionButtons}
+        <FeedSyncStatusChip className="self-start" />
+      </div>
 
       {/* Feed Tabs — fixo ao grid superior, acima dos stories. */}
       <FeedTabs activeTab={activeTab} onTabChange={setActiveTab} onCreatePost={() => setShowCreateModal(true)} onScrollTop={() => { virtuosoRef.current?.scrollToIndex({ index: 0, align: "start", behavior: "smooth" }); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
