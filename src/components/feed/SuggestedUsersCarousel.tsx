@@ -29,6 +29,7 @@ import {
   useNewRealUsersForCarousel,
   useRealUsersCount,
   type SuggestedUser,
+  useDiscoveryPreferences,
 } from "@/hooks/useSuggestedUsers";
 import { useSettingValue } from "@/hooks/useSystemSettings";
 import { useI18n } from "@/lib/i18n";
@@ -479,9 +480,16 @@ export function SuggestedUsersCarousel() {
   } | null>(null);
   const [avatarPromptOpen, setAvatarPromptOpen] = useState(false);
   const navigate = useNavigate();
-
   const { t } = useI18n();
   const { user } = useAuth();
+  const { data: discoveryPrefs } = useDiscoveryPreferences();
+
+  // Força o refetch apenas se houver uma mudança real nas preferências globais
+  // ou se o carrossel for montado pela primeira vez. StaleTime do hook já protege.
+  const prefsKey = JSON.stringify(discoveryPrefs || {});
+  useEffect(() => {
+    if (user?.id) refetch();
+  }, [prefsKey, user?.id, refetch]);
   const { profile } = useProfile();
   const { data: myHighlight } = useMyProfileHighlight();
   const isHighlightActive = !!myHighlight;
