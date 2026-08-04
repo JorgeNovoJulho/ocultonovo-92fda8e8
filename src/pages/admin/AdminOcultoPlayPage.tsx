@@ -167,7 +167,19 @@ export default function AdminOcultoPlayPage() {
 
         {/* CONFIG */}
         <TabsContent value="config" className="space-y-6 mt-4">
+          <div className="flex justify-end">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-2 border-primary/30 text-primary hover:bg-primary/5"
+              onClick={() => navigate('/admin/play-share-editor')}
+            >
+              <Share2 className="h-4 w-4" />
+              Configurar Página de Compartilhamento (Public)
+            </Button>
+          </div>
           <AdminOcultoPlayLaunchCard />
+
 
           <Card className="border-amber-500/30 bg-amber-500/5">
             <CardContent className="pt-5 flex gap-3 text-sm">

@@ -250,6 +250,8 @@ const AdminPushCampaignsPage = lazy(() => import("./pages/admin/AdminPushCampaig
 const AdminReferralPage = lazy(() => import("./pages/admin/AdminReferralPage"));
 const AdminInvoicesPage = lazy(() => import("./pages/admin/AdminInvoicesPage"));
 const AdminAdvancedAnalyticsPage = lazy(() => import("./pages/admin/AdminAdvancedAnalyticsPage"));
+const AdminPlayShareEditorPage = lazy(() => import("./pages/admin/AdminPlayShareEditorPage"));
+
 const AdminWebhooksPage = lazy(() => import("./pages/admin/AdminWebhooksPage"));
 const AdminWebhookEventsPage = lazy(() => import("./pages/admin/AdminWebhookEventsPage"));
 const AdminBackupPage = lazy(() => import("./pages/admin/AdminBackupPage"));

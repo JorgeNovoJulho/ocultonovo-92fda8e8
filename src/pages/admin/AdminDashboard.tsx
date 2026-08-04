@@ -327,7 +327,16 @@ export default function AdminDashboard() {
                     Editar Página de Convite (Link Externo)
                   </Button>
                   <Button 
+                    onClick={() => navigate('/admin/play-share-editor')} 
+                    variant="outline"
+                    className="gap-2 border-primary/40 text-primary hover:bg-primary/5 shadow-sm"
+                  >
+                    <Share2 className="h-4 w-4" /> 
+                    Configurar Compartilhamento Play
+                  </Button>
+                  <Button 
                     variant="outline" 
+
                     onClick={() => navigate('/admin/welcome-log')} 
                     className="gap-2 border-border/60"
                   >
