@@ -436,13 +436,26 @@ export const RealFeed = memo(function RealFeed() {
   const pagesLoaded = infiniteData?.pages?.length ?? 0;
   const hasNextPage = !!rawHasNextPage;
 
-  // Fail-safe: nunca deixar o skeleton infinito.
-  const [skeletonTimedOut, setSkeletonTimedOut] = useState(false);
+  // Monitoramento de retorno ao feed: atualiza em segundo plano ao mudar de função
   useEffect(() => {
-    if (!isLoading) { setSkeletonTimedOut(false); return; }
-    const t = window.setTimeout(() => setSkeletonTimedOut(true), 6000);
-    return () => window.clearTimeout(t);
-  }, [isLoading]);
+    if (mounted && location.pathname === '/feed') {
+      const lastPath = (window as any)._OCULTO_LAST_PATH;
+      if (lastPath && lastPath !== '/feed') {
+        addDebugLog('nav', 'Retorno ao feed: buscando atualizações em background');
+        queryClient.invalidateQueries({ 
+          queryKey: ['posts-infinite'], 
+          refetchType: 'active' 
+        });
+      }
+      (window as any)._OCULTO_LAST_PATH = '/feed';
+    }
+    return () => {
+      if (location.pathname !== '/feed') {
+        (window as any)._OCULTO_LAST_PATH = location.pathname;
+      }
+    };
+  }, [location.pathname, mounted, queryClient, addDebugLog]);
+
 
   const [isHardRefreshing, setIsHardRefreshing] = useState(false);
   const handleHardRefresh = useCallback(async () => {

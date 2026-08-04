@@ -834,20 +834,19 @@ export function useInfinitePosts(
   const query = useInfiniteQuery({
     queryKey: ['posts-infinite', 'v18-complete-includes-adult-posts', isEnabled, profile?.id, pageSize, genderFilterKey, explicitAdultOnly],
     initialPageParam: 0,
+    // Cache de longa duração (24h stale, 48h GC) para estabilizar o feed
     staleTime: 24 * 60 * 60 * 1000, 
     gcTime: 48 * 60 * 60 * 1000, 
 
-
-    retry: (failureCount, err: any) => {
-      if (failureCount >= 3) return false;
-      const msg = String(err?.message || err || '');
-      return /abort|aborted|network|fetch|timeout|failed to fetch|load failed/i.test(msg);
-    },
-    retryDelay: (attempt) => Math.min(500 * 2 ** attempt, 4000),
+    // Bloqueio de refetchs automáticos (piscadas)
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     refetchOnReconnect: false, 
     refetchInterval: false,
+    refetchIntervalInBackground: false,
+
+    retry: (failureCount, err: any) => {
+
     refetchIntervalInBackground: false,
     placeholderData: (previousData: any) => previousData, 
     enabled: feedIdentityReady,
@@ -1305,21 +1304,18 @@ export function useInfinitePosts(
     if (lastBootRefetchRef.current === user.id) return;
     lastBootRefetchRef.current = user.id;
 
-    // COALESCÊNCIA AGRESSIVA: se já houve refetch nos últimos 10s, ignora o boot.
+    // LOGIN BOOT: Única vez que o feed atualiza agressivamente ao entrar
     const now = Date.now();
-    const lastRefetch = (window as any)._OCULTO_LAST_REFETCH || 0;
-    if (now - lastRefetch < 10000) {
-      addDebugLog('stale', 'Ignorando boot refetch (cooldown ativo)', { diff: now - lastRefetch });
-      return;
-    }
     (window as any)._OCULTO_LAST_REFETCH = now;
 
-    addDebugLog('query', 'Disparando refetch de boot');
+    addDebugLog('query', 'Atualizando feed no login (boot inicial)');
     queryClient.invalidateQueries({ queryKey: ['posts-infinite'], refetchType: 'active' });
     queryClient.invalidateQueries({ queryKey: ['posts'], refetchType: 'active' });
-    // Marca cache como sujo para forçar re-render no feed sem sumir com posts atuais
+    
+    // Hidratação imediata via cache store
     useFeedCacheStore.getState().setPosts(useFeedCacheStore.getState().posts || [], user.id);
   }, [feedIdentityReady, user?.id, queryClient, addDebugLog]);
+
 
   // ============================================================
   // Fallback de aba oculta: se o usuário deixou a aba aberta por
