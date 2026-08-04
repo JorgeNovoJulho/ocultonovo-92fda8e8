@@ -1268,7 +1268,7 @@ export function useInfinitePosts(
       // Use rawData length (pré-filtro) para decidir se há próxima página.
       // Se a página inteira veio cheia mas foi filtrada por post_type/gênero, ainda
       // queremos avançar o cursor para não travar o scroll.
-      const nextOffset = rawData.length < pageSize ? null : from + pageSize;
+      const nextOffset = rawData.length < pageSize ? null : from + (rawData.length || pageSize);
       const result = { posts, nextOffset };
       // Cache só da primeira página (hidratação instantânea no próximo load)
       if (from === 0 && posts.length > 0) {
