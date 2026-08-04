@@ -1461,6 +1461,7 @@ export function useInfinitePosts(
 export function useCreatePost() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { profile } = useProfile();
   const { isSimulatingAsBannedUser } = useShadowbanInterceptor();
   const { triggerTranscode } = useVideoTranscoding();
 
