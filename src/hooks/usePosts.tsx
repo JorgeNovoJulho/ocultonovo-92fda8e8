@@ -790,31 +790,20 @@ export function useInfinitePosts(
   const query = useInfiniteQuery({
     queryKey: ['posts-infinite', 'v18-complete-includes-adult-posts', isEnabled, profile?.id, pageSize, genderFilterKey, explicitAdultOnly],
     initialPageParam: 0,
-    // Perf: cache servido imediatamente via `initialData`; revalidação
-    // acontece em background — React Query mantém o cache na tela enquanto
-    // refetch corre, então não há blank feed.
-    // Perf mobile: cache fresco por 2 min — evita refetch ao remontar
-    // (navegação entre páginas) e economiza CPU/rede em devices fracos.
-    staleTime: explicitAdultOnly ? 60_000 : 300_000, // 1m p/ +18, 5m p/ completo
-    gcTime: 30 * 60_000,
-    // Retry com backoff exponencial em AbortError/timeout/transient — antes
-    // 1 tentativa com 500ms travava o skeleton em redes instáveis (3G/4G ruim).
-    // Agora até 3 tentativas (500ms, 1s, 2s) cobrem o reconexão sem loading infinito.
+    staleTime: 600_000, 
+    gcTime: 60 * 60_000,
     retry: (failureCount, err: any) => {
       if (failureCount >= 3) return false;
       const msg = String(err?.message || err || '');
       return /abort|aborted|network|fetch|timeout|failed to fetch|load failed/i.test(msg);
     },
     retryDelay: (attempt) => Math.min(500 * 2 ** attempt, 4000),
-    // Realtime websocket já cobre novidades — não refazer fetch em focus/mount
-    // para preservar bateria, scroll e responsividade no Realme C55 e similares.
-    refetchOnWindowFocus: explicitAdultOnly ? 'always' : false,
-    refetchOnMount: explicitAdultOnly ? 'always' : false,
-    refetchOnReconnect: false, // Alterado para false para estabilidade
-    // Sem polling: realtime cuida disso. Polling de 30s é caro em mobile fraco.
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false, 
     refetchInterval: false,
     refetchIntervalInBackground: false,
-    placeholderData: (previousData) => previousData, // Garante que o Virtuoso não perca os dados anteriores enquanto o refetch corre
+    placeholderData: (previousData) => previousData, 
     enabled: feedIdentityReady,
 
     queryFn: async ({ pageParam = 0 }) => {

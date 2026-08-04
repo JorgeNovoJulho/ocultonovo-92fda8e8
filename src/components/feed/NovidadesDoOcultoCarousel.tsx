@@ -184,7 +184,7 @@ export const NovidadesDoOcultoCarousel = memo(function NovidadesDoOcultoCarousel
       .sort((a, b) => a.position - b.position)
       .map((c) => byKey[c.card_key])
       .filter(Boolean) as React.ReactNode[];
-  }, [link, copied, handleCopy, newsKey, musicsKey, moviesKey, navigate, cardsKey]);
+  }, [link, copied, handleCopy, newsKey, musicsKey, moviesKey, navigate, cardsKey, index]);
 
   const onTouchStart = (e: TouchEvent) => {
     touchEndRef.current = null;
