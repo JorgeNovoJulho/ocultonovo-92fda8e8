@@ -1619,7 +1619,7 @@ export const RealFeed = memo(function RealFeed() {
       <div className="flex flex-col gap-2 p-3">
         {topActionButtons}
         <div className="flex items-center justify-between">
-          <FeedTabs activeTab={activeTab} setActiveTab={handleTabChange} />
+          <FeedTabs activeTab={activeTab} onTabChange={setActiveTab} />
           <FeedSyncStatusChip />
         </div>
         {isDebugEnabled && (
