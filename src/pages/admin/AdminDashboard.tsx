@@ -316,14 +316,22 @@ export default function AdminDashboard() {
                     className="gap-2 bg-primary hover:bg-primary/90 shadow-sm"
                   >
                     <MessageSquareHeart className="h-4 w-4" /> 
-                    Configurar e Ver Prévia
+                    Configurar Mensagem de Boas-vindas
+                  </Button>
+                  <Button 
+                    onClick={() => navigate('/admin/invite-editor')} 
+                    variant="secondary"
+                    className="gap-2 bg-amber-500 hover:bg-amber-400 text-black border-0 shadow-sm font-bold"
+                  >
+                    <ExternalLink className="h-4 w-4" /> 
+                    Editar Página de Convite (Link Externo)
                   </Button>
                   <Button 
                     variant="outline" 
                     onClick={() => navigate('/admin/welcome-log')} 
                     className="gap-2 border-border/60"
                   >
-                    <Clock className="h-4 w-4" /> Ver Histórico de Entregas
+                    <Clock className="h-4 w-4" /> Ver Histórico
                   </Button>
                 </div>
               </div>
