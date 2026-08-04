@@ -123,13 +123,21 @@ export function useUpdateInviteSettings() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (value: InviteSettings) => {
-      const { error } = await (supabase as any)
+      console.log("[useUpdateInviteSettings] Saving:", value);
+      const { error } = await supabase
         .from("landing_settings")
         .upsert(
-          { setting_key: SETTING_KEY, setting_value: value, updated_at: new Date().toISOString() },
+          { 
+            setting_key: SETTING_KEY, 
+            setting_value: value, 
+            updated_at: new Date().toISOString() 
+          },
           { onConflict: "setting_key" }
         );
-      if (error) throw error;
+      if (error) {
+        console.error("[useUpdateInviteSettings] Error:", error);
+        throw error;
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["invite-settings"] });
