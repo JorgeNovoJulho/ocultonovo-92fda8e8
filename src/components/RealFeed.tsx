@@ -379,31 +379,29 @@ const FeedItem = memo(function FeedItem({
 });
 
 export const RealFeed = memo(function RealFeed() {
-  console.log('[FeedDebug] RealFeed rendered');
+  const lastRenderRef = useRef(Date.now());
+  const renderCountRef = useRef(0);
+  const { isDebugEnabled, addLog: addDebugLog } = useFeedDebugStore();
+  const cachedFeedLength = useFeedCacheStore(s => s.posts?.length ?? 0);
+
+  useEffect(() => {
+    renderCountRef.current += 1;
+    const now = Date.now();
+    const diff = now - lastRenderRef.current;
+    lastRenderRef.current = now;
+
+    if (renderCountRef.current > 1 && diff < 2000) {
+      addDebugLog('render', `Piscada detectada! Re-render em ${diff}ms`, { 
+        count: renderCountRef.current,
+        hasCache: cachedFeedLength > 0 
+      });
+      console.warn(`[FeedDebug] Rapid re-render detected: ${diff}ms`);
+    } else {
+      addDebugLog('render', 'Feed montado/renderizado', { diff });
+    }
+  }, [addDebugLog, cachedFeedLength]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showFeedContentTypeModal, setShowFeedContentTypeModal] = useState(false);
-  const [showFeedFilterModal, setShowFeedFilterModal] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [showSubscribeModal, setShowSubscribeModal] = useState(false);
-  const [showVitrineModal, setShowVitrineModal] = useState(false);
-  const [expandedPost, setExpandedPost] = useState<any | null>(null);
-  const [activeTab, setActiveTab] = useState<FeedTab>('foryou');
-  const { shows: legacyFeedModeShows, forcesCardLayout, mode: legacyMode } = useFeedMode();
-  const { isSectionEnabled, viewMode: granularMode } = useViewModePreferences();
-  const { isAdultOnly, isOcultoOnly } = useFeedExperienceMode();
-  const { mode: themeMode, setMode: setThemeMode } = useTheme();
-  const { isDebugEnabled, addLog: addDebugLog, clearLogs } = useFeedDebugStore();
-  const { safeBlurOn, toggleSafeBlur } = useSafeBlur();
-  const [safeBlurPending, setSafeBlurPending] = useState(false);
-  const safeBlurPendingTimer = useRef<number | null>(null);
-
-  // Debug de montagem do feed principal
-  useEffect(() => {
-    (window as any).OCULTO_DEBUG_FEED = true;
-    console.log('[FeedDebug] RealFeed mounted', { timestamp: new Date().toISOString() });
-    return () => console.log('[FeedDebug] RealFeed unmounted');
-  }, []);
 
 
   // Gate combinado:
