@@ -13,7 +13,8 @@ export type OcultoFeedNewsItem = {
 export function useOcultoFeedNews(limit = 4) {
   return useQuery({
     queryKey: ['oculto-feed-news', limit],
-    staleTime: 5 * 60_000,
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
     queryFn: async (): Promise<OcultoFeedNewsItem[]> => {
       const { data, error } = await supabase
         .from('oculto_feed_news')
@@ -47,7 +48,8 @@ export function useOcultoFeedNewsAdmin() {
 export function useLatestPlayTitles(kind: 'audio' | 'link', limit = 4) {
   return useQuery({
     queryKey: ['oculto-play-latest-titles', kind, limit],
-    staleTime: 5 * 60_000,
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
     queryFn: async (): Promise<{ id: string; title: string }[]> => {
       const { data, error } = await supabase
         .from('oculto_play_items')
@@ -96,7 +98,8 @@ async function fetchFeedCards(): Promise<OcultoFeedCard[]> {
 export function useOcultoFeedCards() {
   return useQuery({
     queryKey: ['oculto-feed-cards'],
-    staleTime: 5 * 60_000,
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
     queryFn: fetchFeedCards,
   });
 }
@@ -125,7 +128,8 @@ export type OcultoFeedPlayPick = {
 export function useOcultoFeedPlayPicks(kind: 'audio' | 'link', limit = 4) {
   return useQuery({
     queryKey: ['oculto-feed-play-picks', kind, limit],
-    staleTime: 5 * 60_000,
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
     queryFn: async (): Promise<OcultoFeedPlayPick[]> => {
       const { data, error } = await supabase
         .from('oculto_feed_play_picks')

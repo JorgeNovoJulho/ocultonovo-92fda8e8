@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, memo, type TouchEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Copy, Check, Sparkles, Music2, Film, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -57,7 +57,7 @@ function CardShell({
   );
 }
 
-export function NovidadesDoOcultoCarousel() {
+export const NovidadesDoOcultoCarousel = memo(function NovidadesDoOcultoCarousel() {
   const navigate = useNavigate();
   const link = useInviteLink();
   const { data: news = [] } = useOcultoFeedNews(4);
@@ -269,6 +269,6 @@ export function NovidadesDoOcultoCarousel() {
       </div>
     </section>
   );
-}
+});
 
 export default NovidadesDoOcultoCarousel;
