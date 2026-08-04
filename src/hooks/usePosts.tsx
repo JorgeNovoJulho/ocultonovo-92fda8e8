@@ -339,6 +339,7 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
   const { user, authReady } = useAuth();
   const { profile } = useProfile();
   const queryClient = useQueryClient();
+  const addDebugLog = useFeedDebugStore((s) => s.addLog);
   const { data: feedSettings } = useFeedSettings();
 
   const isEnabled = feedSettings?.is_enabled !== false;
@@ -1282,7 +1283,6 @@ export function useInfinitePosts(
     initialDataUpdatedAt: cacheIsFresh ? cachedFeed?.updatedAt : undefined,
   });
 
-  const addDebugLog = useFeedDebugStore((s) => s.addLog);
 
   // ============================================================
   // Login boot refetch — garante feed fresco logo após autenticar.
