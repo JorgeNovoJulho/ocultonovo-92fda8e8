@@ -157,7 +157,7 @@ import { prefetchFeedMedia } from "@/lib/imageLoadCache";
 import { isVideoUrl } from "@/lib/mediaType";
 import { useFeedDebugStore } from "@/store/useFeedDebugStore";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Info } from "lucide-react";
 
 // Bridge: chaves usadas no RealFeed → chaves canônicas em HOME_SECTIONS
 // (src/config/homeSections.ts). Usado pelo gate granular isSectionEnabled().
