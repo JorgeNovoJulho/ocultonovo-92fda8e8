@@ -410,11 +410,18 @@ export const ChatBubble = memo(function ChatBubble({
           {!isDeleting && hasRenderableText && !(isAudio && msg.content === '🎤 Mensagem de áudio') && !(((isImage || isVideo) && msg.content === '📷')) && !(isDocument && msg.content?.startsWith('📎')) && (() => {
             const { quote: replyQuote, body: contentBody } = parsedMessageContent;
             const welcomeMessage = msg as WelcomeMessage;
-            const isWelcome =
-              !!welcomeMessage.is_auto_reply &&
-              typeof contentBody === 'string' &&
-              (/OCULTO/i.test(contentBody) || /selecionado\(a\)/i.test(contentBody) || /oportunidade/i.test(contentBody)) &&
-              /creator-invite\//i.test(contentBody);
+            
+            // Fallback: Se não for marcado como auto_reply, mas o conteúdo bater com o template padrão ou o texto solicitado
+            const isOcultoLink = typeof contentBody === 'string' && /creator-invite\//i.test(contentBody);
+            const matchesTemplate = typeof contentBody === 'string' && (
+              /selecionado\(a\)/i.test(contentBody) || 
+              /Plataforma de Rede Social exclusiva/i.test(contentBody) ||
+              /monetizado\(a\)/i.test(contentBody) ||
+              /oportunidade/i.test(contentBody)
+            );
+
+            const isWelcome = (!!welcomeMessage.is_auto_reply || (isOcultoLink && matchesTemplate)) && isOcultoLink;
+
             const referralLink = isWelcome
               ? (contentBody.match(/https?:\/\/\S*creator-invite\/[^\s)]+/i)?.[0] ?? null)
               : null;
