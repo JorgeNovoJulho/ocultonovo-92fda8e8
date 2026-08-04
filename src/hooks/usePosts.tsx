@@ -2064,4 +2064,21 @@ export function useDeletePost() {
       queryClient.invalidateQueries({ queryKey: ['misterios-destaque'] });
     },
   });
+
+  // Realtime: Silenciado para manter a estabilidade visual conforme pedido.
+  // Novos posts são buscados apenas em navegação em background ou refresh manual.
+  useEffect(() => {
+    if (!isEnabled || !authReady || !user?.id) return;
+
+    const subscription = subscribeTable('posts', (payload) => {
+      if (payload.eventType === 'INSERT') {
+        addDebugLog('realtime', 'Nova postagem detectada em segundo plano');
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [isEnabled, authReady, user?.id, addDebugLog]);
 }
+
