@@ -639,9 +639,9 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
       if (!isMounted) return;
       
       const now = Date.now();
-      // Proteção contra loops de refetch: aumentar o cooldown para 20 segundos
-      if (now - lastRefetchAt < 20000) {
-        addDebugLog('stale', 'Refetch ignorado (cooldown de 20s ativo)', { diff: now - lastRefetchAt });
+      // Proteção contra loops de refetch: aumentar o cooldown para 45 segundos para estabilidade total
+      if (now - lastRefetchAt < 45000) {
+        addDebugLog('stale', 'Refetch ignorado (cooldown de 45s ativo)', { diff: now - lastRefetchAt });
         return;
       }
 
