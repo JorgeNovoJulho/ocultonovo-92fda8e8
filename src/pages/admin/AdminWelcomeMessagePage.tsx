@@ -98,10 +98,9 @@ type WelcomeSettingsRow = Partial<Settings>;
 type MetricRow = { created_at: string };
 
 const DEFAULT_TEMPLATE =
-  '🎉 *PARABÉNS!*\n\n' +
   'Você foi selecionado(a) por @{{username}} para se tornar membro da nova Plataforma de Rede Social exclusiva, ' +
   'com a possibilidade de ser monetizado(a) por tudo que criar e postar dentro da plataforma OCULTO. ' +
-  'Não perca essa oportunidade que ainda é fechada para poucos\n\n' +
+  'Não perca essa oportunidade que ainda é fechada para poucos\r\n\r\n' +
   'Aproveite essa oportunidade! 🚀';
 
 const EMPTY_SUMMARY: MetricSummary = { copy: 0, share: 0, view: 0 };
