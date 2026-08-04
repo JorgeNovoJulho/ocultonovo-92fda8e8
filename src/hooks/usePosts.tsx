@@ -739,6 +739,7 @@ export function useInfinitePosts(
   const { user, authReady } = useAuth();
   const { profile } = useProfile();
   const queryClient = useQueryClient();
+  const addDebugLog = useFeedDebugStore((s) => s.addLog);
   const { data: feedSettings } = useFeedSettings();
   const likedSavedHydrationReadyRef = useRef(false);
   // O feed público não pode depender do carregamento completo da linha em
