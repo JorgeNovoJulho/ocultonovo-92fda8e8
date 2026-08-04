@@ -1860,7 +1860,7 @@ export const RealFeed = memo(function RealFeed() {
           useWindowScroll
           data={filteredPosts}
           computeItemKey={(index, post: any) => post?.id ?? `post-${index}`}
-          overscan={dataSaver ? { main: 1000, reverse: 500 } : { main: 2000, reverse: 1000 }}
+          overscan={isOcultoOnly || dataSaver ? 1500 : 2500}
           increaseViewportBy={dataSaver ? { top: 500, bottom: 1000 } : { top: 1000, bottom: 2000 }}
 
           // Histerese de prefetch: dispara cedo para esconder a latência de rede.

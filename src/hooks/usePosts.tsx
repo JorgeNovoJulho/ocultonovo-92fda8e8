@@ -339,7 +339,6 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
   const { user, authReady } = useAuth();
   const { profile } = useProfile();
   const queryClient = useQueryClient();
-  const addDebugLog = useFeedDebugStore((s) => s.addLog);
   const { data: feedSettings } = useFeedSettings();
 
   const isEnabled = feedSettings?.is_enabled !== false;
@@ -1283,11 +1282,8 @@ export function useInfinitePosts(
     initialDataUpdatedAt: cacheIsFresh ? cachedFeed?.updatedAt : undefined,
   });
 
-  // ============================================================
-  // Login boot refetch — garante feed fresco logo após autenticar.
-  // Sem isso, usuários que logam com cache antigo (24h TTL) viam
-  // posts atrasados em 1-2 dias até o head-poll de 60s rodar.
-  // ============================================================
+  const addDebugLog = useFeedDebugStore((s) => s.addLog);
+
   // ============================================================
   // Login boot refetch — garante feed fresco logo após autenticar.
   // Sem isso, usuários que logam com cache antigo (24h TTL) viam
