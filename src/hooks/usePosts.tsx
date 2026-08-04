@@ -355,6 +355,8 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
     refetchOnReconnect: false,   // Evita recarregar ao oscilar rede
     refetchInterval: false,      // Desabilita polling automático para estabilidade total
     refetchIntervalInBackground: false,
+    placeholderData: (previousData) => previousData, // Mantém dados anteriores durante a revalidação para evitar piscadas (keepPreviousData)
+
 
     enabled: authReady && !!user?.id,
     queryFn: async () => {
