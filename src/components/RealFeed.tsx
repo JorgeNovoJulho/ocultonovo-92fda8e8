@@ -601,7 +601,8 @@ export const RealFeed = memo(function RealFeed() {
     if (isHardRefreshing) return;
     setIsHardRefreshing(true);
     try {
-      await queryClient.invalidateQueries({ queryKey: ['posts-infinite'], exact: false, refetchType: 'all' });
+      await queryClient.invalidateQueries({ queryKey: ['posts-infinite'], exact: false, refetchType: 'active' });
+      await queryClient.invalidateQueries({ queryKey: ['posts'], exact: false, refetchType: 'active' });
       try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch {}
     } finally {
       setIsHardRefreshing(false);

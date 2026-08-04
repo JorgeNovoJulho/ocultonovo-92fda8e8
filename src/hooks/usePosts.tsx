@@ -347,12 +347,12 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
 
   const query = useQuery({
     queryKey: ['posts', options?.userId, options?.limit, isEnabled, showAll, maxPosts, startDate, profile?.id],
-    staleTime: 15_000,           // 15s: refresh mais agressivo p/ curtidas/comentários aparecerem rápido
-    gcTime: 5 * 60_000,
-    retry: false,
-    refetchOnWindowFocus: true,  // ao voltar à aba, atualiza (backup do realtime)
-    refetchOnMount: false,       // usa cache se ainda fresco — preserva scroll e bateria
-    refetchInterval: 45_000,     // polling leve como fallback caso realtime caia
+    staleTime: 60_000,           // 1m: evita re-carregamentos desnecessários
+    gcTime: 15 * 60_000,
+    retry: 2,
+    refetchOnWindowFocus: false, // desabilitado para evitar "pisca" ao trocar de app
+    refetchOnMount: false,       
+    refetchInterval: 120_000,    // polling a cada 2m como fallback
     refetchIntervalInBackground: false,
 
     enabled: authReady && !!user?.id,
@@ -792,8 +792,8 @@ export function useInfinitePosts(
     // refetch corre, então não há blank feed.
     // Perf mobile: cache fresco por 2 min — evita refetch ao remontar
     // (navegação entre páginas) e economiza CPU/rede em devices fracos.
-    staleTime: explicitAdultOnly ? 0 : 120_000,
-    gcTime: 10 * 60_000,
+    staleTime: explicitAdultOnly ? 60_000 : 300_000, // 1m p/ +18, 5m p/ completo
+    gcTime: 30 * 60_000,
     // Retry com backoff exponencial em AbortError/timeout/transient — antes
     // 1 tentativa com 500ms travava o skeleton em redes instáveis (3G/4G ruim).
     // Agora até 3 tentativas (500ms, 1s, 2s) cobrem o reconexão sem loading infinito.
