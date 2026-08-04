@@ -131,7 +131,7 @@ export function FeedTabs({ activeTab, onTabChange, onCreatePost }: FeedTabsProps
         className="
           flex flex-col gap-1.5 p-2 pt-3
           md:flex-row md:items-stretch md:gap-2 md:overflow-x-auto
-          overflow-visible
+          overflow-visible w-full
           [scrollbar-width:none] [-ms-overflow-style:none]
           [&::-webkit-scrollbar]:hidden
         "
@@ -153,7 +153,7 @@ export function FeedTabs({ activeTab, onTabChange, onCreatePost }: FeedTabsProps
           <SquarePen className="h-4 w-4 shrink-0" />
           <span className="truncate">Publicar</span>
         </button>
-        <div className="grid grid-cols-2 gap-1.5 md:contents">
+        <div className="grid grid-cols-2 gap-1.5 md:contents w-full">
           {tabs.map((tab) => {
             const theme = TAB_THEME[tab.id];
             const isActive = activeTab === tab.id;

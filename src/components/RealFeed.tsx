@@ -1212,7 +1212,7 @@ export const RealFeed = memo(function RealFeed() {
   ]);
 
   const topActionButtons = (
-    <div className="sticky top-0 z-[70] flex flex-nowrap overflow-x-auto no-scrollbar sm:grid sm:grid-cols-7 gap-2 px-2 pt-2 pb-1.5 bg-background/95 backdrop-blur-md border-b border-border/20 shadow-sm items-center w-full min-w-0 justify-start sm:justify-center">
+    <div className="sticky top-0 z-[70] flex flex-nowrap overflow-x-auto no-scrollbar sm:grid sm:grid-cols-7 gap-2 px-2 pt-2 pb-1.5 bg-background/95 backdrop-blur-md border-b border-border/20 shadow-sm items-center w-full min-w-0 justify-center">
       <TooltipProvider delayDuration={150}>
         <Tooltip>
           <TooltipTrigger asChild>
