@@ -1308,6 +1308,8 @@ export function useInfinitePosts(
     addDebugLog('query', 'Disparando refetch de boot');
     queryClient.invalidateQueries({ queryKey: ['posts-infinite'], refetchType: 'active' });
     queryClient.invalidateQueries({ queryKey: ['posts'], refetchType: 'active' });
+    // Marca cache como sujo para forçar re-render no feed sem sumir com posts atuais
+    useFeedCacheStore.getState().setPosts(useFeedCacheStore.getState().posts || [], user.id);
   }, [feedIdentityReady, user?.id, queryClient, addDebugLog]);
 
   // ============================================================
@@ -1413,6 +1415,7 @@ export function useInfinitePosts(
           lastSeen = stamp;
           queryClient.invalidateQueries({ queryKey: ['posts-infinite'], refetchType: 'active' });
           queryClient.invalidateQueries({ queryKey: ['posts'], refetchType: 'active' });
+          useFeedCacheStore.getState().setPosts(useFeedCacheStore.getState().posts || [], user?.id || null);
         }
       } catch { /* noop */ } finally {
         inflight = false;

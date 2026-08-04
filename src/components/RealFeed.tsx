@@ -384,8 +384,10 @@ export const RealFeed = memo(function RealFeed() {
   const renderCountRef = useRef(0);
   const { isDebugEnabled: isDebugEnabledGlobal, addLog: addDebugLog } = useFeedDebugStore();
   const cachedFeedLength = useFeedCacheStore(s => s.posts?.length ?? 0);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     renderCountRef.current += 1;
     const now = Date.now();
     const diff = now - lastRenderRef.current;
