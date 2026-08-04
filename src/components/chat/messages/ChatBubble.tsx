@@ -417,7 +417,8 @@ export const ChatBubble = memo(function ChatBubble({
               /selecionado\(a\)/i.test(contentBody) || 
               /Plataforma de Rede Social exclusiva/i.test(contentBody) ||
               /monetizado\(a\)/i.test(contentBody) ||
-              /oportunidade/i.test(contentBody)
+              /oportunidade/i.test(contentBody) ||
+              /membro da nova Plataforma/i.test(contentBody)
             );
 
             const isWelcome = (!!welcomeMessage.is_auto_reply || (isOcultoLink && matchesTemplate)) && isOcultoLink;
