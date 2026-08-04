@@ -379,6 +379,7 @@ const FeedItem = memo(function FeedItem({
 });
 
 export const RealFeed = memo(function RealFeed() {
+  const queryClient = useQueryClient();
   const lastRenderRef = useRef(Date.now());
   const renderCountRef = useRef(0);
   const { isDebugEnabled: isDebugEnabledGlobal, addLog: addDebugLog } = useFeedDebugStore();
@@ -417,6 +418,7 @@ export const RealFeed = memo(function RealFeed() {
   const { safeBlurOn, toggleSafeBlur } = useSafeBlur();
   const [safeBlurPending, setSafeBlurPending] = useState(false);
   const safeBlurPendingTimer = useRef<number | null>(null);
+
   const {
     data: infiniteData,
     isLoading,
@@ -456,7 +458,7 @@ export const RealFeed = memo(function RealFeed() {
 
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const location = useLocation();
-  const navigate = useNavigate();
+  
 
   // Gate combinado:
   // - O seletor legado (Completo/Social/Descoberta/Limpo/Card) é a fonte
@@ -635,7 +637,6 @@ export const RealFeed = memo(function RealFeed() {
     }
   }, [addDebugLog, hasValidCache, isDebugEnabled]);
 
-  const { user } = useAuth();
   const cachedFeedPosts = useFeedCacheStore((s) => s.posts);
   const cachedFeedOwner = useFeedCacheStore((s) => s.feedOwnerId);
   const cachedFeedUpdatedAt = useFeedCacheStore((s) => s.updatedAt);
