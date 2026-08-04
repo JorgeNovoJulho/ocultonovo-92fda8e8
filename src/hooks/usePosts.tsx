@@ -2065,20 +2065,22 @@ export function useDeletePost() {
     },
   });
 
-  const { user, authReady } = useAuth();
-  const addDebugLog = useFeedDebugStore((s) => s.addLog);
-  const { data: feedSettings } = useFeedSettings();
-  const isEnabled = feedSettings?.is_enabled !== false;
+  const { user: authUser, authReady: authIsReady } = useAuth();
+  const addLogToDebug = useFeedDebugStore((s) => s.addLog);
+  const { data: feedSettingsConfig } = useFeedSettings();
+  const isFeedEnabled = feedSettingsConfig?.is_enabled !== false;
+
 
   // Realtime: Silenciado para manter a estabilidade visual conforme pedido.
   useEffect(() => {
-    if (!isEnabled || !authReady || !user?.id) return;
+    if (!isFeedEnabled || !authIsReady || !authUser?.id) return;
 
     const subscription = subscribeTable('posts', (payload) => {
       if (payload.eventType === 'INSERT') {
-        addDebugLog('realtime', 'Nova postagem detectada em segundo plano');
+        addLogToDebug('query', 'Nova postagem detectada em segundo plano');
       }
     });
+
 
     return () => {
       if (typeof subscription === 'function') {
@@ -2087,7 +2089,7 @@ export function useDeletePost() {
         (subscription as any).unsubscribe();
       }
     };
-  }, [isEnabled, authReady, user?.id, addDebugLog]);
+  }, [isFeedEnabled, authIsReady, authUser?.id, addLogToDebug]);
 }
 
 
