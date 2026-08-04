@@ -1269,6 +1269,14 @@ export function useInfinitePosts(
       // Se a página inteira veio cheia mas foi filtrada por post_type/gênero, ainda
       // queremos avançar o cursor para não travar o scroll.
       const nextOffset = rawData.length < pageSize ? null : from + (rawData.length || pageSize);
+      
+      // LOG DE ESTABILIDADE: Só emite se o feed mudou ou para debug de master
+      if (from === 0 && posts.length > 0) {
+        const firstId = posts[0].id;
+        const lastId = posts[posts.length - 1].id;
+        addDebugLog('query', `Página 0 processada: ${posts.length} posts [${firstId}...${lastId}]`);
+      }
+
       const result = { posts, nextOffset };
       // Cache só da primeira página (hidratação instantânea no próximo load)
       if (from === 0 && posts.length > 0) {

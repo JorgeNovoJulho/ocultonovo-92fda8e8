@@ -798,8 +798,8 @@ export const RealFeed = memo(function RealFeed() {
   const filteredPosts = useMemo(() => {
     if (!postsFiltered) return [];
 
-    const sortPinnedPostsFirst = (items: any[]) =>
-      items.slice().sort((a: any, b: any) => {
+    const sortPinnedPostsFirst = useCallback((items: any[]) =>
+      [...items].sort((a: any, b: any) => {
         const ap = a?.is_pinned ? 1 : 0;
         const bp = b?.is_pinned ? 1 : 0;
         if (ap !== bp) return bp - ap;
@@ -810,22 +810,24 @@ export const RealFeed = memo(function RealFeed() {
 
         const createdAtA = a?.created_at ? new Date(a.created_at).getTime() : 0;
         const createdAtB = b?.created_at ? new Date(b.created_at).getTime() : 0;
-        return createdAtB - createdAtA;
-      });
+        if (createdAtA !== createdAtB) return createdAtB - createdAtA;
+        
+        return String(b.id || "").localeCompare(String(a.id || ""));
+      }), []);
 
-    const hasVipSubscriptionForPost = (post: any) => {
+    const hasVipSubscriptionForPost = useCallback((post: any) => {
       const ownerIds = [post?.user_id, post?.author_id, post?.creator_id].filter(Boolean);
       return ownerIds.some(
         (id) => vipAccess.subscribedCreatorUserIds.has(id) || vipAccess.subscribedCreatorProfileIds.has(id)
       );
-    };
+    }, [vipAccess.subscribedCreatorUserIds, vipAccess.subscribedCreatorProfileIds]);
 
     const followingSet = new Set(followingIds ?? []);
 
     const NARRATIVE_SECTIONS = new Set(['story','chapter','diary','article','series','text_post','backstage','narrative']);
-    const isNarrativePost = (post: any) =>
+    const isNarrativePost = useCallback((post: any) =>
       post?.content_format === 'narrative' ||
-      (post?.section_type && NARRATIVE_SECTIONS.has(String(post.section_type).toLowerCase()));
+      (post?.section_type && NARRATIVE_SECTIONS.has(String(post.section_type).toLowerCase())), []);
 
     const visiblePosts = postsFiltered.filter((post: any) => {
       if (post?.is_hidden === true || post?.privacy_level === 'hidden') return false;
