@@ -846,10 +846,14 @@ export function useInfinitePosts(
     refetchIntervalInBackground: false,
 
     retry: (failureCount, err: any) => {
-
-    refetchIntervalInBackground: false,
+      if (failureCount >= 3) return false;
+      const msg = String(err?.message || err || '');
+      return /abort|aborted|network|fetch|timeout|failed to fetch|load failed/i.test(msg);
+    },
+    retryDelay: (attempt) => Math.min(500 * 2 ** attempt, 4000),
     placeholderData: (previousData: any) => previousData, 
     enabled: feedIdentityReady,
+
 
 
     queryFn: async ({ pageParam = 0 }) => {
