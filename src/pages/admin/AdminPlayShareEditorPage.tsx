@@ -19,6 +19,7 @@ interface PlayShareSettings {
   show_player: boolean;
   show_stats: boolean;
   show_signup_cta: boolean;
+  cta_title: string;
   cta_text: string;
   cta_button_text: string;
   bg_color: string;
@@ -33,7 +34,8 @@ const DEFAULT_PLAY_SETTINGS: PlayShareSettings = {
   show_player: true,
   show_stats: true,
   show_signup_cta: true,
-  cta_text: "Gostou deste conteúdo? Crie sua conta grátis para ver muito mais no OCULTO PLAY.",
+  cta_title: "OCULTO é uma rede social adulta +18",
+  cta_text: "Crie sua conta gratuita para curtir, comentar, salvar em coleções, mandar mensagens e explorar todo o universo do OCULTO PLAY.",
   cta_button_text: "Criar minha conta grátis",
   bg_color: "#0a0a0a",
   accent_color: "#ec4899",
@@ -151,11 +153,19 @@ export default function AdminPlayShareEditorPage() {
             <CardHeader><CardTitle className="text-base text-primary">Conteúdo da Página</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
-                <Label>Texto de Chamada (CTA)</Label>
+                <Label>Título do Bloco de Convite</Label>
+                <Input 
+                  value={settings.cta_title || "OCULTO é uma rede social adulta +18"} 
+                  onChange={(e) => setField("cta_title", e.target.value)}
+                  placeholder="Ex: OCULTO é uma rede social adulta +18"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Texto de Chamada (Corpo do CTA)</Label>
                 <Textarea 
                   value={settings.cta_text} 
                   onChange={(e) => setField("cta_text", e.target.value)}
-                  placeholder="Gostou deste conteúdo?..."
+                  placeholder="Crie sua conta gratuita para..."
                 />
               </div>
               <div className="grid sm:grid-cols-2 gap-4">

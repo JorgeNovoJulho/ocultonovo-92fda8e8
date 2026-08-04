@@ -81,13 +81,27 @@ function playOgImageUrl(itemId: string, version?: string | number | null): strin
   return `https://ocultoswing.com.br/play/og-image/${encodeURIComponent(itemId)}.png${suffix}`;
 }
 
+interface PlayShareSettings {
+  show_logo: boolean;
+  show_author_card: boolean;
+  show_player: boolean;
+  show_stats: boolean;
+  show_signup_cta: boolean;
+  cta_title: string;
+  cta_text: string;
+  cta_button_text: string;
+  bg_color: string;
+  accent_color: string;
+  footer_text: string;
+}
+
 export default function OcultoPlayPublicItemPage() {
   const { id } = useParams<{ id: string }>();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
 
-
+  const [settings, setSettings] = useState<PlayShareSettings | null>(null);
   const [item, setItem] = useState<GuestItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [playing, setPlaying] = useState(false);
@@ -164,6 +178,26 @@ export default function OcultoPlayPublicItemPage() {
   // qualquer sessão: logado, deslogado, sessão expirada, navegador in-app.
   useEffect(() => {
     let alive = true;
+    (async () => {
+      try {
+        const resp = await fetch(
+          `${EXTERNAL_SUPABASE_URL}/rest/v1/oculto_play_share_settings?select=*&id=eq.1`,
+          {
+            headers: {
+              apikey: EXTERNAL_SUPABASE_ANON_KEY,
+              Authorization: `Bearer ${EXTERNAL_SUPABASE_ANON_KEY}`,
+            },
+          }
+        );
+        if (alive && resp.ok) {
+          const data = await resp.json();
+          if (data && data[0]) setSettings(data[0]);
+        }
+      } catch (err) {
+        console.warn("[OcultoPlayPublic] settings failed:", err);
+      }
+    })();
+    
     if (!id) return;
     // Limpa o marker `?app=1` legado das URLs antigas para manter o link
     // copiado/compartilhado sempre canônico (`/play/p/:id`). Crawlers já
@@ -824,14 +858,18 @@ export default function OcultoPlayPublicItemPage() {
   }, [item, muted, playing, audioTime, audioDuration, isVideo, isAudio, isMeme, registerGuestPlayView]);
 
   return (
-    <div className="min-h-dvh bg-gradient-to-b from-black via-zinc-950 to-black flex flex-col">
+    <div 
+      className="min-h-dvh flex flex-col" 
+      style={{ backgroundColor: settings?.bg_color || '#000000' }}
+    >
       {/* Header minimal */}
-      <header className="sticky top-0 z-40 backdrop-blur-md bg-black/50 border-b border-white/10">
-        <div className="max-w-md mx-auto flex items-center justify-between px-3 py-2">
-          <Link to={backTarget} replace className="flex items-center gap-2">
-            <Logo className="h-7 w-auto" />
-            <span className="text-xs font-bold text-white/90 tracking-wider">PLAY</span>
-          </Link>
+      {(settings?.show_logo !== false) && (
+        <header className="sticky top-0 z-40 backdrop-blur-md bg-black/50 border-b border-white/10">
+          <div className="max-w-md mx-auto flex items-center justify-between px-3 py-2">
+            <Link to={backTarget} replace className="flex items-center gap-2">
+              <Logo className="h-7 w-auto" />
+              <span className="text-xs font-bold text-white/90 tracking-wider">PLAY</span>
+            </Link>
           {user ? (
             <Link to={`/oculto-play${resolvedItemId ? `?item=${resolvedItemId}` : ''}`}>
               <Button size="sm" variant="ghost" className="text-white h-8 text-xs">
@@ -850,12 +888,14 @@ export default function OcultoPlayPublicItemPage() {
               </Link>
             </div>
           )}
-        </div>
-      </header>
+          </div>
+        </header>
+      )}
 
       <main className="flex-1 max-w-md w-full mx-auto px-3 py-4 space-y-3">
         {/* Player card */}
-        <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-black aspect-[3/4] shadow-2xl">
+        {(settings?.show_player !== false) && (
+          <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-black aspect-[3/4] shadow-2xl">
           {loading && (
             <div className="absolute inset-0 grid place-items-center">
               <Loader2 className="h-6 w-6 animate-spin text-white/70" />
@@ -912,7 +952,7 @@ export default function OcultoPlayPublicItemPage() {
           )}
 
           {/* Métricas rodapé */}
-          {item && (
+          {item && (settings?.show_stats !== false) && (
             <div className="absolute bottom-0 inset-x-0 p-3 pr-20 bg-gradient-to-t from-black/85 to-transparent text-white">
               {item.title && <p className="text-sm font-semibold line-clamp-2">{item.title}</p>}
               <div className="flex items-center gap-3 mt-1 text-[11px] text-white/85">
@@ -923,9 +963,10 @@ export default function OcultoPlayPublicItemPage() {
             </div>
           )}
         </div>
+        )}
 
         {/* Autor */}
-        {item && (
+        {item && (settings?.show_author_card !== false) && (
           <button
             type="button"
             onClick={() => guestBlock('ver o perfil do criador')}
@@ -977,21 +1018,27 @@ export default function OcultoPlayPublicItemPage() {
         )}
 
         {/* Banner +18 / convite cadastro (somente visitante) */}
-        {!user && item && (
+        {!user && item && (settings?.show_signup_cta !== false) && (
           <div className="rounded-xl border border-fuchsia-500/30 bg-gradient-to-br from-fuchsia-500/10 via-pink-500/5 to-rose-500/10 p-3 text-sm text-white">
             <p className="flex items-center gap-1.5 font-semibold text-fuchsia-200">
-              <ShieldCheck className="h-4 w-4" /> OCULTO é uma rede social adulta +18
+              <ShieldCheck className="h-4 w-4" /> {settings?.cta_title || "OCULTO é uma rede social adulta +18"}
             </p>
             <p className="text-white/80 text-xs mt-1">
-              Crie sua conta gratuita para curtir, comentar, salvar em coleções, mandar mensagens e
-              explorar todo o universo do OCULTO PLAY.
+              {settings?.cta_text || "Crie sua conta gratuita para curtir, comentar, salvar em coleções, mandar mensagens e explorar todo o universo do OCULTO PLAY."}
             </p>
             <Link to={`/signup?from=play${resolvedItemId ? `&item=${resolvedItemId}` : ''}`}>
-              <Button className="mt-3 w-full bg-gradient-to-r from-fuchsia-500 via-pink-500 to-rose-500">
-                Criar minha conta grátis
+              <Button 
+                className="mt-3 w-full"
+                style={{ backgroundColor: settings?.accent_color || undefined }}
+              >
+                {settings?.cta_button_text || "Criar minha conta grátis"}
               </Button>
             </Link>
           </div>
+        )}
+
+        {settings?.footer_text && (
+          <p className="text-[10px] text-center text-white/30 pt-2">{settings.footer_text}</p>
         )}
 
         <Link to={backTarget} replace className="block text-center text-xs text-white/40 mt-4 hover:text-white/70">
