@@ -16,13 +16,14 @@ import {
   Sparkles,
   Loader2,
   Wifi,
-  ExternalLink,
-  RefreshCw,
-  MessageSquareHeart,
-  Trash2,
-  Clock,
-  Info,
+  ExternalLink, 
+  RefreshCw, 
+  MessageSquareHeart, 
+  Trash2, 
+  Clock, 
+  Info, 
   Calculator,
+  Eye,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
