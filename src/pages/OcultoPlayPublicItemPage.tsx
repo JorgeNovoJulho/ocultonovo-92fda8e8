@@ -187,6 +187,7 @@ export default function OcultoPlayPublicItemPage() {
               apikey: EXTERNAL_SUPABASE_ANON_KEY,
               Authorization: `Bearer ${EXTERNAL_SUPABASE_ANON_KEY}`,
             },
+            cache: 'no-store',
           }
         );
         if (alive && resp.ok) {
@@ -1018,7 +1019,7 @@ export default function OcultoPlayPublicItemPage() {
         )}
 
         {/* Banner +18 / convite cadastro (somente visitante) */}
-        {!user && item && (settings?.show_signup_cta !== false) && (
+        {item && (settings?.show_signup_cta !== false) && (
           <div className="rounded-2xl border border-fuchsia-500/30 bg-card/40 p-5 sm:p-6 text-center shadow-xl space-y-4">
             <div className="space-y-2">
               <h3 className="text-lg sm:text-xl font-bold text-primary flex items-center justify-center gap-2">
