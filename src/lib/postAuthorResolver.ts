@@ -223,13 +223,22 @@ export async function getResolvedAuthorScope(authUserId: string, options?: Resol
   if (pending) return pending;
 
   const request = (async () => {
-    const { authorProfileId, creatorId } = await getCanonicalAuthorIds(authUserId);
+    const canonical = await getCanonicalAuthorIds(authUserId);
+    let authorProfileId = canonical.authorProfileId;
+    const creatorId = canonical.creatorId;
 
     const profileIds = new Set<string>();
     if (authorProfileId) profileIds.add(authorProfileId);
     const matchedUsernames = new Set<string>();
 
     const relatedProfiles = sortProfileRows(await getProfilesForAuthUser(authUserId), usernameHints);
+    // Se a 1ª consulta estourou o tempo (comum no 4G), getCanonicalAuthorIds cai
+    // no auth.uid. Corrige com o perfil real assim que ele chegar, para não
+    // gravar no cache um id que não é o do perfil.
+    if (authorProfileId === authUserId && relatedProfiles[0]?.id && relatedProfiles[0].id !== authUserId) {
+      authorProfileId = relatedProfiles[0].id as string;
+      profileIds.add(authorProfileId);
+    }
     const canonicalUsername = normalizeUsernameCandidate(relatedProfiles[0]?.username);
     for (const row of relatedProfiles) {
       if (row?.id) profileIds.add(row.id);
@@ -265,8 +274,13 @@ export async function getResolvedAuthorScope(authUserId: string, options?: Resol
       hasLegacyProfiles: profileIds.size > 1,
     } satisfies ResolvedAuthorScope;
 
-    writeCachedAuthorScope(cacheKey, resolved);
-    writeCachedAuthorScope(buildAuthorScopeCacheKey(authUserId), resolved);
+    // Resultado incompleto (rede falhou e só sobrou o auth.uid): usa, mas não
+    // grava no cache — a próxima tentativa resolve o perfil certo.
+    const incomplete = relatedProfiles.length === 0 && profileIds.size <= 1 && authorProfileId === authUserId;
+    if (!incomplete) {
+      writeCachedAuthorScope(cacheKey, resolved);
+      writeCachedAuthorScope(buildAuthorScopeCacheKey(authUserId), resolved);
+    }
     return resolved;
   })();
 

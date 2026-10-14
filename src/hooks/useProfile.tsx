@@ -226,6 +226,38 @@ const isAbortError = (err: any) => {
   return name === 'AbortError' || code === '20' || /aborted|signal is aborted/i.test(msg);
 };
 
+/** Falhas de rede comuns no celular (4G oscilando, Safari/Chrome Android). */
+const isNetworkError = (err: any) => {
+  const msg = String(err?.message || err?.details || '');
+  return /failed to fetch|load failed|networkerror|network request failed|timeout|fetch failed|ERR_NETWORK|ECONNRESET/i.test(msg);
+};
+
+/**
+ * Último perfil REAL carregado do banco neste aparelho. Usado quando a rede
+ * falha: antes caíamos num perfil "inventado" a partir do login (id = auth.uid
+ * e @ tirado do e-mail), o que no celular trocava os dados do usuário, sumia
+ * com os posts dele no feed/Play e deixava contadores errados.
+ */
+const LAST_GOOD_KEY = (uid: string) => `oculto:profile:last-good:v1:${uid}`;
+const LAST_GOOD_TTL = 7 * 24 * 60 * 60 * 1000;
+const saveLastGoodProfile = (uid: string, profile: Profile) => {
+  try {
+    const { pix_key: _pk, ...safe } = profile as any;
+    localStorage.setItem(LAST_GOOD_KEY(uid), JSON.stringify({ at: Date.now(), profile: safe }));
+  } catch { /* storage cheio / privado */ }
+};
+const loadLastGoodProfile = (uid: string): Profile | null => {
+  try {
+    const raw = localStorage.getItem(LAST_GOOD_KEY(uid));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.profile?.id || Date.now() - Number(parsed.at || 0) > LAST_GOOD_TTL) return null;
+    return { ...(parsed.profile as Profile), __stale: true } as Profile;
+  } catch { return null; }
+};
+const markFallback = (p: Profile): Profile => ({ ...(p as any), __fallback: true } as Profile);
+const isFallbackProfile = (p: unknown) => !!(p as any)?.__fallback || !!(p as any)?.__stale;
+
 const tryPublicProfileFallback = async (userId: string): Promise<ProfileRow | null> => {
   try {
     const { data: byUserId, error: byUserIdError } = await (supabasePublic as any)
@@ -281,9 +313,11 @@ export function useProfile() {
 
   const { data: profile, isLoading, error } = useQuery({
     queryKey: ['profile', user?.id],
-    retry: (failureCount, err: any) => isAbortError(err) && failureCount < 3,
+    retry: (failureCount, err: any) => (isAbortError(err) || isNetworkError(err)) && failureCount < 4,
     retryDelay: (attempt) => Math.min(600 * 2 ** attempt, 4000),
     staleTime: 30_000,
+    // Enquanto estiver com perfil provisório (rede falhou), tenta de novo logo.
+    refetchInterval: (query) => (isFallbackProfile(query.state.data) ? 5_000 : false),
     placeholderData: (previousData) => previousData ?? placeholderProfile,
     queryFn: async () => {
       if (!user?.id) return null;
@@ -309,8 +343,12 @@ export function useProfile() {
         err = profileByIdError;
       }
 
-      // Abort transitório (RQ cancel / unmount): propaga para retry, não polui fallback.
-      if (err && isAbortError(err)) {
+      // Abort / falha de rede transitória: propaga para retry (mantém o perfil
+      // anterior na tela) em vez de cair num perfil provisório errado.
+      if (err && (isAbortError(err) || isNetworkError(err))) {
+        const lastGood = loadLastGoodProfile(user.id);
+        const current = queryClient.getQueryData(['profile', user.id]) as Profile | null | undefined;
+        if (!current?.id && lastGood) return lastGood;
         throw err;
       }
 
@@ -325,7 +363,7 @@ export function useProfile() {
           return normalizedPublic;
         }
         console.warn('[Perfil] DB inacessível, usando fallback local:', (err as any).code, err.message);
-        return buildFallbackProfile(user);
+        return loadLastGoodProfile(user.id) ?? markFallback(buildFallbackProfile(user));
       }
 
       if (!data) {
@@ -369,7 +407,9 @@ export function useProfile() {
         setTimeout(() => {
           queryClient.invalidateQueries({ queryKey: ['profile', user?.id] });
         }, 1500);
-        const fb = buildFallbackProfile(user);
+        const lastGood = loadLastGoodProfile(user.id);
+        if (lastGood) return lastGood;
+        const fb = markFallback(buildFallbackProfile(user));
         const cached = loadProfileImages(user.id);
         if (cached) {
           return {
@@ -397,10 +437,11 @@ export function useProfile() {
       }
 
       const normalized = normalizeProfile(data as ProfileRow);
-      if (user.email === 'ocultomaster@ocultoswing.com.br') {
-        return { ...normalized, plan_type: 'vip', is_vip: true, is_verified: true, is_oculto_verified: true } as Profile;
-      }
-      return normalized;
+      const finalProfile = user.email === 'ocultomaster@ocultoswing.com.br'
+        ? ({ ...normalized, plan_type: 'vip', is_vip: true, is_verified: true, is_oculto_verified: true } as Profile)
+        : normalized;
+      saveLastGoodProfile(user.id, finalProfile);
+      return finalProfile;
     },
     enabled: !!user?.id && authReady,
   });
@@ -409,7 +450,7 @@ export function useProfile() {
   // Nunca sobrescreve uma URL válida em cache com `null` (evita que um
   // fetch parcial pós-update apague avatar/banner do cache local).
   useEffect(() => {
-    if (!user?.id || !profile) return;
+    if (!user?.id || !profile || !profile.id || isFallbackProfile(profile)) return;
     const prev = loadProfileImages(user.id);
     saveProfileImages(user.id, {
       avatar_url: profile.avatar_url ?? prev?.avatar_url ?? null,
