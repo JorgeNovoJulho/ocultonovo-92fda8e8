@@ -113,6 +113,7 @@ const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const PulsesSettingsPage = lazy(() => import("./pages/PulsesSettingsPage"));
 const AttentionHistoryPage = lazy(() => import("./pages/AttentionHistoryPage"));
 const ProfileDiagnosticsPage = lazy(() => import("./pages/ProfileDiagnosticsPage"));
+const SessionDiagnosticsPage = lazy(() => import("./pages/SessionDiagnosticsPage"));
 const EarningsPage = lazy(() => import("./pages/EarningsPage"));
 const EarningsBreakdownPage = lazy(() => import("./pages/EarningsBreakdownPage"));
 const EarningsStatementPage = lazy(() => import("./pages/EarningsStatementPage"));
@@ -536,6 +537,7 @@ const App = () => {
                   <Route path="/settings/pulses" element={<Suspense fallback={<PageFallback />}><PulsesSettingsPage /></Suspense>} />
                   <Route path="/settings/pulses/history" element={<Suspense fallback={<PageFallback />}><AttentionHistoryPage /></Suspense>} />
                   <Route path="/debug/profile" element={<Suspense fallback={<PageFallback />}><ProfileDiagnosticsPage /></Suspense>} />
+                  <Route path="/debug/sessao" element={<ProtectedRoute><Suspense fallback={<PageFallback />}><SessionDiagnosticsPage /></Suspense></ProtectedRoute>} />
                   <Route path="/earnings" element={<Suspense fallback={<PageFallback />}><EarningsPage /></Suspense>} />
                   <Route path="/earnings/breakdown" element={<Suspense fallback={<PageFallback />}><EarningsBreakdownPage /></Suspense>} />
                   <Route path="/earnings/statement" element={<Suspense fallback={<PageFallback />}><EarningsStatementPage /></Suspense>} />
