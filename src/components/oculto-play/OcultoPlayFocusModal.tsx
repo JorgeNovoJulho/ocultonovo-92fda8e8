@@ -1031,6 +1031,7 @@ export function OcultoPlayFocusModal({
                         key={item.id}
                         sourceUrl={linkSourceUrl}
                         thumbUrl={item.thumb_url ?? null}
+                        title={item.title ?? null}
                         lazyClickToPlay={false}
                         restoreFullscreen
                         autoPlay={autoPlayLink}

@@ -214,10 +214,11 @@ export function parseEmbeddedVideo(rawUrl: string): ParsedEmbeddedVideo | null {
   }
 
   if (isDirectVideoUrl(url)) {
+    const direct = toDirectDownloadUrl(url);
     return {
       kind: 'direct',
       id: url,
-      embedSrc: url,
+      embedSrc: direct,
       originalUrl: url,
     };
   }
@@ -243,6 +244,25 @@ export function parseEmbeddedVideo(rawUrl: string): ParsedEmbeddedVideo | null {
 }
 
 /**
+ * Links de compartilhamento que abrem uma PÁGINA em vez do arquivo: converte
+ * para o endereço do arquivo bruto (assim o <video> consegue tocar).
+ *  - Dropbox: ?dl=0 → dl.dropboxusercontent.com (arquivo direto)
+ */
+function toDirectDownloadUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    const host = u.hostname.replace(/^www\./, '');
+    if (host === 'dropbox.com') {
+      u.hostname = 'dl.dropboxusercontent.com';
+      u.searchParams.delete('dl');
+      u.searchParams.delete('raw');
+      return u.toString();
+    }
+  } catch { /* noop */ }
+  return raw;
+}
+
+/**
  * Constrói uma URL de embed amigável para provedores conhecidos que não têm
  * parser dedicado. Para provedores desconhecidos devolve null e o caller usa
  * a URL original — o iframe pode ainda renderizar se o site permitir.
@@ -250,6 +270,13 @@ export function parseEmbeddedVideo(rawUrl: string): ParsedEmbeddedVideo | null {
 function buildGenericEmbedSrc(u: URL): string | null {
   const host = u.hostname.replace(/^www\./, '');
   const path = u.pathname;
+
+  // Google Drive: /file/d/<id>/view → /preview (player do próprio Drive)
+  if (host === 'drive.google.com') {
+    const m = path.match(/\/file\/d\/([A-Za-z0-9_-]+)/) || null;
+    const id = m?.[1] || u.searchParams.get('id');
+    if (id) return `https://drive.google.com/file/d/${id}/preview`;
+  }
 
   // Dailymotion: /video/<id>
   if (/(^|\.)dailymotion\.com$/.test(host)) {

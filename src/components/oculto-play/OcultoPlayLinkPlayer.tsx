@@ -1,32 +1,23 @@
 /**
  * OcultoPlayLinkPlayer — renderiza um item do Play do tipo `link`. Detecta a
  * plataforma a partir de `source_url` (ou `media_url` como fallback) e mostra
- * o player oficial (YouTube/Vimeo/TikTok) ou um <video> nativo (arquivos
- * diretos .mp4/.webm). Inclui botão de tela cheia (Fullscreen API).
+ * o player oficial (YouTube/Vimeo/TikTok/Drive…) ou o OcultoMoviePlayer para
+ * arquivos e streams diretos (.mp4/.webm/.mkv/.m3u8/.mpd…).
  *
- * Persistência: a preferência de tela cheia é mantida entre reaberturas do
- * modal via `localStorage('oculto:play:link:fs')`. Quando o usuário sai do
- * modal, qualquer fullscreen ativo é fechado automaticamente.
+ * A opção "abrir no VLC" foi removida: nunca funcionou de forma confiável nos
+ * navegadores. Formatos que nenhum navegador toca (AVI, WMV, FLV…) mostram uma
+ * tela clara com "Abrir link".
  */
 import { useMemo, useRef, useState, useEffect } from 'react';
-import { ExternalLink, PlayCircle, Maximize, Minimize, Download, Info } from 'lucide-react';
+import { ExternalLink, PlayCircle, Maximize, Minimize, Download, Info, AlertTriangle } from 'lucide-react';
 import { parseEmbeddedVideo } from '@/lib/embeddedVideoUrl';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { ModernVideoPlayer } from '@/components/oculto-play/ModernVideoPlayer';
+import { OcultoMoviePlayer, BROWSER_UNSUPPORTED_EXT } from '@/components/oculto-play/OcultoMoviePlayer';
 
 const FS_PREF_KEY = 'oculto:play:link:fs';
 const TIME_PREF_PREFIX = 'oculto:play:link:t:';
 const TIME_MIN_SAVE = 3; // segundos — não salva os primeiros 3s
-const VLC_DETECTED_KEY = 'oculto:play:vlc:detected';
-const VLC_DOWNLOAD_URL = 'https://www.videolan.org/vlc/';
-const VLC_ANDROID_URL = 'https://play.google.com/store/apps/details?id=org.videolan.vlc';
-const VLC_IOS_URL = 'https://apps.apple.com/app/vlc-media-player/id650377962';
-
-type VlcLaunchState = 'idle' | 'opening' | 'opened' | 'fallback';
-type VlcPlatform = 'android' | 'ios' | 'desktop';
-type BrowserVideoSupport = 'native' | 'hls' | 'dash' | 'handoff';
-
 function readFsPref(): boolean {
   try { return localStorage.getItem(FS_PREF_KEY) === '1'; } catch { return false; }
 }
@@ -51,190 +42,10 @@ function clearSavedTime(itemId: string) {
   try { localStorage.removeItem(TIME_PREF_PREFIX + itemId); } catch { /* noop */ }
 }
 
-function getUserAgent(): string {
-  try { return navigator.userAgent || ''; } catch { return ''; }
-}
-
-function getVlcPlatform(ua = getUserAgent()): VlcPlatform {
-  if (/Android/i.test(ua)) return 'android';
-  if (/iPad|iPhone|iPod/i.test(ua)) return 'ios';
-  return 'desktop';
-}
-
-function getVlcInstallUrl(platform = getVlcPlatform()): string {
-  if (platform === 'android') return VLC_ANDROID_URL;
-  if (platform === 'ios') return VLC_IOS_URL;
-  return VLC_DOWNLOAD_URL;
-}
-
-function readVlcDetected(): boolean {
-  try { return localStorage.getItem(VLC_DETECTED_KEY) === '1'; } catch { return false; }
-}
-
-function writeVlcDetected() {
-  try { localStorage.setItem(VLC_DETECTED_KEY, '1'); } catch { /* noop */ }
-}
-
-/**
- * Prefs VLC — priorizar áudio em português e legendas desligadas por padrão.
- * VLC ativa automaticamente legendas em pt quando o filme não tem faixa de
- * áudio em pt (comportamento nativo com --sub-language quando --audio-language
- * não é encontrado no arquivo).
- */
-const VLC_AUDIO_LANG = 'pt,por,pob';
-const VLC_SUB_LANG = 'pt,por,pob';
-
-function buildDesktopVlcUris(mediaUrl: string): string[] {
-  const encoded = encodeURIComponent(mediaUrl);
-  const hint = `audio-language=${encodeURIComponent(VLC_AUDIO_LANG)}&sub-language=${encodeURIComponent(VLC_SUB_LANG)}&sub-autodetect-file=1`;
-  return [
-    // Handler vlc-protocol (Windows/macOS/Linux): preserva URLs com query assinada.
-    `vlc://weblink?url=${encoded}&${hint}`,
-    // Formato padrão de handlers vlc://.
-    `vlc://${mediaUrl}`,
-  ];
-}
-
-function buildVlcHandoffUrls(mediaUrl: string): { platform: VlcPlatform; uris: string[] } {
-  const platform = getVlcPlatform();
-
-  if (platform === 'ios') {
-    return {
-      platform,
-      uris: [
-        `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(mediaUrl)}`,
-        `vlc://${mediaUrl}`,
-      ],
-    };
-  }
-
-  if (platform === 'android') {
-    const extras = [
-      'S.title=OCULTO%20PLAY',
-      `S.audio_language=${encodeURIComponent(VLC_AUDIO_LANG)}`,
-      `S.subtitle_language=${encodeURIComponent(VLC_SUB_LANG)}`,
-    ].join(';');
-    try {
-      const parsedUrl = new URL(mediaUrl);
-      const scheme = parsedUrl.protocol.replace(':', '');
-      const rest = mediaUrl.replace(/^[a-z][a-z\d+.-]*:\/\//i, '');
-      return {
-        platform,
-        uris: [
-          `intent://${rest}#Intent;scheme=${scheme};action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;package=org.videolan.vlc;type=video/*;${extras};end`,
-          `vlc://${mediaUrl}`,
-        ],
-      };
-    } catch {
-      return {
-        platform,
-        uris: [
-          `intent://${mediaUrl.replace(/^[a-z][a-z\d+.-]*:\/\//i, '')}#Intent;scheme=http;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;package=org.videolan.vlc;type=video/*;${extras};end`,
-          `vlc://${mediaUrl}`,
-        ],
-      };
-    }
-  }
-
-  // Desktop — só usamos protocolos externos. Download de playlist foi removido
-  // porque o browser expõe a janela "salvar arquivo" e não permite deletar
-  // esse arquivo local em segundo plano.
-  return {
-    platform,
-    uris: [
-      `vlc://${mediaUrl}`,
-    ],
-  };
-}
-
-function launchExternalAppUri(uri: string, platform: VlcPlatform, mode: 'primary' | 'fallback' = 'primary') {
-  if (platform === 'android' || platform === 'ios') {
-    window.location.href = uri;
-    return;
-  }
-  const a = document.createElement('a');
-  a.href = uri;
-  a.rel = 'noreferrer';
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  window.setTimeout(() => a.remove(), 0);
-  if (mode === 'primary') {
-    try {
-      const f = document.createElement('iframe');
-      f.style.display = 'none';
-      f.src = uri;
-      document.body.appendChild(f);
-      window.setTimeout(() => f.remove(), 2500);
-    } catch { /* noop */ }
-  }
-}
-
-/**
- * Desktop: tenta abrir somente via protocolo externo. Browsers não permitem
- * criar/abrir/deletar arquivo local em segundo plano; por isso removemos o
- * fallback .m3u8 que causava a janela "salvar arquivo".
- */
-function launchVlcDesktop(mediaUrl: string, onOpened?: () => void, onFailed?: () => void): boolean {
-  const uris = buildDesktopVlcUris(mediaUrl);
-
-  let handoffDetected = false;
-  const markOpened = () => {
-    if (handoffDetected) return;
-    handoffDetected = true;
-    try { onOpened?.(); } catch { /* noop */ }
-  };
-  const onBlur = () => markOpened();
-  const onHide = () => { if (document.hidden) markOpened(); };
-  window.addEventListener('blur', onBlur, { once: true });
-  document.addEventListener('visibilitychange', onHide);
-
-  uris.forEach((uri, index) => window.setTimeout(() => {
-    if (handoffDetected || document.hidden) return;
-    const a = document.createElement('a');
-    a.href = uri;
-    a.rel = 'noreferrer';
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    window.setTimeout(() => a.remove(), 0);
-  }, index * 450));
-
-  window.setTimeout(() => {
-    window.removeEventListener('blur', onBlur);
-    document.removeEventListener('visibilitychange', onHide);
-    if (!handoffDetected && !document.hidden) onFailed?.();
-  }, 2200);
-
-  return true;
-}
-
 function getDirectVideoExt(rawUrl: string): string {
   try { return (new URL(rawUrl).pathname.match(/\.([a-z0-9]+)$/i)?.[1] || '').toLowerCase(); }
   catch { return ''; }
 }
-
-function canPlayNativeExt(ext: string): boolean {
-  if (typeof document === 'undefined') return false;
-  const v = document.createElement('video');
-  const candidates: Record<string, string[]> = {
-    mp4: ['video/mp4; codecs="avc1.42E01E, mp4a.40.2"', 'video/mp4'],
-    m4v: ['video/mp4; codecs="avc1.42E01E, mp4a.40.2"', 'video/mp4'],
-    webm: ['video/webm; codecs="vp9, opus"', 'video/webm'],
-    ogv: ['video/ogg; codecs="theora, vorbis"', 'video/ogg'],
-    ogg: ['video/ogg; codecs="theora, vorbis"', 'video/ogg'],
-    mov: ['video/quicktime', 'video/mp4'],
-  };
-  return (candidates[ext] || []).some(type => !!v.canPlayType(type));
-}
-
-function getBrowserVideoSupport(ext: string): BrowserVideoSupport {
-  if (ext === 'm3u8') return 'hls';
-  if (ext === 'mpd') return 'dash';
-  if (canPlayNativeExt(ext)) return 'native';
-  return 'handoff';
-}
-
 
 /** Sai de qualquer fullscreen ativo. Útil ao desmontar o modal. */
 export async function exitLinkPlayerFullscreen() {
@@ -278,6 +89,8 @@ interface Props {
   preferThumb?: boolean;
   /** Ajuste da capa exibida antes do play. 'contain' preserva a imagem completa. */
   coverFit?: 'cover' | 'contain';
+  /** Título mostrado no topo do player em tela cheia. */
+  title?: string | null;
 }
 
 
@@ -285,7 +98,6 @@ function appendAutoplayParam(src: string): string {
   try {
     const u = new URL(src);
     u.searchParams.set('autoplay', '1');
-    // Para embeds de arquivos diretos via ModernVideoPlayer, passamos o muted
     if (!u.searchParams.has('muted')) u.searchParams.set('muted', '1');
     // Forçar preload e buffering agressivo
     u.searchParams.set('preload', 'auto');
@@ -356,6 +168,7 @@ export function OcultoPlayLinkPlayer({
   endSeconds = null,
   preferThumb = false,
   coverFit = 'cover',
+  title = null,
 }: Props) {
   const parsed = useMemo(() => parseEmbeddedVideo(sourceUrl), [sourceUrl]);
   const [active, setActive] = useState(!lazyClickToPlay || autoPlay);
@@ -371,9 +184,6 @@ export function OcultoPlayLinkPlayer({
   const trimStart = Math.max(0, Number(startSeconds ?? 0) || 0);
   const trimEnd = Math.max(0, Number(endSeconds ?? 0) || 0);
   const hasTrimWindow = trimEnd > trimStart;
-  const [vlcLaunchState, setVlcLaunchState] = useState<VlcLaunchState>('idle');
-  const [vlcKnownInstalled, setVlcKnownInstalled] = useState(() => readVlcDetected());
-  const [directPlaybackFailed, setDirectPlaybackFailed] = useState(false);
 
   const reportCompletion = () => {
     if (completionReportedRef.current) return;
@@ -386,8 +196,6 @@ export function OcultoPlayLinkPlayer({
     completionReportedRef.current = false;
     watchedMsRef.current = 0;
     lastTickRef.current = null;
-    setVlcLaunchState('idle');
-    setDirectPlaybackFailed(false);
   }, [itemId, sourceUrl, trimStart, trimEnd]);
 
   // ---- Reportar visualização após N segundos de reprodução ativa --------
@@ -637,161 +445,46 @@ export function OcultoPlayLinkPlayer({
 
   if (parsed.kind === 'direct') {
     const ext = getDirectVideoExt(parsed.embedSrc);
-    const browserSupport = getBrowserVideoSupport(ext);
 
-    if (browserSupport === 'handoff' || directPlaybackFailed) {
-      // install URL é obtido on-demand no fallback discreto abaixo
-      const openInVlc = () => {
-        const url = parsed.embedSrc;
-        const platform = getVlcPlatform();
-        let opened = false;
-        let cleaned = false;
-
-        const cleanup = () => {
-          if (cleaned) return;
-          cleaned = true;
-          window.removeEventListener('blur', markOpened);
-          window.removeEventListener('pagehide', markOpened);
-          document.removeEventListener('visibilitychange', markVisibilityOpened);
-        };
-        const markOpened = () => {
-          opened = true;
-          writeVlcDetected();
-          setVlcKnownInstalled(true);
-          setVlcLaunchState('opened');
-          window.setTimeout(cleanup, 900);
-        };
-        const markVisibilityOpened = () => {
-          if (document.hidden) markOpened();
-        };
-
-        setVlcLaunchState('opening');
-        window.addEventListener('blur', markOpened);
-        window.addEventListener('pagehide', markOpened);
-        document.addEventListener('visibilitychange', markVisibilityOpened);
-
-        // ---------- Desktop: vlc:// direto, sem download de arquivo --------
-        if (platform === 'desktop') {
-          launchVlcDesktop(url, () => {
-            writeVlcDetected();
-            setVlcKnownInstalled(true);
-            setVlcLaunchState('opened');
-            cleanup();
-          }, () => {
-            setVlcLaunchState('fallback');
-            cleanup();
-          });
-          return;
-        }
-
-
-        // ---------- Mobile: intents / custom schemes ---------------------
-        const { uris } = buildVlcHandoffUrls(url);
-        try {
-          launchExternalAppUri(uris[0], platform, 'primary');
-          if (platform === 'android' && uris[1]) {
-            window.setTimeout(() => {
-              if (!opened && !document.hidden) launchExternalAppUri(uris[1], platform, 'fallback');
-            }, 900);
-          }
-        } catch {
-          cleanup();
-          setVlcLaunchState('fallback');
-          return;
-        }
-
-        window.setTimeout(() => {
-          cleanup();
-          if (!opened && !document.hidden) setVlcLaunchState('fallback');
-        }, platform === 'android' ? 4200 : 3200);
-      };
-
+    if (BROWSER_UNSUPPORTED_EXT.has(ext)) {
       return (
-        <div
-          className={cn(
-            'relative flex flex-col items-center justify-center rounded-lg bg-black overflow-hidden mx-auto',
-            !isFs && aspectClass,
-            className,
-          )}
-        >
-          {thumbUrl ? (
-            <img
-              src={thumbUrl}
-              alt=""
-              className="absolute inset-0 h-full w-full object-contain bg-black"
-              loading="lazy"
-              decoding="async"
-            />
-          ) : null}
-
-          {/* Tag VLC — indica que o filme precisa do VLC */}
-          <div className="absolute top-2 left-2 z-20 inline-flex items-center gap-1 rounded-md bg-orange-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white shadow-lg ring-1 ring-black/40">
-            VLC
+        <div className={cn('relative flex items-center justify-center overflow-hidden rounded-lg bg-black p-5 text-center mx-auto', aspectClass, className)}>
+          {thumbUrl ? <img src={thumbUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-25" loading="lazy" decoding="async" /> : null}
+          <div className="relative z-10 max-w-sm space-y-3 text-white">
+            <AlertTriangle className="mx-auto h-9 w-9 text-amber-400" />
+            <p className="text-sm font-bold">Formato .{ext.toUpperCase()} não toca no navegador</p>
+            <p className="text-xs text-white/70">Para assistir aqui, o filme precisa estar em MP4 (H.264 + AAC), WebM ou HLS (.m3u8). Você ainda pode abrir o link original.</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <a href={parsed.embedSrc} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-sm font-bold text-black">
+                <ExternalLink className="h-4 w-4" /> Abrir link
+              </a>
+              <a href={parsed.embedSrc} download className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-4 py-2 text-sm font-bold">
+                <Download className="h-4 w-4" /> Baixar
+              </a>
+            </div>
           </div>
-
-          {/* Overlay sutil + play central */}
-          <button
-            type="button"
-            onClick={openInVlc}
-            aria-label="Abrir no VLC"
-            className="absolute inset-0 z-10 grid place-items-center bg-gradient-to-t from-black/70 via-black/10 to-transparent transition active:scale-[0.99]"
-          >
-            <span className="grid h-16 w-16 place-items-center rounded-full bg-orange-500/95 text-white shadow-2xl ring-2 ring-white/25 hover:bg-orange-600">
-              <PlayCircle className="h-9 w-9" />
-            </span>
-            <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-[11px] font-semibold text-white ring-1 ring-white/15">
-              {vlcLaunchState === 'opening' ? 'Abrindo VLC…' : 'Toque para abrir no VLC'}
-            </span>
-          </button>
-
-          {/* Fallback discreto — só aparece se detectarmos que o VLC não abriu */}
-          {vlcLaunchState === 'fallback' && !vlcKnownInstalled ? (
-            <a
-              href={getVlcInstallUrl()}
-              target="_blank"
-              rel="noreferrer"
-              className="absolute bottom-2 right-2 z-20 inline-flex items-center gap-1 rounded-md bg-black/80 px-2 py-1 text-[10px] font-semibold text-orange-200 ring-1 ring-orange-500/40"
-            >
-              <Download className="h-3 w-3" /> Instalar VLC
-            </a>
-          ) : null}
         </div>
       );
     }
 
-
-
     return (
       <div
-        ref={wrapRef}
         className={cn(
           'relative w-full bg-black rounded-lg overflow-hidden mx-auto',
-          !isFs && aspectClass,
-          !isFs && 'max-w-full',
+          aspectClass,
+          'max-w-full',
           className,
         )}
       >
-        <ModernVideoPlayer
+        <OcultoMoviePlayer
           src={parsed.embedSrc}
           poster={thumbUrl ?? undefined}
           ext={ext}
+          title={title}
+          itemId={itemId}
+          originalUrl={parsed.originalUrl}
           autoPlay={autoPlay}
-          muted={false}
           videoRefCallback={(el) => { videoRef.current = el; }}
-          onReady={(v) => {
-            // Se o browser bloquear o autoplay com som, cai para muted e
-            // tenta novamente — mantendo a reprodução iniciada. O usuário
-            // reativa o som pelos controles nativos (não fica silenciado
-            // "escondido"). Sem esse fallback, autoplay pode falhar em
-            // páginas sem gesto direto (deep-link / suggestions).
-            if (!autoPlay) return;
-            const tryPlay = async () => {
-              try { await v.play(); } catch {
-                try { v.muted = true; await v.play(); } catch { /* noop */ }
-              }
-            };
-            tryPlay();
-          }}
           onLoadedMetadata={(v) => {
             const saved = hasTrimWindow ? 0 : readSavedTime(itemId);
             const startAt = trimStart > 0 ? trimStart : saved;
@@ -817,9 +510,7 @@ export function OcultoPlayLinkPlayer({
             }
           }}
           onEnded={() => { if (itemId && !hasTrimWindow) clearSavedTime(itemId); reportCompletion(); }}
-          onError={() => setDirectPlaybackFailed(true)}
         />
-        {FsButton}
       </div>
     );
   }
