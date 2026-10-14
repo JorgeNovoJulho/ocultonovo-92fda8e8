@@ -96,6 +96,76 @@ Plataforma brasileira de rede social completa para adultos . Verificação, Modo
   <body>
 
     <div id="root"></div>
+    <!-- ── RECUPERAÇÃO DE INICIALIZAÇÃO ───────────────────────────────────
+         Se o JavaScript principal não carregar (versão antiga em cache
+         apontando para arquivos que não existem mais após um deploy), o app
+         ficava em tela branca para sempre. Aqui: limpa o cache offline e
+         recarrega a versão nova (no máximo 2 vezes); depois mostra um botão.
+    ──────────────────────────────────────────────────────────────────── -->
+    <script>
+      (function () {
+        var KEY = 'oculto-boot-recover';
+        var done = false;
+        function rootEmpty() {
+          var r = document.getElementById('root');
+          return !r || r.childElementCount === 0;
+        }
+        function showFallback() {
+          var r = document.getElementById('root');
+          if (!r || !rootEmpty()) return;
+          r.innerHTML =
+            '<div style="min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#0b0b10;color:#fff;font-family:Inter,system-ui,sans-serif;padding:24px;text-align:center">' +
+            '<p style="font-size:18px;font-weight:800;margin:0">O OCULTO foi atualizado</p>' +
+            '<p style="font-size:14px;opacity:.75;margin:0">Toque para carregar a versão nova.</p>' +
+            '<button id="oculto-boot-reload" style="background:#d946ef;color:#fff;border:0;border-radius:12px;padding:12px 22px;font-weight:800;font-size:15px">Atualizar agora</button></div>';
+          var b = document.getElementById('oculto-boot-reload');
+          if (b) b.onclick = function () { try { sessionStorage.removeItem(KEY); } catch (e) {} recover(true); };
+        }
+        function recover(force) {
+          if (done) return;
+          var tries = 0;
+          try { tries = Number(sessionStorage.getItem(KEY) || 0); } catch (e) {}
+          if (!force && tries >= 2) { showFallback(); return; }
+          done = true;
+          try { sessionStorage.setItem(KEY, String(tries + 1)); } catch (e) {}
+          var jobs = [];
+          try {
+            if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+              jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+                return Promise.all(rs.map(function (r) { return r.unregister(); }));
+              }));
+            }
+          } catch (e) {}
+          try {
+            if (window.caches && caches.keys) {
+              jobs.push(caches.keys().then(function (ks) {
+                return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+              }));
+            }
+          } catch (e) {}
+          var go = function () {
+            var u = location.pathname + '?v=' + Date.now() + location.hash;
+            location.replace(u);
+          };
+          Promise.all(jobs).then(go, go);
+          setTimeout(go, 2500);
+        }
+        // Arquivo JS/CSS do app que não carregou.
+        window.addEventListener('error', function (ev) {
+          var t = ev && ev.target;
+          if (!t || (t.tagName !== 'SCRIPT' && t.tagName !== 'LINK')) return;
+          var src = t.src || t.href || '';
+          if (src.indexOf('/assets/') === -1) return;
+          if (rootEmpty()) recover(false);
+        }, true);
+        // Carregou tudo e mesmo assim nada apareceu.
+        window.addEventListener('load', function () {
+          setTimeout(function () { if (rootEmpty()) recover(false); }, 6000);
+          // Inicializou certo: zera as tentativas.
+          setTimeout(function () { if (!rootEmpty()) { try { sessionStorage.removeItem(KEY); } catch (e) {} } }, 8000);
+        });
+      })();
+    </script>
     <!-- ── NUCLEAR SCROLL UNLOCKER ─────────────────────────────────────────
          Radix UI / Vaul injetam overflow:hidden no body via JS.
          Este script intercepta a propriedade e neutraliza qualquer bloqueio.

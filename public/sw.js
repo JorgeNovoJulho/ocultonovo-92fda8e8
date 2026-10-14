@@ -7,7 +7,10 @@
 
 // v10: descarta caches antigos que podem ter guardado o index.html no lugar
 // de arquivos JS/CSS de versões anteriores (causava "Algo deu errado").
-const CACHE_VERSION = 'v10';
+// v11: página do app só vem do cache quando a rede FALHA de verdade (antes,
+// 3s de 4G lento já entregavam um index.html antigo apontando para arquivos
+// JS que não existem mais → tela branca no celular após deploys).
+const CACHE_VERSION = 'v11';
 const ASSET_CACHE   = `oculto-assets-${CACHE_VERSION}`;
 const IMAGE_CACHE   = `oculto-images-${CACHE_VERSION}`;
 const MEDIA_IMG_CACHE = `oculto-media-img-${CACHE_VERSION}`;
@@ -103,8 +106,10 @@ async function networkFirstHTML(request) {
   const cache = await caches.open(HTML_CACHE);
   try {
     const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), 3000);
-    const fresh = await fetch(request, { signal: controller.signal });
+    // Online: espera a rede (até 15s). Offline: cai direto no cache.
+    const offline = self.navigator && self.navigator.onLine === false;
+    const t = setTimeout(() => controller.abort(), offline ? 1500 : 15000);
+    const fresh = await fetch(request, { signal: controller.signal, cache: 'no-store' });
     clearTimeout(t);
     // Mantém o app shell atualizado para uso offline subsequente
     try {
