@@ -163,14 +163,26 @@ export function getNotificationTarget(n: NotificationLike, actor?: ActorLike): N
   return { url: cta || '/notifications' };
 }
 
-/** Confere se a conversa existe e se o usuário logado participa dela. */
+/**
+ * Confere se o usuário logado AINDA participa da conversa. Filtra pelos ids
+ * do próprio usuário: sem isso, contas com permissão ampla (ex.: master)
+ * enxergavam a linha do OUTRO participante de uma conversa que já tinham
+ * excluído e o app achava que a conversa existia.
+ */
 async function conversationIsReachable(conversationId: string): Promise<boolean> {
   try {
     const { supabase } = await import('@/lib/supabaseExternal');
+    const { resolveChatIdentity } = await import('@/lib/chatIdentity');
+    const { data: auth } = await supabase.auth.getUser();
+    const uid = auth?.user?.id;
+    if (!uid) return true;
+    const identity = await resolveChatIdentity(uid);
+    const selfIds = identity.selfIds.length > 0 ? identity.selfIds : [uid];
     const { data, error } = await (supabase as any)
       .from('conversation_participants')
       .select('conversation_id')
       .eq('conversation_id', conversationId)
+      .in('user_id', selfIds)
       .limit(1);
     if (error) return true; // na dúvida, não bloqueia a navegação
     return Array.isArray(data) && data.length > 0;

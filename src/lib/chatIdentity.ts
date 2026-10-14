@@ -30,18 +30,32 @@ const isMissingRpc = (error: any) => {
   return text.includes('pgrst202') || text.includes('schema cache') || text.includes('function');
 };
 
+/**
+ * Busca TODAS as linhas de perfil ligadas a um id (profiles.id OU user_id).
+ *
+ * IMPORTANTE: não usar `.maybeSingle()` aqui. Existem contas com mais de uma
+ * linha em `profiles` (duplicatas antigas); com `.maybeSingle()` a consulta
+ * devolve ERRO (várias linhas) e `data = null` em silêncio — o chat passava
+ * a procurar as conversas só pelo auth id e a lista aparecia VAZIA.
+ */
+async function fetchProfileRowsByAnyId(anyId: string, columns = 'id, user_id'): Promise<any[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select(columns.includes('created_at') ? columns : `${columns}, created_at`)
+    .or(`id.eq.${anyId},user_id.eq.${anyId}`)
+    .order('created_at', { ascending: true })
+    .limit(10);
+  if (error) throw error;
+  return (data as any[]) ?? [];
+}
+
 const resolveAnyChatIds = async (anyId?: string | null) => {
   const fallback = buildIdSet(anyId);
   if (!anyId) return fallback;
 
   try {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, user_id')
-      .or(`id.eq.${anyId},user_id.eq.${anyId}`)
-      .maybeSingle();
-
-    return buildIdSet(anyId, profile?.id, profile?.user_id);
+    const rows = await fetchProfileRowsByAnyId(anyId);
+    return buildIdSet(anyId, ...rows.flatMap((r) => [r?.id, r?.user_id]));
   } catch {
     return fallback;
   }
@@ -139,16 +153,15 @@ export async function resolveChatIdentity(authUserId?: string | null): Promise<C
 
   const fetcher = (async (): Promise<ChatIdentity> => {
     try {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id, user_id')
-        .or(`user_id.eq.${safeAuthUserId},id.eq.${safeAuthUserId}`)
-        .maybeSingle();
-
+      const rows = await fetchProfileRowsByAnyId(safeAuthUserId);
+      // Perfil canônico: o mais antigo ligado ao auth id (mesma regra do useProfile).
+      const canonical = rows.find((r) => r?.user_id === safeAuthUserId) ?? rows[0] ?? null;
       const value: ChatIdentity = {
         authUserId: safeAuthUserId,
-        profileId: profile?.id ?? null,
-        selfIds: buildIdSet(safeAuthUserId, profile?.id, profile?.user_id),
+        profileId: canonical?.id ?? null,
+        // Inclui os ids de TODAS as linhas: conversas antigas podem ter sido
+        // gravadas com o id de um perfil duplicado.
+        selfIds: buildIdSet(safeAuthUserId, ...rows.flatMap((r) => [r?.id, r?.user_id])),
       };
       identityCache.set(safeAuthUserId, { value, at: Date.now() });
       return value;
@@ -167,13 +180,9 @@ export async function resolveAuthUserIdFromAnyId(anyId?: string | null): Promise
   if (!anyId) return null;
 
   try {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, user_id')
-      .or(`id.eq.${anyId},user_id.eq.${anyId}`)
-      .maybeSingle();
-
-    return profile?.user_id || anyId;
+    const rows = await fetchProfileRowsByAnyId(anyId);
+    const withAuth = rows.find((r) => r?.user_id);
+    return withAuth?.user_id || anyId;
   } catch {
     return anyId;
   }
@@ -194,11 +203,14 @@ export async function resolveProfileByAnyId<T = Record<string, any>>(
 
   const fetcher = (async (): Promise<T | null> => {
     try {
+      // `.limit(1)` em vez de `.maybeSingle()`: com perfis duplicados o
+      // maybeSingle falhava e o chat não achava a pessoa ("Usuário não encontrado").
       const [byId, byUserId] = await Promise.all([
-        supabase.from('profiles').select(columns).eq('id', anyId).maybeSingle(),
-        supabase.from('profiles').select(columns).eq('user_id', anyId).maybeSingle(),
+        supabase.from('profiles').select(columns).eq('id', anyId).limit(1),
+        supabase.from('profiles').select(columns).eq('user_id', anyId).order('created_at', { ascending: true }).limit(1),
       ]);
-      const value = ((byId.data ?? byUserId.data) as T | null) ?? null;
+      const first = (r: any) => (Array.isArray(r?.data) && r.data.length > 0 ? r.data[0] : null);
+      const value = ((first(byId) ?? first(byUserId)) as T | null) ?? null;
       profileCache.set(cacheKey, { value, at: Date.now() });
       return value;
     } finally {

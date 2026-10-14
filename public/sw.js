@@ -5,7 +5,9 @@
 // (rest/auth/realtime/functions), áudio/vídeo de storage, /version.json, /sw.js,
 // /manifest. Mantém push handler e SKIP_WAITING.
 
-const CACHE_VERSION = 'v9';
+// v10: descarta caches antigos que podem ter guardado o index.html no lugar
+// de arquivos JS/CSS de versões anteriores (causava "Algo deu errado").
+const CACHE_VERSION = 'v10';
 const ASSET_CACHE   = `oculto-assets-${CACHE_VERSION}`;
 const IMAGE_CACHE   = `oculto-images-${CACHE_VERSION}`;
 const MEDIA_IMG_CACHE = `oculto-media-img-${CACHE_VERSION}`;
@@ -125,11 +127,24 @@ async function networkFirstHTML(request) {
   }
 }
 
+// Resposta HTML para um pedido de JS/CSS = arquivo de uma versão antiga que
+// não existe mais (o servidor devolveu a página do app no lugar).
+function isHtmlResponse(res) {
+  const ct = (res && res.headers && res.headers.get('content-type')) || '';
+  return ct.includes('text/html');
+}
+
 async function cacheFirstAsset(request) {
   const cache = await caches.open(ASSET_CACHE);
   const cached = await cache.match(request);
-  if (cached) return cached;
+  if (cached && !isHtmlResponse(cached)) return cached;
+  if (cached) cache.delete(request).catch(() => {});
   const fresh = await fetch(request);
+  if (isHtmlResponse(fresh)) {
+    // NÃO guarda e devolve 404: o app detecta o arquivo ausente e recarrega
+    // a versão nova, em vez de executar HTML como JavaScript.
+    return new Response('', { status: 404, statusText: 'Asset not found' });
+  }
   if (fresh.ok) cache.put(request, fresh.clone()).catch(() => {});
   return fresh;
 }

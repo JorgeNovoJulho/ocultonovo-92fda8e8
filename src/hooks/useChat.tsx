@@ -215,6 +215,9 @@ export function useChat() {
     return [];
   });
   const [loading, setLoading] = useState(true);
+  // Falha ao carregar a lista (antes ficava só no console e a tela dizia
+  // "Nenhuma mensagem ainda", como se não houvesse conversas).
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [typingUsers, setTypingUsers] = useState<Map<string, string[]>>(new Map());
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'reconnecting' | 'error'>('connected');
   const [activeConversationId, setActiveConversationIdState] = useState<string | null>(null);
@@ -475,6 +478,7 @@ export function useChat() {
     try {
       const list = await promise;
       setConversations(list);
+      setFetchError(null);
       writeConversationsCache(userId, list);
       broadcastConversations(userId, list);
       abortRetryRef.current = 0;
@@ -504,6 +508,7 @@ export function useChat() {
         return;
       }
       console.error('[Chat] Fetch error:', error);
+      setFetchError(String((error as any)?.message || error || 'erro desconhecido'));
     } finally {
       setLoading(false);
 
@@ -1027,5 +1032,6 @@ export function useChat() {
     getOrCreateConversation,
     archiveConversation,
     refetch: fetchConversations,
+    fetchError,
   };
 }

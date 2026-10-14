@@ -18,6 +18,29 @@ interface State {
   error?: Error;
   errorCount: number;
   retryCount: number;
+  componentStack?: string;
+  showDetails?: boolean;
+  copied?: boolean;
+}
+
+/** Texto técnico do erro para o usuário copiar e enviar ao suporte/dev. */
+function buildErrorReport(error?: Error, componentStack?: string): string {
+  const lines: string[] = [];
+  try {
+    lines.push(`Erro: ${error?.name || 'Error'}: ${error?.message || String(error)}`);
+    lines.push(`Página: ${typeof window !== 'undefined' ? window.location.pathname + window.location.search : ''}`);
+    lines.push(`Quando: ${new Date().toISOString()}`);
+    lines.push(`Navegador: ${typeof navigator !== 'undefined' ? navigator.userAgent : ''}`);
+    try {
+      const v = (window as any).__APP_VERSION__ || document.querySelector('meta[name="app-version"]')?.getAttribute('content');
+      if (v) lines.push(`Versão: ${v}`);
+    } catch { /* noop */ }
+    const stack = String(error?.stack || '').split('\n').slice(0, 8).join('\n');
+    if (stack) lines.push('', 'Stack:', stack);
+    const comp = String(componentStack || '').trim().split('\n').slice(0, 8).join('\n');
+    if (comp) lines.push('', 'Componentes:', comp);
+  } catch { /* noop */ }
+  return lines.join('\n');
 }
 
 const LOOP_KEY = '__oculto_err_loop';
@@ -167,7 +190,9 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    this.setState(prev => ({ errorCount: prev.errorCount + 1 }));
+    this.setState(prev => ({ errorCount: prev.errorCount + 1, componentStack: errorInfo?.componentStack || undefined }));
+    // Sempre registra no console (também em produção) para diagnóstico.
+    try { console.error('[ErrorBoundary]', error, errorInfo?.componentStack?.slice(0, 600)); } catch { /* noop */ }
     this.props.onError?.(error, errorInfo);
 
     if (import.meta.env.DEV) {
@@ -252,10 +277,39 @@ export class ErrorBoundary extends Component<Props, State> {
           <p className="text-sm text-muted-foreground max-w-[300px]">
             Ocorreu um erro inesperado. Se o problema persistir, toque em <strong>Limpar & reiniciar</strong> para sair do loop.
           </p>
-          {import.meta.env.DEV && this.state.error && (
-            <p className="mt-2 text-[10px] font-mono text-destructive/60 max-w-[320px] break-all">
-              {this.state.error.message}
-            </p>
+          {this.state.error && (
+            <div className="mt-3 flex flex-col items-center gap-2">
+              <button
+                type="button"
+                className="text-[11px] underline text-muted-foreground hover:text-foreground"
+                onClick={() => this.setState((p) => ({ showDetails: !p.showDetails }))}
+              >
+                {this.state.showDetails ? 'Ocultar detalhes do erro' : 'Ver detalhes do erro'}
+              </button>
+              {this.state.showDetails && (
+                <>
+                  <pre className="text-left text-[10px] leading-snug font-mono text-destructive/80 bg-muted/40 rounded-md p-2 max-w-[340px] max-h-48 overflow-auto whitespace-pre-wrap break-all">
+                    {buildErrorReport(this.state.error, this.state.componentStack)}
+                  </pre>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      const text = buildErrorReport(this.state.error, this.state.componentStack);
+                      try {
+                        void navigator.clipboard?.writeText(text).then(
+                          () => this.setState({ copied: true }),
+                          () => this.setState({ copied: false }),
+                        );
+                      } catch { /* noop */ }
+                    }}
+                  >
+                    {this.state.copied ? 'Copiado!' : 'Copiar detalhes'}
+                  </Button>
+                </>
+              )}
+            </div>
           )}
         </div>
         <div className="flex flex-wrap gap-2 justify-center">

@@ -17,6 +17,22 @@ if (!import.meta.env.DEV) {
   console.info = noop;
 }
 
+// ─── Arquivo de uma versão anterior não existe mais (novo deploy) ───
+// O Vite dispara `vite:preloadError` quando um import dinâmico falha. Em vez
+// de cair na tela "Algo deu errado", recarrega UMA vez para pegar a versão nova.
+if (typeof window !== "undefined") {
+  window.addEventListener("vite:preloadError", (event) => {
+    try {
+      const KEY = "__oculto_preload_reload";
+      const last = Number(sessionStorage.getItem(KEY) || 0);
+      if (Date.now() - last < 30_000) return; // evita loop
+      sessionStorage.setItem(KEY, String(Date.now()));
+      event.preventDefault();
+      window.location.reload();
+    } catch { /* deixa o ErrorBoundary tratar */ }
+  });
+}
+
 bootPaywallBlurLevel();
 startAppVersionWatcher();
 // Atraso pequeno para não disputar com o boot inicial; corre em background.

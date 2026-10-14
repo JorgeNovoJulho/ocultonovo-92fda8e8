@@ -107,7 +107,7 @@ export default function MessagesPage() {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const { conversations, loading, typingUsers, totalUnreadCount, connectionStatus, sendMessage, setTyping, markAsRead, markTabAsRead, archiveConversation, setActiveConversation, getOrCreateConversation, refetch: refetchConversations } = useChat();
+  const { conversations, loading, typingUsers, totalUnreadCount, connectionStatus, sendMessage, setTyping, markAsRead, markTabAsRead, archiveConversation, setActiveConversation, getOrCreateConversation, refetch: refetchConversations, fetchError: conversationsError } = useChat();
   const blockContact = useBlockContact();
   const unblockContact = useUnblockContact();
   const [activeTab, setActiveTab] = useState<'inbox' | 'archived'>('inbox');
@@ -225,10 +225,14 @@ export default function MessagesPage() {
         // chat vazio e a lista "Nenhuma mensagem ainda".
         void (async () => {
           try {
+            const identity = await resolveChatIdentity(user?.id);
+            const ids = identity.selfIds.length > 0 ? identity.selfIds : (user?.id ? [user.id] : []);
+            if (ids.length === 0) return;
             const { data: rows, error: partErr } = await (supabase as any)
               .from('conversation_participants')
               .select('conversation_id')
               .eq('conversation_id', cid)
+              .in('user_id', ids)
               .limit(1);
             if (partErr || (Array.isArray(rows) && rows.length > 0)) return;
             setSelectedConversation((cur) => (cur?.id === cid ? null : cur));
@@ -737,6 +741,13 @@ export default function MessagesPage() {
         {loading ? (
           <div className="flex items-center justify-center h-32">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : conversations.length === 0 && conversationsError ? (
+          <div className="flex flex-col items-center justify-center h-64 text-center p-4 gap-3">
+            <MessageCircle className="h-12 w-12 text-muted-foreground/30" />
+            <p className="text-muted-foreground text-sm">Não foi possível carregar suas conversas.</p>
+            <Button variant="outline" size="sm" onClick={() => refetchConversations()}>Tentar novamente</Button>
+            <p className="text-[10px] text-muted-foreground/60 max-w-[260px] break-all">{conversationsError}</p>
           </div>
         ) : conversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center p-4">
