@@ -160,6 +160,7 @@ function CentralAuraBody({ onClose }: { onClose: () => void }) {
           bg-black
           sm:shadow-[0_0_0_1px_rgba(34,211,238,0.18),0_40px_120px_-30px_rgba(34,211,238,0.45)]
           [&>button.absolute]:hidden
+          max-sm:!transform-none max-sm:!animate-none
         "
       >
         {/* halos neon */}
@@ -234,7 +235,8 @@ function CentralAuraBody({ onClose }: { onClose: () => void }) {
 
             <div
               ref={scrollRef}
-              className="relative min-h-0 flex-1 touch-pan-y overflow-y-auto overflow-x-hidden overscroll-y-contain px-3 py-4 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:px-5 sm:pb-10 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+              data-aura-scroll=""
+              className="relative min-h-0 flex-1 touch-pan-y overflow-y-auto overflow-x-hidden overscroll-y-contain bg-black sm:bg-transparent px-3 py-4 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:px-5 sm:pb-10 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
             >
               {/* JORNADA + HISTÓRIA (unificadas) */}
               <TabsContent value="jornada" className="mt-0 space-y-4">
