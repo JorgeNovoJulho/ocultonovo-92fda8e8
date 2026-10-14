@@ -761,17 +761,25 @@ export default function OcultoPlayPage() {
 
 
   const videoHistoryRef = useRef<string[]>([]);
+  // Fila do player vertical: TODOS os vídeos publicados (mesma consulta da
+  // seção Vídeos — sem custo extra de rede). Antes usava a lista da tela
+  // inicial (18 itens no celular, misturando tipos): a rolagem "infinita"
+  // acabava cedo e um vídeo fora dessa lista abria no primeiro da seção.
+  const allNormalFeed = useOcultoPlayFeed('normal', undefined, 500);
   const videoPool = useMemo<OcultoPlayItem[]>(() => {
-    const source = (feed.data ?? []) as OcultoPlayItem[];
+    const seen = new Set<string>();
+    const source = [
+      ...((allNormalFeed.data ?? []) as OcultoPlayItem[]),
+      ...((feed.data ?? []) as OcultoPlayItem[]),
+    ];
     return source
-      .filter((it) => (it.kind === 'short_video' || it.kind === 'vip_teaser') && !!it.media_url)
-      .slice()
-      .sort((a, b) => {
-        const ta = new Date((a as any).created_at ?? 0).getTime();
-        const tb = new Date((b as any).created_at ?? 0).getTime();
-        return tb - ta;
-      });
-  }, [feed.data]);
+      .filter((it) => {
+        if (!it?.id || seen.has(it.id)) return false;
+        seen.add(it.id);
+        return (it.kind === 'short_video' || it.kind === 'vip_teaser') && !!it.media_url && !it.is_adult;
+      })
+      .sort((a, b) => new Date(b.published_at ?? 0).getTime() - new Date(a.published_at ?? 0).getTime());
+  }, [allNormalFeed.data, feed.data]);
 
   const pickRandomVideo = useCallback((current: OcultoPlayItem): OcultoPlayItem | null => {
     if (!videoPool.length) return null;

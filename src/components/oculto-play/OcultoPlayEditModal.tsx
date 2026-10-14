@@ -41,6 +41,9 @@ import {
   formatLastSavedTime,
 } from '@/lib/ocultoPlayLyricsAutosave';
 import { useIsMasterAdmin } from '@/hooks/useUserRoles';
+import { PLAY_CHANNELS_KEY, useMyPlayChannels } from '@/hooks/usePlayChannels';
+import { processOcultoPlayVideoForUpload, OCULTO_PLAY_MAX_SHORT_VIDEO_SECONDS } from '@/lib/ocultoPlayVideoProcessor';
+import outroAsset from '@/assets/oculto-play-outro.png.asset.json';
 
 
 interface Props {
@@ -109,6 +112,16 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
   const { data: isMasterRole } = useIsMasterAdmin();
   const canChangeVisibility = isMasterRole === true;
   const qc = useQueryClient();
+  // ---- Canais Play: mesmas opções do modal de envio ----
+  const { data: myChannelsData } = useMyPlayChannels();
+  const [channelId, setChannelId] = useState<string | null>(null);
+  const [originalChannelId, setOriginalChannelId] = useState<string | null>(null);
+  const [origin, setOrigin] = useState<'' | 'original' | 'ai' | 'licensed'>('');
+  const [originTool, setOriginTool] = useState('');
+  const [sectionVal, setSectionVal] = useState<'normal' | 'today' | 'comeback'>('normal');
+  const [channelFieldsReady, setChannelFieldsReady] = useState(false);
+  const [newVideoFile, setNewVideoFile] = useState<File | null>(null);
+  const videoFileInputRef = useRef<HTMLInputElement | null>(null);
   const [title, setTitle] = useState('');
   const [caption, setCaption] = useState('');
   const [composer, setComposer] = useState('');
@@ -157,6 +170,36 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
 
   const isAudio = item?.kind === 'audio';
   const isLink = item?.kind === 'link';
+  const isVideo = item?.kind === 'short_video' || item?.kind === 'vip_teaser';
+  const channelKindNeeded = isAudio ? 'audio' : 'video';
+  const compatibleChannels = (myChannelsData ?? []).filter((c) => c.kind === channelKindNeeded);
+  const ownsCurrentChannel = !originalChannelId || compatibleChannels.some((c) => c.id === originalChannelId);
+
+  // Últimos valores salvos de canal/origem/seção (busca separada: se o
+  // servidor ainda não tiver as colunas novas, o resto do modal segue normal).
+  useEffect(() => {
+    if (!open || !item?.id) return;
+    let cancelled = false;
+    setChannelFieldsReady(false);
+    setNewVideoFile(null);
+    (async () => {
+      try {
+        const { data, error } = await (supabase as any)
+          .from('oculto_play_items')
+          .select('channel_id, content_origin, section, ai_tool')
+          .eq('id', item.id)
+          .maybeSingle();
+        if (cancelled || error || !data) return;
+        setChannelId(data.channel_id ?? null);
+        setOriginalChannelId(data.channel_id ?? null);
+        setOrigin((data.content_origin ?? '') as any);
+        setOriginTool(item.kind !== 'audio' ? (data.ai_tool ?? '') : '');
+        setSectionVal((data.section ?? 'normal') as any);
+        setChannelFieldsReady(true);
+      } catch { /* servidor sem Fase 1 */ }
+    })();
+    return () => { cancelled = true; };
+  }, [open, item?.id, item?.kind]);
   const tagsQuery = useOcultoPlayAudioTags('genre');
   const aiQuery = useOcultoPlayAudioTags('ai');
 
@@ -743,6 +786,38 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
         setSavePct(null);
       }
 
+      // ---- Trocar arquivo de vídeo (mesmo processamento do envio) ----
+      let videoPatch: Record<string, any> = {};
+      if (isVideo && newVideoFile) {
+        const { data: u } = await supabase.auth.getUser();
+        const uid = u?.user?.id;
+        if (!uid) throw new Error('Faça login novamente.');
+        const probe = await new Promise<number>((resolve) => {
+          const v = document.createElement('video');
+          const url = URL.createObjectURL(newVideoFile);
+          v.preload = 'metadata';
+          v.onloadedmetadata = () => { const d = v.duration || 0; URL.revokeObjectURL(url); resolve(Number.isFinite(d) ? d : 0); };
+          v.onerror = () => { URL.revokeObjectURL(url); resolve(0); };
+          v.src = url;
+        });
+        if (!probe) throw new Error('Não foi possível ler o vídeo escolhido.');
+        const clipEnd = Math.min(probe, OCULTO_PLAY_MAX_SHORT_VIDEO_SECONDS);
+        setSaveStage('Preparando vídeo…');
+        const processed = await processOcultoPlayVideoForUpload(newVideoFile, {
+          trimStart: 0,
+          trimEnd: clipEnd,
+          duration: probe,
+          outroImageUrl: (outroAsset as any).url,
+          outroSeconds: 2,
+          onProgress: (pct) => setSavePct(Math.round(pct * 0.5)),
+        });
+        setSaveStage('Enviando vídeo…');
+        const up = await uploadOcultoPlayFileProgress(processed, uid, 'video', processed.name, (pct) => setSavePct(50 + Math.round(pct * 0.5)));
+        videoPatch = { media_url: up.publicUrl, duration_sec: Math.max(1, Math.round(clipEnd + 2)), trim_start_seconds: null, trim_end_seconds: null };
+        setSaveStage('Salvando…');
+        setSavePct(null);
+      }
+
       const previewEnd = isAudio && audioDuration > 0
         ? Math.min(audioDuration, previewStart + previewLength)
         : null;
@@ -820,11 +895,36 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
           }
         }
       }
+      // ---- Canal, origem, seção e vídeo novo ----
+      const channelPatch: Record<string, any> = { ...videoPatch };
+      if (channelFieldsReady) {
+        if (channelId && channelId !== originalChannelId && ownsCurrentChannel) channelPatch.channel_id = channelId;
+        channelPatch.content_origin = origin || null;
+        if (!isAudio) channelPatch.ai_tool = origin === 'ai' && originTool.trim() ? originTool.trim().slice(0, 80) : null;
+        if (canChangeVisibility) channelPatch.section = sectionVal;
+      }
+      if (Object.keys(channelPatch).length > 0) {
+        const { error: chErr } = await (supabase as any)
+          .from('oculto_play_items')
+          .update(channelPatch)
+          .eq('id', item.id);
+        if (chErr) throw chErr;
+        if (channelPatch.channel_id) setOriginalChannelId(channelPatch.channel_id);
+        setNewVideoFile(null);
+      }
+      const chosenChannel = compatibleChannels.find((c) => c.id === (channelPatch.channel_id ?? channelId));
       if (nextThumbUrl !== thumbUrl) setThumbUrl(nextThumbUrl);
       if (nextThumbUrl !== originalThumbUrl) setOriginalThumbUrl(nextThumbUrl);
       if (data) {
         const merged = {
           ...(data as any),
+          ...channelPatch,
+          ...(chosenChannel ? {
+            channel_id: chosenChannel.id,
+            channel_name: chosenChannel.name,
+            channel_slug: chosenChannel.slug,
+            channel_avatar_url: chosenChannel.avatar_url ?? (data as any).channel_avatar_url ?? null,
+          } : {}),
           is_adult: isAdult,
           lyrics: isAudio ? (lyrics.trim() ? lyrics : null) : (data as any).lyrics,
           ...(isAudio ? {
@@ -848,6 +948,7 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
       // toca mais rápido para todos). Não bloqueia o fechamento do modal.
       if (isAudio && previewNeedsServerClip) void regenerateServerPreviewClip(qc, item.id);
       await qc.invalidateQueries({ queryKey: ['oculto-play'], refetchType: 'active' });
+      qc.invalidateQueries({ queryKey: PLAY_CHANNELS_KEY });
       toast.success('Conteúdo atualizado.');
       onClose();
     } catch (e: any) {
@@ -898,6 +999,79 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
         <div
           className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-6 py-3 space-y-3 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
+          {/* Canal e publicação — mesmas opções do modal de envio */}
+          {channelFieldsReady && (
+            <div className="space-y-3 rounded-xl border border-border/50 bg-muted/20 p-3">
+              {ownsCurrentChannel && compatibleChannels.length > 0 && (
+                <div>
+                  <Label className="text-xs">Publicar em</Label>
+                  <select
+                    value={channelId ?? ''}
+                    onChange={(e) => setChannelId(e.target.value || null)}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    {compatibleChannels.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.kind === 'audio' ? '🎵 ' : '🎬 '}{c.name}{c.is_official ? ' (oficial)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div>
+                <Label className="text-xs">Tipo</Label>
+                <p className="mt-1 rounded-md border border-border/50 bg-background/50 px-3 py-2 text-sm">
+                  {isAudio ? 'Áudios' : isLink ? 'Links' : isVideo ? 'Vídeos' : item?.kind === 'meme' ? 'Memes' : 'Conteúdo'}
+                  <span className="ml-1 text-[11px] text-muted-foreground">· o tipo do arquivo não muda na edição</span>
+                </p>
+              </div>
+              <div>
+                <Label className="text-xs">Origem do conteúdo</Label>
+                <div className="mt-1 grid grid-cols-3 gap-1.5">
+                  {([
+                    { id: 'original', label: 'Original meu' },
+                    { id: 'ai', label: 'Criado com IA' },
+                    { id: 'licensed', label: 'Terceiros c/ licença' },
+                  ] as const).map((o) => (
+                    <button
+                      key={o.id}
+                      type="button"
+                      onClick={() => setOrigin(origin === o.id ? '' : o.id)}
+                      className={cn(
+                        'rounded-lg border px-2 py-2 text-[11px] font-semibold leading-tight transition',
+                        origin === o.id ? 'border-primary bg-primary/15 text-foreground' : 'border-border/60 text-muted-foreground',
+                      )}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+                {origin === 'ai' && !isAudio && (
+                  <Input
+                    className="mt-1.5 h-9 text-xs"
+                    value={originTool}
+                    onChange={(e) => setOriginTool(e.target.value.slice(0, 80))}
+                    placeholder="Ferramenta usada (opcional): Sora, Runway, Suno…"
+                  />
+                )}
+              </div>
+              {canChangeVisibility && (
+                <div>
+                  <Label className="text-xs">Seção (master)</Label>
+                  <select
+                    value={sectionVal}
+                    onChange={(e) => setSectionVal(e.target.value as any)}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="today">Hoje no Oculto</option>
+                    <option value="comeback">Volte para Ver</option>
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Capa (genérica — para link há um seletor próprio abaixo) */}
           {!isLink && (
           <div>
@@ -1112,6 +1286,36 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
             />
             {errors.caption && <p className="text-[11px] text-rose-400 mt-1">{errors.caption}</p>}
           </div>
+
+          {/* Arquivo de vídeo — trocar (passa pelo mesmo processamento do envio) */}
+          {isVideo && (
+            <div>
+              <Label className="text-xs">Arquivo do vídeo</Label>
+              <input
+                ref={videoFileInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0] ?? null; setNewVideoFile(f); e.target.value = ''; }}
+              />
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <Button type="button" size="sm" variant="secondary" onClick={() => videoFileInputRef.current?.click()} disabled={saving}>
+                  <Upload className="mr-1.5 h-3.5 w-3.5" /> {newVideoFile ? 'Escolher outro' : 'Trocar vídeo'}
+                </Button>
+                {newVideoFile && (
+                  <>
+                    <span className="max-w-[200px] truncate text-[11px] text-muted-foreground">{newVideoFile.name}</span>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setNewVideoFile(null)} disabled={saving}>
+                      <RotateCcw className="mr-1 h-3.5 w-3.5" /> Manter o atual
+                    </Button>
+                  </>
+                )}
+              </div>
+              <p className="mt-1 text-[10.5px] text-muted-foreground">
+                O novo vídeo é otimizado (até {Math.floor(OCULTO_PLAY_MAX_SHORT_VIDEO_SECONDS / 60)} min) e recebe a tela final do OCULTO, como no envio.
+              </p>
+            </div>
+          )}
 
           {/* Arquivo da música (.mp3) — logo abaixo da legenda */}
           {isAudio && (

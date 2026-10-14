@@ -556,6 +556,20 @@ export function OcultoPlayFocusModal({
       });
   }, [isVideoOpen, fallbackVideoFeed.data]);
   const effectiveVideoQueue = (videoQueue && videoQueue.length > 0) ? videoQueue : fallbackVideoPool;
+  // Fila do feed vertical: o vídeo ESCOLHIDO sempre entra (antes, se ele não
+  // estivesse na fila, o player caía no primeiro vídeo da seção). Limitada
+  // a 150 a partir do escolhido para não pesar em celular modesto.
+  const shortsQueue = useMemo<OPItem[]>(() => {
+    const isShort = (it: OPItem | null | undefined) =>
+      !!it && (it.kind === 'short_video' || it.kind === 'vip_teaser') && !!it.media_url;
+    const base = effectiveVideoQueue.filter(isShort);
+    const seed = itemProp && isShort(itemProp) ? itemProp : null;
+    if (!seed) return base.slice(0, 150);
+    const idx = base.findIndex((it) => it.id === seed.id);
+    if (idx < 0) return [seed, ...base].slice(0, 150);
+    // Começa no escolhido e segue a ordem da seção (com volta ao início).
+    return [...base.slice(idx), ...base.slice(0, idx)].slice(0, 150);
+  }, [effectiveVideoQueue, itemProp]);
 
   // ===== Fila de links para navegação prev/next dentro do modal =====
   const isLinkOpen = !!(open && itemProp && itemProp.kind === 'link');
@@ -857,9 +871,7 @@ export function OcultoPlayFocusModal({
           {isVideo && item.media_url ? (
             // ====== FEED VERTICAL INFINITO ESTILO TIKTOK ======
             <OcultoPlayShortsScroller
-              items={(effectiveVideoQueue.length ? effectiveVideoQueue : [item]).filter(
-                (it) => (it.kind === 'short_video' || it.kind === 'vip_teaser') && !!it.media_url,
-              )}
+              items={shortsQueue}
               seedId={stableSeedId || item.id}
               onClose={safeClose}
               onActiveChange={undefined}
