@@ -15,7 +15,7 @@ import { resolveActorId } from '@/lib/ensureProfile';
 import { loadCache, saveCache } from '@/lib/persistentQueryCache';
 import { useFeedCacheStore } from '@/store/useFeedCacheStore';
 import { logger } from '@/lib/logger';
-import { useFeedDebugStore } from '@/store/useFeedDebugStore';
+import { useFeedDebugStore, feedDebugLog } from '@/store/useFeedDebugStore';
 import {
   sanitizeCategories,
   matchesSelectedCategories,
@@ -335,6 +335,9 @@ const resolveNotificationRecipient = async (postId: string) => {
 // PAGE_SIZE: max posts loaded per batch — keep low for low-RAM devices
 export const FEED_PAGE_SIZE = 15;
 
+/** Último usuário para o qual o feed fez o refetch de login (ver useInfinitePosts). */
+let lastBootRefetchUserId: string | null = null;
+
 export function usePosts(options?: { userId?: string; limit?: number }) {
   const { user, authReady } = useAuth();
   const { profile } = useProfile();
@@ -349,23 +352,18 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
 
   const query = useQuery({
     queryKey: ['posts', options?.userId, options?.limit, isEnabled, showAll, maxPosts, startDate, profile?.id],
-    // Cache de longa duração: 24h stale, 48h GC
-    staleTime: 24 * 60 * 60 * 1000,
-    gcTime: 48 * 60 * 60 * 1000,
-
-    // Desabilitar todas as atualizações automáticas
+    // Cache equilibrado: dados ficam "frescos" por 2 min (sem refetch ao
+    // navegar/voltar) e são revalidados em segundo plano depois disso.
+    // 24h deixava posts, curtidas e comentários desatualizados por um dia.
+    // Sem `placeholderData`: a queryKey inclui o userId, e reaproveitar os
+    // dados anteriores mostrava os posts do perfil ANTERIOR ao abrir outro.
+    staleTime: 2 * 60_000,
+    gcTime: 10 * 60_000,
     retry: 2,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    refetchOnReconnect: false,
+    refetchOnReconnect: true,
     refetchInterval: false,
     refetchIntervalInBackground: false,
-    // Garante que o usuário veja os dados do cache imediatamente ao entrar
-    placeholderData: (previousData: any) => previousData,
-
-
-
-
     enabled: authReady && !!user?.id,
     queryFn: async () => {
       addDebugLog('query', 'Buscando posts do feed', { userId: options?.userId, limit: options?.limit });
@@ -609,121 +607,32 @@ export function usePosts(options?: { userId?: string; limit?: number }) {
     },
   });
 
-  // Subscribe to realtime updates with auto-reconnect + throttled refetch.
-  //
-  // Histórico: a versão anterior chamava `invalidateQueries({refetchType:'all'})`
-  // + `refetchQueries({type:'all'})` para TODOS os eventos (inclusive cada
-  // mudança em `profiles`, `post_likes`, `post_comments` etc.). Em mobile
-  // isso disparava um refetch completo de TODAS as páginas a cada poucos
-  // segundos → o array de `posts` ganhava nova identidade → Virtuoso e os
-  // cards remontavam → o feed "piscava/reiniciava" durante a navegação.
-  //
-  // Correção:
-  //  - `profiles` saiu da assinatura: muda o tempo todo (presença, status,
-  //    avatar) e não é dono do feed.
-  //  - Eventos secundários (likes/saves/comments/shares) são coalescidos
-  //    em janela maior (1500ms) e usam `refetchType: 'active'` — só refaz
-  //    queries que estão sendo observadas naquele instante.
-  //  - Removido o `refetchQueries` duplicado — `invalidate` já refaz.
-  //  - `visibilitychange` agora respeita um cooldown de 5s, evitando
-  //    refetch instantâneo cada vez que o usuário troca rapidamente de
-  //    aba/app em mobile (gera flicker).
+  // Realtime do hook legado (usado pelo Modo Espião). A sincronização do
+  // feed principal fica a cargo de `usePostsRealtime` (montado uma vez no
+  // DashboardLayout). Aqui só revalidamos a PRÓPRIA query `['posts']` quando
+  // entra ou sai uma publicação — curtidas/comentários chegam via UPDATE em
+  // `posts` e são aplicados no cache por `usePostsRealtime`.
+  // Antes este efeito assinava 6 tabelas e invalidava também `posts-infinite`
+  // a cada curtida da plataforma, recarregando todas as páginas do feed.
   useEffect(() => {
-    let throttleTimer: ReturnType<typeof setTimeout> | null = null;
-    let pendingRefetch = false;
-    let isMounted = true;
-    let lastRefetchAt = 0;
-    const addDebugLog = useFeedDebugStore.getState().addLog;
-
-    const doRefetch = () => {
-      if (!isMounted) return;
-      
-      const now = Date.now();
-      // Proteção contra loops de refetch: aumentar o cooldown para 45 segundos para estabilidade total
-      if (now - lastRefetchAt < 45000) {
-        addDebugLog('stale', 'Refetch ignorado (cooldown de 45s ativo)', { diff: now - lastRefetchAt });
-        return;
-      }
-
-      lastRefetchAt = now;
-      addDebugLog('query', 'Disparando refetch controlado via Realtime/Visibility');
-      
-      queryClient.invalidateQueries({ queryKey: ['posts'], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ['posts-infinite'], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ['oculto-feed-news'] });
-      queryClient.invalidateQueries({ queryKey: ['oculto-feed-cards'] });
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const schedule = () => {
+      if (timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        feedDebugLog('query', 'usePosts: revalidando após INSERT/DELETE');
+        queryClient.invalidateQueries({ queryKey: ['posts'], refetchType: 'active' });
+      }, 5000);
     };
-
-    const throttledRefetch = (immediate = false) => {
-      if (!isMounted) return;
-      
-      if (immediate) {
-        if (throttleTimer) { clearTimeout(throttleTimer); throttleTimer = null; }
-        pendingRefetch = false;
-        doRefetch();
-        return;
-      }
-      
-      pendingRefetch = true;
-      if (throttleTimer) return;
-      
-      // Janela de coalescência aumentada para 30s para evitar piscadas constantes em ambiente mobile
-      throttleTimer = setTimeout(() => {
-        throttleTimer = null;
-        if (!isMounted || !pendingRefetch) return;
-        pendingRefetch = false;
-        doRefetch();
-      }, 30000); 
-    };
-
-    const onPostsChange = (payload: any) => {
-      addDebugLog('stale', 'Evento Realtime detectado: posts', { type: payload.eventType });
-      throttledRefetch(false); // Nunca imediato para alterações de posts via realtime
-    };
-    
-    const onSecondaryChange = (payload: any) => {
-      addDebugLog('stale', `Evento Realtime secundário: ${payload.table}`, { type: payload.eventType });
-      throttledRefetch(false);
-    };
-
-    const unsubs: Array<() => void> = [
-      subscribeTable('posts', onPostsChange),
-      subscribeTable('post_likes', onSecondaryChange),
-      subscribeTable('post_dislikes', onSecondaryChange),
-      subscribeTable('post_comments', onSecondaryChange),
-      subscribeTable('saved_posts', onSecondaryChange),
-      subscribeTable('post_shares', onSecondaryChange),
-    ];
-
-    const onVisibility = () => {
-      if (typeof document === 'undefined') return;
-      if (document.visibilityState !== 'visible') return;
-      
-      const now = Date.now();
-      // Só refetch se ficou fora por mais de 5 minutos
-      if (now - lastRefetchAt < 300000) {
-        addDebugLog('stale', 'Visibility ignorado (cache recente)', { diff: now - lastRefetchAt });
-        return;
-      }
-      
-      addDebugLog('query', 'Retorno de visibilidade detectado');
-      throttledRefetch(true);
-    };
-    
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', onVisibility);
-    }
-
+    const unsub = subscribeTable('posts', (payload: any) => {
+      const evt = payload?.eventType;
+      if (evt === 'INSERT' || evt === 'DELETE') schedule();
+    });
     return () => {
-      isMounted = false;
-      if (throttleTimer) clearTimeout(throttleTimer);
-      if (typeof document !== 'undefined') {
-        document.removeEventListener('visibilitychange', onVisibility);
-      }
-      for (const u of unsubs) u();
+      if (timer) clearTimeout(timer);
+      unsub();
     };
   }, [queryClient]);
-
 
   return query;
 }
@@ -834,14 +743,17 @@ export function useInfinitePosts(
   const query = useInfiniteQuery({
     queryKey: ['posts-infinite', 'v18-complete-includes-adult-posts', isEnabled, profile?.id, pageSize, genderFilterKey, explicitAdultOnly],
     initialPageParam: 0,
-    // Cache de longa duração (24h stale, 48h GC) para estabilizar o feed
-    staleTime: 24 * 60 * 60 * 1000, 
-    gcTime: 48 * 60 * 60 * 1000, 
-
-    // Bloqueio de refetchs automáticos (piscadas)
+    // Feed fica "fresco" por 2 min e o cache sobrevive 30 min fora da tela
+    // (voltar ao feed reaproveita os dados e o scroll, sem refetch).
+    // Novidades chegam por `usePostsRealtime` (prepend/patch no cache), pelo
+    // refetch único de login (abaixo) e ao reconectar a rede. O cache de 24h
+    // anterior + refetchOnReconnect:false deixava o feed parado por um dia
+    // quando o websocket caía no celular.
+    staleTime: 2 * 60_000,
+    gcTime: 30 * 60_000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
-    refetchOnReconnect: false, 
+    refetchOnReconnect: true,
     refetchInterval: false,
     refetchIntervalInBackground: false,
 
@@ -1302,11 +1214,13 @@ export function useInfinitePosts(
   // Sem isso, usuários que logam com cache antigo (24h TTL) viam
   // posts atrasados em 1-2 dias até o head-poll de 60s rodar.
   // ============================================================
-  const lastBootRefetchRef = useRef<string | null>(null);
+  // Controle em nível de MÓDULO (não useRef): com useRef, cada vez que o
+  // usuário voltava ao feed o hook remontava e refazia o fetch de todas as
+  // páginas — o "boot" acontecia a cada navegação, não uma vez por login.
   useEffect(() => {
     if (!feedIdentityReady || !user?.id) return;
-    if (lastBootRefetchRef.current === user.id) return;
-    lastBootRefetchRef.current = user.id;
+    if (lastBootRefetchUserId === user.id) return;
+    lastBootRefetchUserId = user.id;
 
     // LOGIN BOOT: Única vez que o feed atualiza agressivamente ao entrar
     const now = Date.now();
@@ -1321,36 +1235,9 @@ export function useInfinitePosts(
   }, [feedIdentityReady, user?.id, queryClient, addDebugLog]);
 
 
-  // ============================================================
-  // Fallback de aba oculta: se o usuário deixou a aba aberta por
-  // horas/dias (laptop dormindo), o WebSocket pode ter caído sem
-  // reconectar. Ao voltar à aba após ≥5 min hidden, força refetch.
-  // ============================================================
-  useEffect(() => {
-    if (!feedIdentityReady) return;
-    let hiddenSince: number | null = null;
-    const onVis = () => {
-      if (typeof document === 'undefined') return;
-      if (document.visibilityState === 'hidden') {
-        hiddenSince = Date.now();
-      } else if (hiddenSince && Date.now() - hiddenSince > 5 * 60_000) {
-        hiddenSince = null;
-        // COALESCÊNCIA: ignora se atualizado nos últimos 5 min.
-        const now = Date.now();
-        const lastRefetch = (window as any)._OCULTO_LAST_REFETCH || 0;
-        if (now - lastRefetch < 300000) {
-          addDebugLog('stale', 'Ignorando visibilidade refetch (dados recentes)');
-          return;
-        }
-        (window as any)._OCULTO_LAST_REFETCH = now;
-        addDebugLog('query', 'Refetch por retorno de visibilidade');
-        queryClient.invalidateQueries({ queryKey: ['posts-infinite'], refetchType: 'active' });
-        queryClient.invalidateQueries({ queryKey: ['posts'], refetchType: 'active' });
-      }
-    };
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
-  }, [feedIdentityReady, queryClient, addDebugLog]);
+  // Retorno de aba após muito tempo em background: tratado UMA vez em
+  // `usePostsRealtime`. Ter o mesmo efeito aqui gerava dois invalidates
+  // seguidos — o segundo cancelava o fetch em andamento e começava de novo.
 
   // Realtime local do infinite feed: só aplica DELETE no cache.
   // INSERT/UPDATE já são tratados por `usePostsRealtime` no RealFeed; duplicar
@@ -1393,76 +1280,10 @@ export function useInfinitePosts(
     };
   }, [queryClient]);
 
-  // ============================================================
-  // Head-poll de novidades (fallback do realtime).
-  // Sondagem leve do `created_at` mais recente a cada 60s. Garante
-  // que novos posts apareçam mesmo se a publication `supabase_realtime`
-  // estiver degradada/vazia (sem precisar recarregar a página).
-  // ============================================================
-  useEffect(() => {
-    if (!feedIdentityReady) return;
-    let isMounted = true;
-    let lastSeen: string | null = null;
-    let inflight = false;
-
-    const probe = async () => {
-      if (!isMounted || inflight) return;
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      inflight = true;
-      try {
-        const { data, error } = await supabase
-          .from(FEED_TABLE_NAME as any)
-          .select('id, created_at')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (error || !data || !isMounted) return;
-        const stamp = (data as any).created_at as string | undefined;
-        if (!stamp) return;
-        if (lastSeen === null) { lastSeen = stamp; return; }
-        if (stamp > lastSeen) {
-          lastSeen = stamp;
-          queryClient.invalidateQueries({ queryKey: ['posts-infinite'], refetchType: 'active' });
-          queryClient.invalidateQueries({ queryKey: ['posts'], refetchType: 'active' });
-          useFeedCacheStore.getState().setPosts(useFeedCacheStore.getState().posts || [], user?.id || null);
-        }
-      } catch { /* noop */ } finally {
-        inflight = false;
-      }
-    };
-
-    probe();
-    // Safety-net leve (60s): o Realtime cobre INSERT/DELETE em tempo real;
-    // este probe só existe para o caso raro da publication `supabase_realtime`
-    // estar degradada. Além disso, o listener `visibilitychange`/`focus`
-    // abaixo já dispara probe imediato ao voltar de background.
-    const timer = setInterval(probe, 60_000);
-    const onVis = () => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') probe();
-    };
-    const onFocus = () => probe();
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', onVis);
-    }
-    if (typeof window !== 'undefined') {
-      window.addEventListener('focus', onFocus);
-      window.addEventListener('pageshow', onFocus);
-      window.addEventListener('online', onFocus);
-    }
-
-    return () => {
-      isMounted = false;
-      clearInterval(timer);
-      if (typeof document !== 'undefined') {
-        document.removeEventListener('visibilitychange', onVis);
-      }
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('focus', onFocus);
-        window.removeEventListener('pageshow', onFocus);
-        window.removeEventListener('online', onFocus);
-      }
-    };
-  }, [queryClient, feedIdentityReady]);
+  // Sondagem de novidades: feita UMA vez pelo watchdog de `usePostsRealtime`
+  // (só roda quando o realtime fica em silêncio). Havia aqui uma segunda
+  // sondagem a cada 60s que, ao achar um post novo, invalidava o feed de novo
+  // logo depois do watchdog — dois refetches completos por publicação.
 
   return query;
 }

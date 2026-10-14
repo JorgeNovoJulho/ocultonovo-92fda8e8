@@ -143,10 +143,21 @@ export function useFeedExperienceMode() {
           const { data: auth } = await supabase.auth.getUser();
           const uid = auth?.user?.id;
           if (!uid) return;
-          const { error } = await supabase
+          // O perfil canônico é localizado por `user_id` (igual ao useProfile);
+          // `id` fica só como fallback para perfis legados. Antes era apenas
+          // `.eq('id', uid)`, que não atualiza nada quando id ≠ auth uid.
+          let { data: updated, error } = await supabase
             .from('profiles')
             .update({ feed_experience_mode: next })
-            .eq('id', uid);
+            .eq('user_id', uid)
+            .select('id');
+          if (!error && (!updated || updated.length === 0)) {
+            ({ data: updated, error } = await supabase
+              .from('profiles')
+              .update({ feed_experience_mode: next })
+              .eq('id', uid)
+              .select('id'));
+          }
           if (error) {
             console.warn('[feedExperienceMode] falha ao persistir no banco:', error.message);
             return;

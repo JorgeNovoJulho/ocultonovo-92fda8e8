@@ -484,11 +484,16 @@ export function SuggestedUsersCarousel() {
   const { user } = useAuth();
   const { data: discoveryPrefs } = useDiscoveryPreferences();
 
-  // Força o refetch apenas se houver uma mudança real nas preferências globais
-  // ou se o carrossel for montado pela primeira vez. StaleTime do hook já protege.
-  const prefsKey = JSON.stringify(discoveryPrefs || {});
+  // Refaz a busca SÓ quando as preferências de descoberta realmente mudam.
+  // A versão anterior também disparava na montagem e de novo quando as
+  // preferências terminavam de carregar — 2 requisições a cada volta ao feed.
+  const prefsKey = discoveryPrefs === undefined ? null : JSON.stringify(discoveryPrefs);
+  const lastPrefsKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (user?.id) refetch();
+    if (prefsKey === null) return;
+    const prev = lastPrefsKeyRef.current;
+    lastPrefsKeyRef.current = prefsKey;
+    if (prev !== null && prev !== prefsKey && user?.id) refetch();
   }, [prefsKey, user?.id, refetch]);
   const { profile } = useProfile();
   const { data: myHighlight } = useMyProfileHighlight();

@@ -42,11 +42,12 @@ async function ensureEventsSchema() {
 export function useEvents() {
   return useQuery({
     queryKey: ["events"],
-    staleTime: 30 * 60 * 1000, // 30m
-    gcTime: 60 * 60 * 1000,
-    refetchOnMount: false,
+    // Eventos mudam pouco, mas vagas/RSVP sim: 5 min de cache e revalida
+    // ao abrir a tela depois disso (antes: 30 min sem revalidar nunca).
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchOnReconnect: true,
 
     queryFn: async () => {
       // Decoupled fetch (sem JOIN — evita PGRST200 em DB externo sem FK declarada)

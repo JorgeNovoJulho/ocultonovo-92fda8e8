@@ -71,11 +71,12 @@ export function useActiveAuctions() {
 
   const query = useQuery({
     queryKey: ["auctions", "active"],
-    staleTime: 10 * 60 * 1000, // 10m
-    gcTime: 20 * 60 * 1000,
-    refetchOnMount: false,
+    // Leilão muda rápido (lances, encerramento com anti-sniping): 10 min de
+    // cache sem revalidar ao abrir a tela mostrava lances e prazos velhos.
+    staleTime: 30_000,
+    gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchOnReconnect: true,
 
     queryFn: async () => {
       const { data, error } = await supabase

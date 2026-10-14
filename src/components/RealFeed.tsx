@@ -108,8 +108,14 @@ const SocialCycleBadge = lazy(() =>
 );
 import { MarketplaceAdCard } from "./marketplace-ads/MarketplaceAdCard";
 import { MarketplaceAdSkeleton, MarketplaceAdEmpty } from "./marketplace-ads/MarketplaceAdSkeleton";
-import { MisteriosEmDestaqueSection } from "./feed/MisteriosEmDestaqueSection";
-import { CommunidadesOcultasFeedSection } from "./feed/CommunidadesOcultasFeedSection";
+// Seções pesadas carregadas sob demanda (já ficam dentro de <Suspense> no
+// FeedItem). Importá-las direto colocava o código delas no pacote inicial.
+const MisteriosEmDestaqueSection = lazy(() =>
+  import("./feed/MisteriosEmDestaqueSection").then((m) => ({ default: m.MisteriosEmDestaqueSection }))
+);
+const CommunidadesOcultasFeedSection = lazy(() =>
+  import("./feed/CommunidadesOcultasFeedSection").then((m) => ({ default: m.CommunidadesOcultasFeedSection }))
+);
 const LatestPlayVideosStrip = lazy(() =>
   import("./feed/LatestPlayVideosStrip").then((m) => ({ default: m.LatestPlayVideosStrip }))
 );
@@ -155,9 +161,8 @@ import { useFeedCacheStore } from "@/store/useFeedCacheStore";
 import { FeedSyncStatusChip } from "@/components/feed/FeedSyncStatusChip";
 import { prefetchFeedMedia } from "@/lib/imageLoadCache";
 import { isVideoUrl } from "@/lib/mediaType";
-import { useFeedDebugStore } from "@/store/useFeedDebugStore";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertTriangle, Info } from "lucide-react";
+import { useFeedDebugStore, feedDebugLog } from "@/store/useFeedDebugStore";
+import { Info } from "lucide-react";
 
 // Bridge: chaves usadas no RealFeed → chaves canônicas em HOME_SECTIONS
 // (src/config/homeSections.ts). Usado pelo gate granular isSectionEnabled().
@@ -269,7 +274,7 @@ const FeedItem = memo(function FeedItem({
   const isCommunityTopic =
     post?.post_type === "community_topic" || !!parseCommunityTopicSnapshot(post?.content_text);
   return (
-    <div className="feed-post-item" style={{ contain: 'layout style', minHeight: '400px' }}>
+    <div className="feed-post-item" style={{ contain: showSuggestions ? 'style paint' : 'content' }}>
       {isCommunityTopic
         ? <CommunityTopicFeedCard post={post} />
         : isNarrative
@@ -383,31 +388,12 @@ export const RealFeed = memo(function RealFeed() {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const location = useLocation();
   const navigate = useNavigate();
-  const lastRenderRef = useRef(0);
-  const renderCountRef = useRef(0);
-  const { isDebugEnabled: isDebugEnabledGlobal, addLog: addDebugLog } = useFeedDebugStore();
-  const cachedFeedLength = useFeedCacheStore(s => s.posts?.length ?? 0);
-  const [mounted, setMounted] = useState(false);
-
+  // Diagnóstico: ler SEMPRE com seletor. Ler a store inteira fazia o feed
+  // re-renderizar a cada log gravado (inclusive eventos realtime de outros usuários).
+  const isDebugEnabled = useFeedDebugStore((s) => s.isDebugEnabled);
   useEffect(() => {
-    setMounted(true);
-    const now = Date.now();
-    const diff = now - lastRenderRef.current;
-    
-    // Ignoramos o primeiro render do mount
-    if (renderCountRef.current > 0 && diff < 3000) {
-      addDebugLog('render', `Piscada evitada: Re-render em ${diff}ms`, { 
-        count: renderCountRef.current,
-        hasCache: cachedFeedLength > 0 
-      });
-      console.warn(`[FeedDebug] Rapid re-render detected and suppressed: ${diff}ms`);
-    } else {
-      addDebugLog('render', 'Feed montado/estabilizado', { diff });
-    }
-    
-    renderCountRef.current += 1;
-    lastRenderRef.current = now;
-  }, [addDebugLog, cachedFeedLength]);
+    feedDebugLog('render', 'RealFeed montado');
+  }, []);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showFeedContentTypeModal, setShowFeedContentTypeModal] = useState(false);
@@ -421,7 +407,6 @@ export const RealFeed = memo(function RealFeed() {
   const { isSectionEnabled, viewMode: granularMode } = useViewModePreferences();
   const { isAdultOnly, isOcultoOnly } = useFeedExperienceMode();
   const { mode: themeMode, setMode: setThemeMode } = useTheme();
-  const { isDebugEnabled, clearLogs } = useFeedDebugStore();
   const { safeBlurOn, toggleSafeBlur } = useSafeBlur();
   const [safeBlurPending, setSafeBlurPending] = useState(false);
   const safeBlurPendingTimer = useRef<number | null>(null);
@@ -448,27 +433,9 @@ export const RealFeed = memo(function RealFeed() {
     return () => window.clearTimeout(t);
   }, [isLoading]);
 
-  // Monitoramento de retorno ao feed: atualiza em segundo plano ao mudar de função
-  useEffect(() => {
-    if (mounted && location.pathname === '/feed') {
-      const lastPath = (window as any)._OCULTO_LAST_PATH;
-      if (lastPath && lastPath !== '/feed') {
-        addDebugLog('query', 'Retorno ao feed: buscando atualizações em background');
-        queryClient.invalidateQueries({ 
-          queryKey: ['posts-infinite'], 
-          refetchType: 'active' 
-        });
-      }
-      (window as any)._OCULTO_LAST_PATH = '/feed';
-    }
-    return () => {
-      if (location.pathname !== '/feed') {
-        (window as any)._OCULTO_LAST_PATH = location.pathname;
-      }
-    };
-  }, [location.pathname, mounted, queryClient, addDebugLog]);
-
-
+  // Obs.: o "retorno ao feed" não força mais refetch de todas as páginas.
+  // O React Query revalida sozinho quando o cache passa do staleTime
+  // (ver useInfinitePosts), sem desmontar a lista nem perder o scroll.
 
   const [isHardRefreshing, setIsHardRefreshing] = useState(false);
   const handleHardRefresh = useCallback(async () => {
@@ -646,22 +613,6 @@ export const RealFeed = memo(function RealFeed() {
     if (!feedAccess.checking && !feedAccess.allowed) setFeedLimitOpen(true);
   }, [feedAccess.checking, feedAccess.allowed]);
 
-
-  const hasValidCache = useFeedCacheStore(s => !!s.posts?.length && (Date.now() - s.updatedAt < 24 * 60 * 60 * 1000));
-  const [showRenderWarning, setShowRenderWarning] = useState(false);
-
-  useEffect(() => {
-    addDebugLog('render', 'RealFeed montado/remontado');
-    if (hasValidCache) {
-      setShowRenderWarning(true);
-      // Limpar logs antigos se o feed está remontando sem motivo aparente
-      if (isDebugEnabled) {
-        addDebugLog('stale', 'ALERTA: Remontagem inesperada detectada');
-      }
-      const t = setTimeout(() => setShowRenderWarning(false), 3000);
-      return () => clearTimeout(t);
-    }
-  }, [addDebugLog, hasValidCache, isDebugEnabled]);
 
   const cachedFeedPosts = useFeedCacheStore((s) => s.posts);
   const cachedFeedOwner = useFeedCacheStore((s) => s.feedOwnerId);
@@ -1623,12 +1574,6 @@ export const RealFeed = memo(function RealFeed() {
         </div>
         {isDebugEnabled && (
           <div className="flex flex-col gap-1 items-start">
-            {showRenderWarning && (
-              <Alert variant="destructive" className="py-1 px-3 w-auto bg-amber-500/10 border-amber-500/30 text-amber-500 animate-pulse">
-                <AlertTriangle className="h-3 w-3 mr-2" />
-                <AlertDescription className="text-[10px] font-bold uppercase">Re-render inesperado</AlertDescription>
-              </Alert>
-            )}
             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[9px] font-mono">
               <Info className="h-2.5 w-2.5" />
               <span>DEBUG: Monitoring v18.5 Active</span>
@@ -1850,13 +1795,16 @@ export const RealFeed = memo(function RealFeed() {
       {activeTab !== 'card' && activeTab !== 'vip' && (
 
         <Virtuoso
-          key={`feed-virtuoso-${activeTab}-${mounted ? 'm' : 'u'}`}
+          // Sem `key` dinâmica: a key anterior mudava de 'u' para 'm' logo após
+          // o primeiro render e REMONTAVA a lista inteira (pisca + perde scroll).
           ref={virtuosoRef}
           useWindowScroll
           data={filteredPosts}
           computeItemKey={(index, post: any) => post?.id ?? `post-${index}`}
-          overscan={isOcultoOnly || dataSaver ? 2500 : 4000}
-          increaseViewportBy={dataSaver ? { top: 500, bottom: 1000 } : { top: 1000, bottom: 2000 }}
+          // Janela de renderização moderada: 4000px de overscan mantinha dezenas
+          // de cards (com mídia) montados fora da tela — pesado em celular <4GB.
+          overscan={dataSaver ? { main: 600, reverse: 300 } : { main: 1200, reverse: 600 }}
+          increaseViewportBy={dataSaver ? { top: 200, bottom: 600 } : { top: 400, bottom: 1000 }}
 
           // Histerese de prefetch: dispara cedo para esconder a latência de rede.
           atBottomThreshold={dataSaver ? 2000 : 1500}

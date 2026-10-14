@@ -18,6 +18,15 @@ import { useAuth } from "@/hooks/useAuth";
  * em qualquer lugar do RealFeed sem alterar suas props.
  */
 export function FeedSyncStatusChip({ className = "" }: { className?: string }) {
+  const { user } = useAuth();
+  const isMaster = (user?.email || "").trim().toLowerCase() === "ocultomaster@ocultoswing.com.br";
+  // Usuários comuns não montam nada: sem inscrição em useIsFetching nem na
+  // store de diagnóstico (antes, todo usuário re-renderizava o chip a cada fetch).
+  if (!isMaster) return null;
+  return <FeedSyncStatusChipMaster className={className} />;
+}
+
+function FeedSyncStatusChipMaster({ className = "" }: { className?: string }) {
   const fetching = useIsFetching({
     predicate: (q) => {
       const k = q.queryKey?.[0];
@@ -28,10 +37,11 @@ export function FeedSyncStatusChip({ className = "" }: { className?: string }) {
   const [phase, setPhase] = useState<"cache" | "syncing" | "fresh" | "idle">(
     cachedPosts > 0 ? "cache" : "idle",
   );
-  const { isDebugEnabled, logs, toggleDebug, clearLogs } = useFeedDebugStore();
-  const addDebugLog = useFeedDebugStore(s => s.addLog);
-  const { user } = useAuth();
-  const isMaster = user?.email === 'ocultomaster@ocultoswing.com.br';
+  const isDebugEnabled = useFeedDebugStore((s) => s.isDebugEnabled);
+  const logs = useFeedDebugStore((s) => s.logs);
+  const toggleDebug = useFeedDebugStore((s) => s.toggleDebug);
+  const clearLogs = useFeedDebugStore((s) => s.clearLogs);
+  const addDebugLog = useFeedDebugStore((s) => s.addLog);
 
   const exportLogs = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -57,9 +67,8 @@ export function FeedSyncStatusChip({ className = "" }: { className?: string }) {
       const t = window.setTimeout(() => setPhase("idle"), 2500);
       return () => window.clearTimeout(t);
     }
-  }, [fetching, phase]);
+  }, [fetching, phase, addDebugLog]);
 
-  if (!isMaster) return null;
   if (phase === "idle" && !isDebugEnabled) return null;
 
   const styles: Record<

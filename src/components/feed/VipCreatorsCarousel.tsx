@@ -665,15 +665,14 @@ function CreateVipChannelCTACard({ onClick }: { onClick: () => void }) {
 
 
 export const VipCreatorsCarousel = memo(function VipCreatorsCarousel() {
-  const { data: realCreators = [], isLoading, refetch } = useVipCreators(30);
+  // A lista de criadores VIP não depende do usuário logado: o cache do
+  // React Query é suficiente. (O refetch forçado a cada montagem fazia o
+  // carrossel recarregar sempre que o usuário voltava ao feed.)
+  const { data: realCreators = [], isLoading } = useVipCreators(30);
   const navigate = useNavigate();
   const [showVitrine, setShowVitrine] = useState(false);
   const [highlightModalOpen, setHighlightModalOpen] = useState(false);
   const { user } = useAuth();
-
-  useEffect(() => {
-    if (user?.id) refetch();
-  }, [user?.id, refetch]);
   const { profile } = useProfile();
   const { data: myHighlight } = useMyProfileHighlight();
   const { data: ownsVipChannel = false } = useHasVipChannel();

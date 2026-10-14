@@ -32,10 +32,75 @@ const FEED_QUERY_PREFIXES = [
   ["subscribed-vip-posts"],
 ] as const;
 
-// Ultra-rápido: INSERT/DELETE refletem instantaneamente (sem debounce).
-// UPDATE de contadores (likes/comments) agrupa em 150ms para evitar flood.
-const INSERT_DEBOUNCE_MS = 0;
-const UPDATE_DEBOUNCE_MS = 150;
+// INSERT: o post novo já entra na hora via prepend otimista (abaixo); o
+// refetch de confirmação é agrupado em 4s para que rajadas de publicações
+// virem UMA revalidação em vez de várias seguidas.
+const INSERT_DEBOUNCE_MS = 4000;
+const UPDATE_DEBOUNCE_MS = 1000;
+
+/**
+ * Campos de `posts` que, quando mudam, alteram QUAIS posts aparecem ou a
+ * ORDEM do feed. Só nesses casos o UPDATE exige refetch. Qualquer outra
+ * mudança (contadores de curtidas/comentários — atualizados por trigger no
+ * banco a cada curtida da plataforma inteira —, texto, mídia) é aplicada
+ * direto no cache, sem rede e sem remontar a lista.
+ */
+const VISIBILITY_FIELDS = [
+  "is_hidden", "privacy_level", "is_adult", "is_flash", "is_pinned", "pinned_at",
+  "is_locked", "is_paid", "post_type",
+] as const;
+
+/** Aplica os campos de `row` no post com o mesmo id em qualquer cache conhecido. */
+function patchPostInCaches(qc: ReturnType<typeof useQueryClient>, row: any): boolean {
+  if (!row?.id) return false;
+  let found = false;
+  const merge = (p: any) => {
+    if (!p || p.id !== row.id) return p;
+    found = true;
+    const next: any = { ...p };
+    for (const k of Object.keys(row)) {
+      // Só sobrescreve campos que o post do cache já conhece: o payload do
+      // realtime é a linha crua da tabela, sem `author`/`profiles` hidratados.
+      if (k in p) next[k] = row[k];
+    }
+    return next;
+  };
+  for (const queryKey of FEED_QUERY_PREFIXES) {
+    qc.setQueriesData({ queryKey }, (old: any) => {
+      if (!old) return old;
+      if (Array.isArray(old)) {
+        return old.some((p: any) => p?.id === row.id) ? old.map(merge) : old;
+      }
+      if (Array.isArray(old.pages)) {
+        const hit = old.pages.some((pg: any) =>
+          (Array.isArray(pg) ? pg : pg?.posts || []).some((p: any) => p?.id === row.id),
+        );
+        if (!hit) return old;
+        return {
+          ...old,
+          pages: old.pages.map((pg: any) =>
+            Array.isArray(pg) ? pg.map(merge) : pg?.posts ? { ...pg, posts: pg.posts.map(merge) } : pg,
+          ),
+        };
+      }
+      return old;
+    });
+  }
+  return found;
+}
+
+function changesVisibility(payload: any): boolean {
+  const next = payload?.new || {};
+  const prev = payload?.old || {};
+  // Sem `old` completo (REPLICA IDENTITY padrão só envia a PK), não dá para
+  // comparar: considera mudança de visibilidade apenas se o campo veio com
+  // valor que esconde o post.
+  const hasFullOld = Object.keys(prev).length > 1;
+  if (!hasFullOld) {
+    return next.is_hidden === true || next.privacy_level === "hidden" || next.is_flash === true;
+  }
+  return VISIBILITY_FIELDS.some((f) => f in next && next[f] !== prev[f]);
+}
 // Só revalida ao voltar para a aba se ficou mais que isto em background.
 const STALE_AFTER_HIDDEN_MS = 5 * 60 * 1000;
 let realtimeFeedOwnerMounted = false;
@@ -129,6 +194,14 @@ export function usePostsRealtime() {
         }
         scheduleInsert();
       } else if (evt === "UPDATE") {
+        // Caminho comum (curtida/comentário em qualquer post da plataforma
+        // dispara UPDATE em `posts` via trigger de contador): aplica no cache,
+        // sem refetch. Antes, CADA curtida recarregava todas as páginas do feed.
+        const row = payload?.new;
+        if (row && !changesVisibility(payload)) {
+          patchPostInCaches(qc, row);
+          return;
+        }
         schedulePostUpdate();
       } else {
         scheduleCounterUpdate();
@@ -218,13 +291,19 @@ export function usePostsRealtime() {
     // — não disparam refetch imediato (o contador local é otimista).
     // INSERT em tópicos de comunidades também dispara refresh hard, pois
     // alguns modos de feed mostram tópicos no feed principal.
+    // `post_likes`/`post_comments`/`post_dislikes`/`saved_posts` NÃO são mais
+    // assinadas aqui: os handlers não faziam nada, mas cada curtida/comentário
+    // da plataforma inteira ainda trafegava pelo websocket de TODOS os
+    // usuários. Os contadores chegam pelo UPDATE em `posts` (trigger) e são
+    // aplicados no cache acima.
     const unsubs = [
       subscribeTable("posts", onPostsChange),
-      subscribeTable("post_likes", () => scheduleCounterUpdate()),
-      subscribeTable("post_comments", () => scheduleCounterUpdate()),
-      subscribeTable("post_dislikes", () => scheduleCounterUpdate()),
-      subscribeTable("saved_posts", () => scheduleCounterUpdate()),
-      subscribeTable("oculto_community_topics", onPostsChange),
+      subscribeTable("oculto_community_topics", (payload: any) => {
+        lastRealtimeAtRef.current = Date.now();
+        const evt = payload?.eventType || payload?.event;
+        if (evt === "INSERT" || evt === "DELETE") scheduleInsert();
+        else if (evt === "UPDATE") schedulePostUpdate();
+      }),
     ];
 
     const onVisibility = () => {

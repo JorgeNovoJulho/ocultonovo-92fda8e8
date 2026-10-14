@@ -123,7 +123,6 @@ export function useUpdateInviteSettings() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (value: InviteSettings) => {
-      console.log("[useUpdateInviteSettings] Saving:", value);
       const { error } = await supabase
         .from("landing_settings")
         .upsert(

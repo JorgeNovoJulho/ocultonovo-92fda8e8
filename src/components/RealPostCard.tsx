@@ -195,18 +195,18 @@ const getPlanLabel = (plan?: string) => {
   return null;
 };
 
-export const RealPostCard = memo(function RealPostCard({ post: rawPost, onSubscribe, isDisliked = false, onOpenExpandedPost, isOcultoOnly }: RealPostCardProps) {
-  useEffect(() => {
-    if ((window as any).OCULTO_DEBUG_FEED) {
-      console.log(`[FeedDebug] Render RealPostCard: ${rawPost.id}`, {
-        author: (rawPost as any).author?.username,
-        isPinned: (rawPost as any).is_pinned,
-        timestamp: new Date().toISOString()
-      });
-    }
-  });
+/**
+ * Wrapper leve: decide se o card deve aparecer ANTES de chamar qualquer hook.
+ * Um `return null` no meio do corpo (antes dos hooks) viola as Regras dos Hooks
+ * do React e derruba o feed com "Rendered fewer hooks than expected" quando o
+ * post ou o modo do feed muda com o card montado.
+ */
+export const RealPostCard = memo(function RealPostCard(props: RealPostCardProps) {
+  if (props.isOcultoOnly && (props.post as any)?.is_adult === true) return null;
+  return <RealPostCardBody {...props} />;
+});
 
-
+const RealPostCardBody = memo(function RealPostCardBody({ post: rawPost, onSubscribe, isDisliked = false, onOpenExpandedPost }: RealPostCardProps) {
   // Defensive normalization: aceita media_urls[] como fallback de media_url,
   // e garante que content_text nulo nunca quebre o render do card.
   const post = useMemo(() => {
@@ -221,11 +221,9 @@ export const RealPostCard = memo(function RealPostCard({ post: rawPost, onSubscr
       media_duration_seconds: duration || (rawPost as any).media_duration_seconds || null,
       video_duration_seconds: duration || (rawPost as any).video_duration_seconds || null,
     };
-  }, [rawPost.id, rawPost.updated_at]);
-
-  
-  const isAdult = (post as any).is_adult === true;
-  if (isOcultoOnly && isAdult) return null;
+    // Depende do objeto inteiro: curtidas/comentários mudam sem alterar
+    // `updated_at`, e depender só de id/updated_at congelava as contagens.
+  }, [rawPost]);
 
   const { toast } = useToast();
   const { user } = useAuth();
