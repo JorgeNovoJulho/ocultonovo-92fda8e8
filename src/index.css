@@ -1642,3 +1642,31 @@ html:not(.dark) [data-aura-page] [class*="text-"][class*="/90"] {
 @media (prefers-reduced-motion: reduce) {
   .gold-card-shine::after { animation: none; opacity: 0.35; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ANTI-"CHUVISCO" NO CELULAR (Realme C55 / GPUs Mali e inferiores)
+   Faixas pixeladas aparecem quando o Chrome Android fica sem memória de GPU
+   para rasterizar camadas. Os maiores consumidores eram:
+     1) "orbes" decorativos gigantes com filter: blur(40–150px) dentro de
+        áreas que rolam (cada um vira uma camada grande com filtro);
+     2) camadas forçadas por item (translateZ/will-change em cada card).
+   Aqui só removemos enfeites — desfoques que escondem conteúdo pago/+18
+   ficam em <img>/<video> e NÃO são afetados.
+══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 820px) and (pointer: coarse) {
+  :is(.pointer-events-none, [aria-hidden="true"]):is(
+    [class~="blur-xl"], [class~="blur-2xl"], [class~="blur-3xl"],
+    [class~="blur-[80px]"], [class~="blur-[100px]"], [class~="blur-[120px]"], [class~="blur-[150px]"]
+  ):not(img):not(video):not(picture):not(canvas) {
+    display: none !important;
+  }
+
+  /* Uma camada por card esgota a GPU em carrosséis longos. */
+  .discovery-suggestion-slot,
+  .will-animate,
+  [class~="will-change-transform"] {
+    will-change: auto !important;
+    transform: none;
+  }
+
+}

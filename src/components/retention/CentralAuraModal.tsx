@@ -162,9 +162,9 @@ function CentralAuraBody({ onClose }: { onClose: () => void }) {
         "
       >
         {/* halos neon */}
-        <div aria-hidden className="pointer-events-none absolute -top-32 -left-24 h-80 w-80 rounded-full blur-3xl opacity-40"
+        <div aria-hidden className="pointer-events-none absolute -top-32 -left-24 h-80 w-80 rounded-full sm:blur-3xl opacity-40"
           style={{ background: 'radial-gradient(circle, rgba(34,211,238,0.45), transparent 70%)' }} />
-        <div aria-hidden className="pointer-events-none absolute -bottom-32 -right-24 h-80 w-80 rounded-full blur-3xl opacity-40"
+        <div aria-hidden className="pointer-events-none absolute -bottom-32 -right-24 h-80 w-80 rounded-full sm:blur-3xl opacity-40"
           style={{ background: 'radial-gradient(circle, rgba(168,85,247,0.45), transparent 70%)' }} />
 
         <div className="relative flex h-full min-h-0 flex-col overflow-hidden">

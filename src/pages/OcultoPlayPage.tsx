@@ -4871,23 +4871,32 @@ function PlayHRow({ title, children, itemWidth = 'w-[42vw] max-w-[176px]' }: {
   );
 }
 
-function topGenres(items: OcultoPlayItem[], max: number, minItems: number) {
-  const count = new Map<string, OcultoPlayItem[]>();
+/**
+ * Uma linha de cards para CADA gênero usado nos itens (genre_tags).
+ * Gênero novo aparece sozinho: as linhas nascem dos próprios itens, que
+ * chegam em tempo real. "Rock", "rock" e " ROCK " viram a mesma linha.
+ */
+function topGenres(items: OcultoPlayItem[], max = Infinity, minItems = 1, perRow = 30) {
+  const groups = new Map<string, { name: string; items: OcultoPlayItem[]; seen: Set<string> }>();
+  const anyGenre = items.some((it) => (it.genre_tags?.length ?? 0) > 0);
   for (const it of items) {
-    const tags = (it.genre_tags && it.genre_tags.length ? it.genre_tags : it.tags) ?? [];
-    for (const t of tags.slice(0, 4)) {
-      const key = String(t).trim();
-      if (!key) continue;
-      const list = count.get(key) ?? [];
-      list.push(it);
-      count.set(key, list);
+    const tags = (anyGenre ? it.genre_tags : it.tags) ?? [];
+    for (const raw of tags) {
+      const name = String(raw ?? '').replace(/^#/, '').trim();
+      if (!name) continue;
+      const key = name.toLocaleLowerCase('pt-BR');
+      let g = groups.get(key);
+      if (!g) { g = { name: name.charAt(0).toLocaleUpperCase('pt-BR') + name.slice(1), items: [], seen: new Set() }; groups.set(key, g); }
+      if (g.seen.has(it.id)) continue;
+      g.seen.add(it.id);
+      g.items.push(it);
     }
   }
-  return [...count.entries()]
-    .filter(([, list]) => list.length >= minItems)
-    .sort((a, b) => b[1].length - a[1].length)
+  return [...groups.values()]
+    .filter((g) => g.items.length >= minItems)
+    .sort((a, b) => b.items.length - a.items.length || a.name.localeCompare(b.name, 'pt-BR'))
     .slice(0, max)
-    .map(([name, list]) => ({ name, items: list.slice(0, 12) }));
+    .map((g) => ({ name: g.name, items: g.items.slice(0, perRow) }));
 }
 
 /** Card de música enxuto: capa, título e nome do usuário. "Mais" expande o card completo. */
@@ -4936,7 +4945,7 @@ function SpotifyAudioLayout({ items, onOpenFocus }: { items: OcultoPlayItem[]; o
   const [showAll, setShowAll] = useState(false);
   const newest = useMemo(() => items.slice(0, 12), [items]);
   const mostPlayed = useMemo(() => [...items].sort((a, b) => (b.view_count ?? 0) - (a.view_count ?? 0)).slice(0, 8), [items]);
-  const genres = useMemo(() => topGenres(items, 3, 3), [items]);
+  const genres = useMemo(() => topGenres(items), [items]);
   const trackList = showAll ? items : mostPlayed;
   // Card expandido: lista da fileira + posição do card tocado.
   const [expanded, setExpanded] = useState<{ list: OcultoPlayItem[]; index: number } | null>(null);
@@ -5022,7 +5031,7 @@ function SpotifyAudioLayout({ items, onOpenFocus }: { items: OcultoPlayItem[]; o
 function NetflixMoviesLayout({ items, onOpenFocus }: { items: OcultoPlayItem[]; onOpenFocus: (it: OcultoPlayItem) => void }) {
   const newest = useMemo(() => items.slice(0, 12), [items]);
   const mostWatched = useMemo(() => [...items].sort((a, b) => (b.view_count ?? 0) - (a.view_count ?? 0)).slice(0, 12), [items]);
-  const genres = useMemo(() => topGenres(items, 4, 2), [items]);
+  const genres = useMemo(() => topGenres(items), [items]);
   const card = (it: OcultoPlayItem) => <PlayLinkCard item={it} variant="netflix" onOpenFocus={() => onOpenFocus(it)} />;
 
   return (

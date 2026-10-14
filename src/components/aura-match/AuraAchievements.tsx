@@ -87,9 +87,10 @@ export function AuraAchievements() {
 
   return (
     <LayoutGroup>
+    {/* Sem `layout`: a animação de layout do framer-motion escala o bloco
+        inteiro com transform e, no celular, a camada era rasterizada
+        distorcida (faixas pixeladas). */}
     <motion.div
-      layout
-      transition={{ layout: { duration: 0.28, ease: [0.22, 1, 0.36, 1] } }}
       className="rounded-xl border border-amber-400/30 bg-gradient-to-br from-amber-500/12 via-amber-500/6 to-orange-600/4 p-3 space-y-2 shadow-[0_0_24px_-12px_hsl(38_95%_55%/0.45)]"
     >
 
@@ -345,7 +346,6 @@ export function AuraAchievements() {
       <AnimatePresence initial={false}>
         {filter === 'rare_pending' && (
           <motion.div
-            layout
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
@@ -369,7 +369,7 @@ export function AuraAchievements() {
       </AnimatePresence>
 
 
-      <motion.div layout id="aura-achievements-grid" className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+      <motion.div id="aura-achievements-grid" className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
         {visible.length === 0 && (
           <div className="col-span-full text-center text-[11px] text-muted-foreground py-4">
             {filter === 'unlocked' ? 'Nenhuma conquista concluída ainda.'

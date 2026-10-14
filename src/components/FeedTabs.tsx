@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
-import { SquarePen, BrainCircuit } from "lucide-react";
+import { SquarePen, BrainCircuit, Sparkles, LayoutGrid } from "lucide-react";
 import { OcultoPlayFeedTabButton } from "@/components/OcultoPlayFeedTabButton";
 
 /** Prefetch do chunk do CentralAuraModal — evita atraso ao clicar em Aura IA. */
@@ -125,66 +125,75 @@ export function FeedTabs({ activeTab, onTabChange, onCreatePost }: FeedTabsProps
     const t = window.setTimeout(prefetchAuraModal, 1500);
     return () => window.clearTimeout(t);
   }, []);
+  // Os 3 botões têm exatamente o mesmo tamanho (grade de 3 colunas iguais).
+  // Sem filtros/brilho animado/desfoque no celular: esses efeitos sobre uma
+  // barra fixa forçam camadas de GPU grandes e causavam "chuvisco" em
+  // aparelhos fracos (Realme C55 e abaixo).
+  const shortLabel: Record<FeedTab, string> = {
+    following: t('feed.tabs.following'),
+    foryou: 'Novidades',
+    vip: 'VIP',
+    card: t('feed.tabs.card'),
+  };
+  const tabIcon: Record<FeedTab, typeof Sparkles> = {
+    following: Sparkles,
+    foryou: Sparkles,
+    vip: Sparkles,
+    card: LayoutGrid,
+  };
+  const tabTone: Record<FeedTab, { active: string; idle: string }> = {
+    following: { active: 'bg-sky-600 border-sky-400 text-white', idle: 'border-sky-500/40 text-sky-200 bg-sky-500/10' },
+    foryou: {
+      active: 'bg-gradient-to-br from-violet-600 to-fuchsia-600 border-violet-300/80 text-white shadow-md shadow-violet-900/40',
+      idle: 'border-violet-400/45 text-violet-200 bg-violet-500/10 hover:bg-violet-500/20',
+    },
+    vip: { active: 'bg-amber-500 border-amber-300 text-black', idle: 'border-amber-400/40 text-amber-200 bg-amber-500/10' },
+    card: {
+      active: 'bg-gradient-to-br from-emerald-600 to-teal-600 border-emerald-300/80 text-white shadow-md shadow-emerald-900/40',
+      idle: 'border-emerald-400/45 text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20',
+    },
+  };
+  const BTN =
+    "relative flex h-11 w-full min-w-0 items-center justify-center gap-1.5 rounded-xl border px-2 " +
+    "text-[11px] sm:text-[13px] font-extrabold uppercase tracking-wide leading-none whitespace-nowrap " +
+    "select-none transition-colors active:scale-[0.97]";
+
   return (
-    <div className="sticky top-14 md:top-16 z-50 bg-background/95 backdrop-blur-md border-b border-border/30 overflow-visible">
-      <div
-        className="
-          flex flex-col gap-1.5 p-2 pt-3
-          md:flex-row md:items-stretch md:gap-2 md:overflow-x-auto
-          overflow-visible w-full
-          [scrollbar-width:none] [-ms-overflow-style:none]
-          [&::-webkit-scrollbar]:hidden
-        "
-      >
+    <div className="sticky top-14 md:top-16 z-50 bg-background border-b border-border/30 md:bg-background/95 md:backdrop-blur-md">
+      <div className="grid grid-cols-3 gap-2 p-2 pt-3 md:flex md:gap-2">
         <button
           key="publish"
+          type="button"
           onClick={handleCreatePost}
           className={cn(
-            FEED_BTN_BASE,
-            "border-2 w-full md:w-auto md:order-last",
-            "border-publish-border bg-gradient-to-r from-publish/80 via-publish/55 to-publish/35",
-            "text-publish-foreground hover:from-publish hover:via-publish/75 hover:to-publish/50",
-            "shadow-[0_0_0_1px_hsl(var(--publish-border)/0.45),0_0_18px_hsl(var(--publish-glow)/0.34)]",
-            "hover:shadow-[0_0_0_1px_hsl(var(--publish-border)/0.65),0_0_28px_hsl(var(--publish-glow)/0.48)]",
-            "gap-1.5 animate-glow-pulse-blue",
+            BTN,
+            "border-sky-300/70 bg-gradient-to-br from-sky-500 to-blue-700 text-white shadow-md shadow-blue-900/40 hover:from-sky-400 hover:to-blue-600",
+            "md:order-last md:w-auto md:min-w-[8rem]",
           )}
           title="Publicar no feed"
         >
           <SquarePen className="h-4 w-4 shrink-0" />
           <span className="truncate">Publicar</span>
         </button>
-        <div className="grid grid-cols-2 gap-1.5 md:contents w-full">
-          {tabs.map((tab) => {
-            const theme = TAB_THEME[tab.id];
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => onTabChange(tab.id)}
-                className={cn(
-                  FEED_BTN_BASE,
-                  "border-2 w-full",
-                  theme.fillActive,
-                  theme.ring,
-                  "bg-clip-text text-transparent bg-gradient-to-r",
-                  theme.text,
-                  theme.glow,
-                  isActive ? "brightness-125 scale-[1.02]" : "brightness-95 hover:brightness-110",
-                )}
-              >
-                <span className="truncate">{tab.label}</span>
-                {isActive && (
-                  <div
-                    className={cn(
-                      "absolute bottom-0 left-2 right-2 h-[3px] rounded-full bg-gradient-to-r",
-                      theme.underline,
-                    )}
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          const Icon = tabIcon[tab.id];
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => onTabChange(tab.id)}
+              aria-pressed={isActive}
+              title={tab.label}
+              className={cn(BTN, "md:flex-1", isActive ? tabTone[tab.id].active : tabTone[tab.id].idle)}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              <span className="truncate md:hidden">{shortLabel[tab.id]}</span>
+              <span className="hidden truncate md:inline">{tab.label}</span>
+              {isActive && <span className="absolute inset-x-3 bottom-1 h-[2px] rounded-full bg-white/80" />}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
