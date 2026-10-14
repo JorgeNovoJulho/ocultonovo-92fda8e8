@@ -394,38 +394,35 @@ export function OcultoPlayLinkPlayer({
   const aspectClass = isVertical ? 'aspect-[9/16]' : 'aspect-video';
   const cover = preferThumb ? (thumbUrl || null) : (thumbUrl || parsed.thumbnailUrl);
 
-  if (parsed.kind === 'magnet') {
+  // Links do Stremio / torrent / computador de quem postou: não tocam para
+  // ninguém além do autor. Aviso claro em vez de falhar sem explicação.
+  if (parsed.kind === 'magnet' || parsed.kind === 'local') {
+    const isMagnet = parsed.kind === 'magnet';
+    if (lazyClickToPlay && !autoPlay) {
+      // Card na lista: capa + etiqueta compacta (o aviso completo aparece ao abrir).
+      return (
+        <div className={cn('relative overflow-hidden rounded-lg bg-black mx-auto', aspectClass, className)}>
+          {thumbUrl ? <img src={thumbUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-60" loading="lazy" decoding="async" /> : null}
+          <span className="absolute bottom-1.5 left-1.5 right-1.5 z-10 rounded-md bg-amber-500/95 px-2 py-1 text-center text-[10px] font-bold leading-tight text-black">
+            {isMagnet ? 'Link torrent — não toca para outros usuários' : 'Link do Stremio/PC — não toca para outros usuários'}
+          </span>
+        </div>
+      );
+    }
     return (
-      <div
-        className={cn(
-          'relative flex flex-col items-center justify-center rounded-lg bg-black p-5 text-center overflow-hidden mx-auto',
-          !isFs && aspectClass,
-          className,
-        )}
-      >
-        {thumbUrl ? <img src={thumbUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-20 blur-sm" /> : null}
-        <div className="relative z-10 flex max-w-xs flex-col items-center gap-3">
-          <div className="grid h-14 w-14 place-items-center rounded-full border border-primary/40 bg-primary/15">
-            <Info className="h-7 w-7 text-primary" />
+      <div className={cn('relative flex items-center justify-center overflow-hidden rounded-lg bg-black p-5 text-center mx-auto', aspectClass, className)}>
+        {thumbUrl ? <img src={thumbUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-20" loading="lazy" decoding="async" /> : null}
+        <div className="relative z-10 flex max-w-sm flex-col items-center gap-3 text-white">
+          <div className="grid h-12 w-12 place-items-center rounded-full bg-amber-500/20 ring-1 ring-amber-400/50">
+            <Info className="h-6 w-6 text-amber-300" />
           </div>
-          <div className="space-y-1">
-            <p className="text-sm font-bold text-foreground">Link Magnet detectado</p>
-            <p className="text-[11px] leading-snug text-muted-foreground">
-              Este formato não roda direto no navegador. Abra em um aplicativo compatível do dispositivo; se não houver app instalado, instale o Stremio.
-            </p>
-          </div>
-          <div className="grid w-full gap-2">
-            <Button asChild size="sm" className="h-9 text-xs">
-              <a href={parsed.embedSrc}>
-                <ExternalLink className="mr-2 h-3.5 w-3.5" /> Abrir no app
-              </a>
-            </Button>
-            <Button asChild size="sm" variant="outline" className="h-9 text-xs">
-              <a href="https://www.stremio.com/downloads" target="_blank" rel="noreferrer">
-                <Download className="mr-2 h-3.5 w-3.5" /> Instalar Stremio
-              </a>
-            </Button>
-          </div>
+          <p className="text-sm font-bold">Este filme não está disponível para assistir aqui</p>
+          <p className="text-xs leading-relaxed text-white/75">
+            {isMagnet
+              ? 'O link publicado é um torrent (magnet). Navegadores não reproduzem torrents, então ele não toca para outros usuários.'
+              : 'O link publicado aponta para o computador de quem postou (por exemplo, o Stremio aberto naquele PC). Ele só funciona lá e não toca para outros usuários.'}
+          </p>
+          <p className="text-[11px] text-white/55">Quem publicou pode trocar por um vídeo enviado ao Oculto ou um link MP4, HLS (.m3u8), YouTube, Vimeo ou Internet Archive.</p>
         </div>
       </div>
     );

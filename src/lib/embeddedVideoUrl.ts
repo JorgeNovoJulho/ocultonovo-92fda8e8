@@ -12,7 +12,30 @@
  * considerado vídeo direto (a regex agora exige fim de path).
  */
 
-export type EmbeddedVideoKind = 'youtube' | 'vimeo' | 'tiktok' | 'direct' | 'embed' | 'magnet';
+export type EmbeddedVideoKind = 'youtube' | 'vimeo' | 'tiktok' | 'direct' | 'embed' | 'magnet' | 'local';
+
+/**
+ * Links que NÃO tocam para outros usuários:
+ *  - 'magnet'  → torrent (magnet:?xt=…); navegadores não baixam torrents.
+ *  - 'local'   → endereço do computador de quem postou (ex.: servidor do
+ *                Stremio em http://127.0.0.1:11470/…, localhost, rede de casa
+ *                192.168.x.x) ou o esquema stremio://. Só abre naquele PC.
+ */
+export type UnplayableLinkReason = 'magnet' | 'local';
+
+export function getUnplayableLinkReason(raw: string | null | undefined): UnplayableLinkReason | null {
+  const v = extractUrlFromEmbedSnippet(String(raw ?? '')).trim().toLowerCase();
+  if (!v) return null;
+  if (v.startsWith('magnet:')) return 'magnet';
+  if (v.startsWith('stremio:')) return 'local';
+  if (/^https?:\/\/(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|\[::1\]|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?(\/|$|\?)/.test(v)) return 'local';
+  if (/^https?:\/\/[^/]+:(11470|12470)(\/|$|\?)/.test(v)) return 'local';
+  return null;
+}
+
+export function isUnplayableLink(raw: string | null | undefined): boolean {
+  return getUnplayableLinkReason(raw) !== null;
+}
 
 export interface ParsedEmbeddedVideo {
   kind: EmbeddedVideoKind;
@@ -168,6 +191,11 @@ export function parseEmbeddedVideo(rawUrl: string): ParsedEmbeddedVideo | null {
   if (!rawUrl) return null;
   const url = normalizeVideoUrl(extractUrlFromEmbedSnippet(rawUrl));
 
+  // Endereços do computador de quem postou (Stremio/localhost/rede de casa).
+  if (getUnplayableLinkReason(url) === 'local') {
+    return { kind: 'local', id: url, embedSrc: url, originalUrl: url };
+  }
+
   const btih = getMagnetBtih(url);
   if (btih && isMagnetVideoUrl(url)) {
     return {
@@ -270,6 +298,12 @@ function toDirectDownloadUrl(raw: string): string {
 function buildGenericEmbedSrc(u: URL): string | null {
   const host = u.hostname.replace(/^www\./, '');
   const path = u.pathname;
+
+  // Internet Archive (filmes de domínio público): /details/<id> → /embed/<id>
+  if (host === 'archive.org') {
+    const m = path.match(/^\/(?:details|embed)\/([^/?#]+)/);
+    if (m) return `https://archive.org/embed/${m[1]}`;
+  }
 
   // Google Drive: /file/d/<id>/view → /preview (player do próprio Drive)
   if (host === 'drive.google.com') {

@@ -1,6 +1,8 @@
 /**
  * OcultoPlayLinkComposer — UI dentro do modal de upload para criar um item do tipo
- * `link` no PLAY. Aceita YouTube, Vimeo, TikTok, magnet links e arquivos diretos (.mp4/.webm).
+ * `link` no PLAY. Aceita YouTube, Vimeo, TikTok, Internet Archive, Google Drive e arquivos
+ * diretos/streams (.mp4/.webm/.mkv/.m3u8/.mpd). Recusa magnet e links locais (Stremio,
+ * localhost, 127.0.0.1, rede de casa): não tocam para outros usuários.
  *
  * Saída via `onChange`:
  *   - sourceUrl: URL crua informada pelo usuário (será salva em source_url + media_url)
@@ -50,6 +52,7 @@ const PROVIDER_LABEL: Record<ParsedEmbeddedVideo['kind'], string> = {
   direct: 'Arquivo direto',
   embed: 'Outro provedor',
   magnet: 'Magnet',
+  local: 'Link local',
 };
 
 export function OcultoPlayLinkComposer({ value, onChange, currentThumbUrl }: Props) {
@@ -107,7 +110,7 @@ export function OcultoPlayLinkComposer({ value, onChange, currentThumbUrl }: Pro
       (selectedFrameIdx != null ? frames[selectedFrameIdx]?.blob ?? null : null);
     const next: OcultoPlayLinkComposerValue = {
       sourceUrl: url.trim(),
-      provider: parsed?.kind ?? null,
+      provider: parsed && parsed.kind !== 'magnet' && parsed.kind !== 'local' ? parsed.kind : null,
       coverBlob,
       coverRemoteUrl: coverBlob ? null : selectedRemoteThumb,
     };
@@ -160,7 +163,7 @@ export function OcultoPlayLinkComposer({ value, onChange, currentThumbUrl }: Pro
     <div className="space-y-3">
       <div>
         <label className="text-xs text-muted-foreground mb-1 flex items-center gap-1.5">
-          <Link2 className="h-3.5 w-3.5" /> URL ou código de embed (YouTube, Vimeo, TikTok, magnet, .mp4 direto ou outros)
+          <Link2 className="h-3.5 w-3.5" /> Link do vídeo (MP4, HLS .m3u8, YouTube, Vimeo, Internet Archive, Drive…)
         </label>
         <Input
           value={url}
@@ -182,17 +185,29 @@ export function OcultoPlayLinkComposer({ value, onChange, currentThumbUrl }: Pro
               URL inválida
             </p>
             <p className="text-rose-200/85 leading-snug">
-              Cole uma URL completa começando com https:// ou magnet:?xt=urn:btih:...
+              Cole uma URL completa começando com https://
             </p>
           </div>
         )}
-        {parsed && (
+        {parsed && (parsed.kind === 'magnet' || parsed.kind === 'local') && (
+          <div className="mt-1.5 rounded-md border border-rose-500/40 bg-rose-500/10 p-2.5 text-[11px] text-rose-100 space-y-1">
+            <p className="flex items-center gap-1 font-semibold">
+              <AlertTriangle className="h-3 w-3" />
+              Este link não toca para outros usuários
+            </p>
+            <p className="text-rose-200/85 leading-snug">
+              {parsed.kind === 'magnet'
+                ? 'Links magnet (torrent) não reproduzem em navegadores.'
+                : 'Este endereço é do seu computador (ex.: Stremio em 127.0.0.1:11470, localhost ou rede de casa). Só funciona no seu PC.'}
+              {' '}Envie o arquivo do vídeo ou use um link MP4, HLS (.m3u8), YouTube, Vimeo, Internet Archive ou Google Drive.
+            </p>
+          </div>
+        )}
+        {parsed && parsed.kind !== 'magnet' && parsed.kind !== 'local' && (
           <div className="mt-1 flex items-center gap-2">
             <Badge variant="outline" className="text-[10px] uppercase">{PROVIDER_LABEL[parsed.kind]}</Badge>
             <span className="text-[10px] text-muted-foreground">
-              {parsed.kind === 'magnet'
-                ? 'Será salvo como link externo e aberto por um app compatível do dispositivo.'
-                : parsed.kind === 'embed'
+              {parsed.kind === 'embed'
                 ? 'Tentaremos embutir; se o site bloquear, abre externamente.'
                 : 'Detectado automaticamente'}
             </span>
@@ -238,13 +253,9 @@ export function OcultoPlayLinkComposer({ value, onChange, currentThumbUrl }: Pro
 
 
       {/* Preview do player */}
-      {parsed && (
+      {parsed && parsed.kind !== 'magnet' && parsed.kind !== 'local' && (
         <div className="rounded-lg overflow-hidden border border-border/40 bg-black aspect-video relative">
-          {parsed.kind === 'magnet' ? (
-            <div className="absolute inset-0 grid place-items-center p-4 text-center text-xs text-white/85">
-              Link magnet detectado. O navegador não reproduz diretamente; no player, o usuário poderá abrir no app compatível do dispositivo.
-            </div>
-          ) : parsed.kind === 'direct' ? (
+          {parsed.kind === 'direct' ? (
             <video src={parsed.embedSrc} controls controlsList="nodownload noplaybackrate noremoteplayback" disablePictureInPicture onContextMenu={(e) => e.preventDefault()} className="absolute inset-0 h-full w-full" />
           ) : (
             <iframe

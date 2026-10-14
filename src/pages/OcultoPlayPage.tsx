@@ -31,7 +31,7 @@ import {
   seekSharedAudio,
 } from '@/lib/ocultoPlayAudioSession';
 import { pauseAllPreviews } from '@/lib/ocultoPlayPreviewCoordinator';
-import { parseEmbeddedVideo } from '@/lib/embeddedVideoUrl';
+import { parseEmbeddedVideo, isUnplayableLink } from '@/lib/embeddedVideoUrl';
 import { OcultoPlayLinkPlayer } from '@/components/oculto-play/OcultoPlayLinkPlayer';
 
 import { useAuth } from '@/hooks/useAuth';
@@ -2728,8 +2728,12 @@ function UploadModal({
       return;
     }
     if (kind === 'link') {
+      if (linkComposer.sourceUrl && isUnplayableLink(linkComposer.sourceUrl)) {
+        toast.error('Este link não toca para outros usuários.', { description: 'Links magnet e do Stremio (127.0.0.1/localhost) só funcionam no seu computador. Envie o arquivo ou use MP4, HLS, YouTube, Vimeo ou Internet Archive.' });
+        return;
+      }
       if (!linkComposer.sourceUrl || !linkComposer.provider) {
-        toast.error('Cole um link válido (YouTube, Vimeo, TikTok, magnet, embed ou .mp4).');
+        toast.error('Cole um link válido (MP4, HLS .m3u8, YouTube, Vimeo, Internet Archive ou Drive).');
         return;
       }
     }
@@ -4483,9 +4487,17 @@ function PlayLinksSection({
   const { data, isLoading } = useAllOcultoPlayLinks(500);
 
   const sectionTone = adultOnly ? 'adult' : 'movie';
+  // Links do Stremio/torrent (127.0.0.1, localhost, magnet) não tocam para
+  // ninguém além de quem postou: ficam visíveis só para o autor e o master.
+  const { profile: viewerProfile } = useProfile();
+  const { data: viewerIsMaster } = useIsMasterAdmin();
   const allLinkItems = useMemo(
-    () => (data ?? []).filter((it) => it?.kind === 'link'),
-    [data],
+    () => (data ?? []).filter((it) => {
+      if (it?.kind !== 'link') return false;
+      if (!isUnplayableLink((it as any).source_url || it.media_url)) return true;
+      return viewerIsMaster === true || (!!viewerProfile?.id && it.author_id === viewerProfile.id);
+    }),
+    [data, viewerIsMaster, viewerProfile?.id],
   );
 
   const items = useMemo(

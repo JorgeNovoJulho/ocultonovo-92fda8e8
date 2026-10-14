@@ -5,6 +5,7 @@
  * capa, título, legenda, compositor, IA, estilos, visibilidade e preview
  * (início + duração até 30s) com player de prévia.
  */
+import { isUnplayableLink } from '@/lib/embeddedVideoUrl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, ImagePlus, Play, Pause, Globe, Star, Crown, Flame, X, Music, Upload, Trash2, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
@@ -748,6 +749,13 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
       toast.error('Verifique os campos destacados.');
       return;
     }
+    if (isLink) {
+      const nextUrl = (linkValue.sourceUrl || '').trim();
+      if (nextUrl !== (originalSourceUrl || '').trim() && isUnplayableLink(nextUrl)) {
+        toast.error('Este link não toca para outros usuários.', { description: 'Links magnet e do Stremio (127.0.0.1/localhost) só funcionam no seu computador. Use MP4, HLS, YouTube, Vimeo ou Internet Archive.' });
+        return;
+      }
+    }
     setSaving(true);
     try {
       // 1) Para itens de link: resolve a nova capa (upload do blob OU URL remota sugerida).
@@ -956,7 +964,7 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
         const patch: Record<string, any> = {
           source_url: newUrl || null,
           media_url: newUrl || null,
-          link_provider: linkValue.provider ?? null,
+          link_provider: linkValue.provider ?? (item as any).link_provider ?? null,
           genre_tags: linkGenreTags,
           is_adult: isAdult,
         };
@@ -1063,7 +1071,7 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
           ...(isLink ? {
             source_url: (linkValue.sourceUrl || '').trim() || null,
             media_url: (linkValue.sourceUrl || '').trim() || null,
-            link_provider: linkValue.provider ?? null,
+            link_provider: linkValue.provider ?? (data as any).link_provider ?? null,
             genre_tags: linkGenreTags,
             thumb_url: nextThumbUrl,
           } : {}),
