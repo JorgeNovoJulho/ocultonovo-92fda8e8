@@ -196,6 +196,81 @@ const writeConversationsCache = (userId: string, list: Conversation[]) => {
 // faz o HTTP/2 da Supabase abortar lotes inteiros e o feed/chat fica em
 // loading infinito ("AbortError: signal is aborted without reason").
 const _inflightFetches = new Map<string, Promise<Conversation[]>>();
+
+// ─── Lista via função do banco (chat_my_conversations) ───────────────────
+// Uma única consulta, que não depende das regras de leitura de cada tabela
+// (que deixavam a lista vazia em silêncio). `null` = função indisponível →
+// usa o caminho antigo.
+let _chatRpcUnavailable = false;
+const PEER_PROFILE_COLUMNS = 'id, user_id, name, username, avatar_url, is_online, last_seen, show_online_status, profile_type, is_verified, is_verified_couple, plan_type, is_creator, accept_super_dm, min_super_dm_price, is_seed';
+
+async function fetchConversationsViaRpc(): Promise<Conversation[] | null> {
+  if (_chatRpcUnavailable) return null;
+  const { data, error } = await (supabase as any).rpc('chat_my_conversations');
+  if (error) {
+    const t = `${error.code || ''} ${error.message || ''}`.toLowerCase();
+    if (t.includes('pgrst202') || t.includes('could not find the function') || t.includes('schema cache')) {
+      _chatRpcUnavailable = true;
+    } else {
+      console.warn('[Chat] chat_my_conversations falhou, usando caminho antigo:', error.message);
+    }
+    return null;
+  }
+  const rows: any[] = Array.isArray(data) ? data : [];
+  if (rows.length === 0) return [];
+
+  const peerIds = Array.from(new Set(rows.map((r) => r.peer_user_id).filter(Boolean))) as string[];
+  const profiles = new Map<string, any>();
+  const seedPeers = new Set<string>();
+  if (peerIds.length > 0) {
+    const [byUserId, byId] = await Promise.all([
+      (supabase as any).from('v_public_profiles').select(PEER_PROFILE_COLUMNS).in('user_id', peerIds),
+      (supabase as any).from('v_public_profiles').select(PEER_PROFILE_COLUMNS).in('id', peerIds),
+    ]);
+    for (const p of [...(byUserId.data || []), ...(byId.data || [])]) {
+      const keys = [p.user_id, p.id].filter(Boolean);
+      if (p.is_seed) { keys.forEach((k: string) => seedPeers.add(k)); continue; }
+      keys.forEach((k: string) => profiles.set(k, p));
+    }
+  }
+
+  const list: Conversation[] = [];
+  for (const r of rows) {
+    const peer: string | null = r.peer_user_id || null;
+    if (peer && seedPeers.has(peer)) continue; // conversas com perfis-robô ficam ocultas (regra existente)
+    const profile = (peer && profiles.get(peer)) || {
+      id: '', user_id: peer || '', name: 'Usuário', avatar_url: null,
+      is_online: false, last_seen: null, show_online_status: true, profile_type: 'single', is_verified: false,
+      is_verified_couple: false, plan_type: 'free', is_creator: false,
+    };
+    list.push({
+      id: r.conversation_id,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      self_is_archived: !!r.is_archived,
+      participants: peer ? [{
+        user_id: peer,
+        is_archived: false,
+        last_read_at: null,
+        has_unread_priority: false,
+        total_priority_amount: 0,
+        profile,
+      }] : [],
+      unread_count: Number(r.unread_count) || 0,
+      has_unread_priority: !!r.has_unread_priority,
+      total_priority_amount: Number(r.total_priority_amount) || 0,
+      last_message: r.last_message_id ? {
+        id: r.last_message_id,
+        conversation_id: r.conversation_id,
+        sender_id: r.last_message_sender_id || '',
+        content: r.last_message_content || '',
+        is_read: !!r.last_message_is_read,
+        created_at: r.last_message_at,
+      } : undefined,
+    });
+  }
+  return sortConversations(dedupeConversations(list));
+}
 const CHAT_UPDATE_EVENT = 'oculto:chat:conversations:update';
 const broadcastConversations = (userId: string, list: Conversation[]) => {
   try {
@@ -269,6 +344,12 @@ export function useChat() {
   // Núcleo da busca — extraído para fora do hook de modo a ser
   // compartilhado entre múltiplas instâncias (via _inflightFetches).
   const runFetchCore = useCallback(async (userId: string): Promise<Conversation[]> => {
+    // Caminho principal: função do banco `chat_my_conversations` (1 consulta,
+    // não depende das regras de leitura de cada tabela). Se ainda não foi
+    // criada no banco, cai no caminho antigo abaixo.
+    const viaRpc = await fetchConversationsViaRpc();
+    if (viaRpc) return viaRpc;
+
     const selfIdentity = await resolveChatIdentity(userId);
     const selfIds = selfIdentity.selfIds.length > 0 ? selfIdentity.selfIds : [userId];
 
@@ -401,8 +482,13 @@ export function useChat() {
     const conversationMap = new Map<string, Conversation>();
 
     participations?.filter(p => !botConvIds.has(p.conversation_id)).forEach(p => {
-      const conv = (p as any).conversations as { id: string; created_at: string; updated_at: string } | null;
-      if (!conv) return;
+      // Se a linha de `conversations` não veio (regra de leitura da tabela),
+      // NÃO descarta a conversa: usa a data da última mensagem. Antes isso
+      // zerava a lista inteira em silêncio ("Nenhuma mensagem ainda").
+      const lastAt = (lastMessages || []).find((m: any) => m.conversation_id === p.conversation_id)?.created_at
+        || new Date(0).toISOString();
+      const conv = ((p as any).conversations as { id: string; created_at: string; updated_at: string } | null)
+        || { id: p.conversation_id, created_at: lastAt, updated_at: lastAt };
       const peers = (allParticipants || []).filter(ap => ap.conversation_id === p.conversation_id);
       if (peers.some(peer => blockedPeerIds.has(peer.user_id))) return;
       const part = p as any;

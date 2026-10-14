@@ -468,6 +468,11 @@ export function useNotifications() {
       if (raw?.is_seed === true) return;
       const rawType = normalizeNotificationType(raw.type);
       const senderId = (raw.data as any)?.sender_id || raw.actor_id;
+      // Nova mensagem → a lista do chat atualiza na hora (reforço caso o
+      // tempo real da tabela `messages` não entregue o evento).
+      if (rawType === 'message' || raw.type === 'new_message' || raw.type === 'super_dm') {
+        try { window.dispatchEvent(new CustomEvent('oculto:chat:force-refetch')); } catch { /* noop */ }
+      }
       if ((rawType === 'message' || raw.type === 'new_message' || raw.type === 'attention_ping') && senderId) {
         if (await isChatBlockedBetween(senderId, user.id)) return;
       }
