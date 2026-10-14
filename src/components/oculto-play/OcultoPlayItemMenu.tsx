@@ -5,7 +5,7 @@
  *   - Denunciar (todos, quando habilitado)
  *   - Editar e Excluir (apenas autor / `canManage`)
  */
-import { MoreVertical, Pencil, Trash2, Loader2, Share2, Flag } from 'lucide-react';
+import { MoreVertical, Pencil, Trash2, Loader2, Share2, Flag, Snowflake, Sun } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +19,10 @@ interface Props {
   canManage: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
+  /** Congelar/descongelar (só autor): congelado some para os outros. */
+  onToggleFreeze?: () => void;
+  frozen?: boolean;
+  isFreezePending?: boolean;
   onShareToFeed?: () => void;
   onReport?: () => void;
   isShareToFeedPending?: boolean;
@@ -27,14 +31,14 @@ interface Props {
 }
 
 export function OcultoPlayItemMenu({
-  canManage, onEdit, onDelete, onShareToFeed, onReport,
-  isShareToFeedPending, isDeletePending, className,
+  canManage, onEdit, onDelete, onToggleFreeze, frozen, isFreezePending,
+  onShareToFeed, onReport, isShareToFeedPending, isDeletePending, className,
 }: Props) {
   // visível se há qualquer ação disponível
   if (!canManage && !onShareToFeed && !onReport) return null;
-  const busy = isDeletePending || isShareToFeedPending;
+  const busy = isDeletePending || isShareToFeedPending || isFreezePending;
   const hasPublicActions = !!onShareToFeed || !!onReport;
-  const hasOwnerActions = canManage && (!!onEdit || !!onDelete);
+  const hasOwnerActions = canManage && (!!onEdit || !!onDelete || !!onToggleFreeze);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -75,6 +79,13 @@ export function OcultoPlayItemMenu({
         {canManage && onEdit && (
           <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onEdit(); }} className="gap-2">
             <Pencil className="h-4 w-4" /> Editar
+          </DropdownMenuItem>
+        )}
+        {canManage && onToggleFreeze && (
+          <DropdownMenuItem onSelect={(e) => { e.preventDefault(); onToggleFreeze(); }} className="gap-2">
+            {frozen
+              ? <><Sun className="h-4 w-4 text-amber-400" /> Descongelar (mostrar a todos)</>
+              : <><Snowflake className="h-4 w-4 text-sky-400" /> Congelar (ocultar dos outros)</>}
           </DropdownMenuItem>
         )}
         {canManage && onDelete && (

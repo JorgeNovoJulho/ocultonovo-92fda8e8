@@ -6,7 +6,7 @@
  * - Tabs: Para Você / Hoje / Volte para Ver, e filtros por tipo de mídia.
  * - Botão "Enviar" abre modal de upload (vídeo curto, meme, áudio) com visibility.
  */
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -37,7 +37,8 @@ import { OcultoPlayLinkPlayer } from '@/components/oculto-play/OcultoPlayLinkPla
 import { useAuth } from '@/hooks/useAuth';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useIsMasterAdmin } from '@/hooks/useUserRoles';
-import { useMyPlayChannels, type PlayChannelKind, type PlayChannelSection } from '@/hooks/usePlayChannels';
+import { useMyPlayChannels, useSetPlayItemFrozen, type PlayChannelKind, type PlayChannelSection } from '@/hooks/usePlayChannels';
+import { usePlayRealtimeSync } from '@/hooks/usePlayRealtimeSync';
 import { CreateChannelDialog } from '@/components/oculto-play/channels/CreateChannelDialog';
 import { PlayChannelsStrip } from '@/components/oculto-play/channels/PlayChannelsStrip';
 import { useOcultoPlayAccess, useOcultoPlayConfig, type OcultoPlayConfig } from '@/hooks/useOcultoPlayAccess';
@@ -248,6 +249,8 @@ export default function OcultoPlayPage() {
   // Canais Play: qualquer usuário logado publica no próprio canal.
   const canUpload = !!user?.id;
   const { data: myChannels } = useMyPlayChannels();
+  // Canais e envios novos aparecem sozinhos (sem recarregar a página).
+  usePlayRealtimeSync(!!user?.id);
   const [createChannelOpen, setCreateChannelOpen] = useState(false);
   const [createChannelKind, setCreateChannelKind] = useState<PlayChannelKind>('video');
   const [uploadChannelId, setUploadChannelId] = useState<string | null>(null);
@@ -1021,6 +1024,7 @@ export default function OcultoPlayPage() {
         <PlayKindLargeCardsSection
           kind="audio"
           channelSection="audio"
+          layout="spotify"
           title="Áudios"
           icon={<span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-purple-300/15 ring-1 ring-purple-200/30"><Headphones className="h-7 w-7 text-purple-50 drop-shadow" strokeWidth={2.6} /></span>}
           onOpenFocus={(it) => setFocusItem(it)}
@@ -1036,6 +1040,7 @@ export default function OcultoPlayPage() {
         <PlayKindLargeCardsSection
           kinds={['short_video', 'vip_teaser']}
           channelSection="shorts"
+          layout="youtube"
           title="Vídeos"
           icon={<span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-yellow-950/15 ring-1 ring-yellow-950/25"><Clapperboard className="h-7 w-7 text-yellow-950 drop-shadow" strokeWidth={2.6} /></span>}
           onOpenFocus={(it) => setFocusItem(it)}
@@ -1050,6 +1055,7 @@ export default function OcultoPlayPage() {
         <PlayLinksSection
           title="Filmes"
           channelSection="links"
+          layout="netflix"
           icon={<span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-cyan-300/15 ring-1 ring-cyan-200/30"><Film className="h-7 w-7 text-cyan-50 drop-shadow" strokeWidth={2.6} /></span>}
           onOpenFocus={(it) => setFocusItem(it)}
           storageKey="links"
@@ -1065,6 +1071,7 @@ export default function OcultoPlayPage() {
         <PlayLinksSection
           title="Filmes +18"
           channelSection="links_adult"
+          layout="youtube"
           icon={<span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-red-300/15 ring-1 ring-red-200/30"><ShieldAlert className="h-7 w-7 text-red-50 drop-shadow" strokeWidth={2.6} /></span>}
           onOpenFocus={(it) => setFocusItem(it)}
           storageKey="links_adult"
@@ -1990,8 +1997,15 @@ function AudioGridCard({ item, nextAudioUrl, onOpenFocus }: { item: OcultoPlayIt
   );
 }
 
-function PlayCard({ item, onPlayQueue, nextAudioUrl }: { item: OcultoPlayItem; onPlayQueue?: () => void; nextAudioUrl?: string | null }) {
+function PlayCard({ item, onPlayQueue, nextAudioUrl, variant = 'default' }: {
+  item: OcultoPlayItem;
+  onPlayQueue?: () => void;
+  nextAudioUrl?: string | null;
+  /** 'youtube' = capa arredondada + linha com foto do canal, título, views e tempo */
+  variant?: 'default' | 'youtube';
+}) {
   const actions = useOcultoPlayActions();
+  const freezeCard = useSetPlayItemFrozen();
   const registerCardView = useRegisterOcultoPlayCardView();
   const { grant } = useOcultoPlayXpActions();
   const { profile } = useProfile();
@@ -2052,7 +2066,10 @@ function PlayCard({ item, onPlayQueue, nextAudioUrl }: { item: OcultoPlayItem; o
 
   return (
     <div
-      className="group relative rounded-xl overflow-hidden bg-card border border-border/40 aspect-[3/4] flex flex-col cursor-pointer"
+      className={cn(
+        'group relative flex flex-col cursor-pointer',
+        variant === 'youtube' ? '' : 'rounded-xl overflow-hidden bg-card border border-border/40 aspect-[3/4]',
+      )}
       onClick={isVideoKind ? (e) => {
         const t = e.target as HTMLElement;
         if (t.closest('button,a,[role="menu"],[role="menuitem"],[role="dialog"]')) return;
@@ -2060,7 +2077,7 @@ function PlayCard({ item, onPlayQueue, nextAudioUrl }: { item: OcultoPlayItem; o
       } : undefined}
     >
       {/* Media */}
-      <div className="relative flex-1 bg-black/30 overflow-hidden">
+      <div className={cn('relative bg-black/30 overflow-hidden', variant === 'youtube' ? 'aspect-[9/16] rounded-xl' : 'flex-1')}>
         {item.kind === 'short_video' && item.media_url ? (
           item.thumb_url ? (
             // Mobile fast-path: render apenas o poster como <img>. O <video> só carrega
@@ -2210,6 +2227,14 @@ function PlayCard({ item, onPlayQueue, nextAudioUrl }: { item: OcultoPlayItem; o
             canManage={isOwner}
             onEdit={isOwner ? () => setEditOpen(true) : undefined}
             onDelete={isOwner ? () => setDeleteConfirmOpen(true) : undefined}
+            onToggleFreeze={isOwner ? () => {
+              freezeCard.mutate({ itemId: item.id, frozen: !item.is_frozen }, {
+                onSuccess: () => toast.success(item.is_frozen ? 'Descongelado: visível para todos.' : 'Congelado: só você vê, no seu canal.'),
+                onError: (e: any) => toast.error(e?.message ?? 'Não foi possível congelar.'),
+              });
+            } : undefined}
+            frozen={!!item.is_frozen}
+            isFreezePending={freezeCard.isPending}
             onShareToFeed={() => shareToFeed.mutate({ item })}
             isShareToFeedPending={shareToFeed.isPending}
             isDeletePending={deleting}
@@ -2268,7 +2293,9 @@ function PlayCard({ item, onPlayQueue, nextAudioUrl }: { item: OcultoPlayItem; o
       </div>
 
       {/* Footer */}
-      {(item.title || item.author_username || (item.genre_tags && item.genre_tags.length > 0)) && (
+      {variant === 'youtube' ? (
+        <div className="pt-2 px-0.5"><PlayYoutubeMeta item={item} views={effectiveViews} /></div>
+      ) : (item.title || item.author_username || (item.genre_tags && item.genre_tags.length > 0)) && (
         <div className="p-2">
           {item.title && (
             <p className="text-[11px] font-medium line-clamp-2">{item.title}</p>
@@ -2404,10 +2431,19 @@ function UploadModal({
   const persisted = useRef<Partial<PersistShape>>(loadPersisted()).current;
 
   const [kind, setKind] = useState<OcultoPlayKind>(persisted.kind ?? 'meme');
+  // Tipos permitidos pelo canal escolhido:
+  //  canal de vídeo → Vídeos + Links · canal de áudio → Áudios.
+  //  (o master ainda vê Memes/Teasers/Comunidades/Desafios no canal de vídeo)
   const uploadKinds = useMemo(() => {
     const base = enabledKinds.length > 0 ? enabledKinds : (Object.keys(KIND_META) as OcultoPlayKind[]);
-    return isMasterUser ? base : base.filter((k) => !MASTER_ONLY_KINDS.includes(k));
-  }, [enabledKinds, isMasterUser]);
+    if (selectedChannel?.kind === 'audio') return ['audio'] as OcultoPlayKind[];
+    if (selectedChannel?.kind === 'video') {
+      const core = (['short_video', 'link'] as OcultoPlayKind[]).filter((k) => base.includes(k) || k === 'short_video');
+      const extra = isMasterUser ? base.filter((k) => !['audio', 'short_video', 'link'].includes(k)) : [];
+      return [...core, ...extra];
+    }
+    return isMasterUser ? base : base.filter((k) => !MASTER_ONLY_KINDS.includes(k) && k !== 'meme');
+  }, [enabledKinds, isMasterUser, selectedChannel?.kind]);
   useEffect(() => {
     if (isMasterRole === undefined) return; // espera saber se é master
     if (!uploadKinds.includes(kind) && uploadKinds.length > 0) {
@@ -4184,9 +4220,10 @@ function useAllOcultoPlayLinks(limit = 500) {
     staleTime: 30_000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const BASE_COLS = 'id, author_id, kind, section, visibility, title, caption, media_url, thumb_url, audio_url, audio_preview_url, duration_sec, tags, genre_tags, view_count, like_count, save_count, share_count, dislike_count, comment_count, published_at, created_at, expires_at, source_url, link_provider, is_adult, trailer_url, trailer_trim_start_seconds, trailer_trim_end_seconds';
+      const run = (cols: string) => (supabase as any)
         .from('oculto_play_items')
-        .select('id, author_id, kind, section, visibility, title, caption, media_url, thumb_url, audio_url, audio_preview_url, duration_sec, tags, genre_tags, view_count, like_count, save_count, share_count, dislike_count, comment_count, published_at, created_at, expires_at, source_url, link_provider, is_adult, trailer_url, trailer_trim_start_seconds, trailer_trim_end_seconds')
+        .select(cols)
         .eq('kind', 'link')
         .eq('section', 'normal')
         .or('is_published.is.null,is_published.eq.true')
@@ -4195,8 +4232,28 @@ function useAllOcultoPlayLinks(limit = 500) {
         .order('published_at', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
         .limit(limit);
+      let res = await run(`${BASE_COLS}, channel_id`);
+      // Servidor ainda sem a coluna de canal: busca sem ela.
+      if (res.error && /channel_id/i.test(res.error.message ?? '')) res = await run(BASE_COLS);
+      const { data, error } = res;
       if (error) throw error;
       const rows = ((data ?? []) as any[]).map((row) => normalizeOcultoPlayItem(row));
+      const channelIds = Array.from(new Set(rows.map((it) => it.channel_id).filter(Boolean))) as string[];
+      if (channelIds.length > 0) {
+        const { data: chans } = await (supabase as any)
+          .from('oculto_play_channels')
+          .select('id, name, slug, avatar_url, status')
+          .in('id', channelIds);
+        const cmap = new Map<string, any>(((chans ?? []) as any[]).map((c) => [c.id, c]));
+        for (const it of rows) {
+          const c = it.channel_id ? cmap.get(it.channel_id) : null;
+          if (c) {
+            it.channel_name = c.name;
+            it.channel_slug = c.slug;
+            it.channel_avatar_url = c.avatar_url ?? null;
+          }
+        }
+      }
       const authorIds = Array.from(new Set(rows.map((it) => it.author_id).filter(Boolean)));
       if (authorIds.length > 0) {
         const { data: profiles } = await (supabase as any)
@@ -4231,6 +4288,7 @@ function PlayKindLargeCardsSection({
   kind,
   kinds,
   channelSection,
+  layout = 'grid',
   title,
   icon,
   onOpenFocus,
@@ -4245,6 +4303,8 @@ function PlayKindLargeCardsSection({
   kind?: OcultoPlayKind;
   kinds?: OcultoPlayKind[];
   channelSection?: PlayChannelSection;
+  /** 'spotify' (áudios) · 'youtube' (vídeos) · 'grid' (padrão) */
+  layout?: 'grid' | 'spotify' | 'youtube';
   title: string;
   icon?: React.ReactNode;
   onOpenFocus: (it: OcultoPlayItem) => void;
@@ -4328,6 +4388,20 @@ function PlayKindLargeCardsSection({
                 <div className="text-center py-8 text-xs text-muted-foreground">
                   Nenhum resultado para os filtros selecionados.
                 </div>
+              ) : layout === 'spotify' && !(filters.query || filters.tag || filters.creatorId) ? (
+                <SpotifyAudioLayout items={filtered} onOpenFocus={onOpenFocus} />
+              ) : layout === 'youtube' ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-2.5 gap-y-5 items-start">
+                  {filtered.map((item) => (
+                    <div key={item.id} className="contain-paint">
+                      {item.kind === 'audio'
+                        ? <AudioGridCard item={item} onOpenFocus={() => onOpenFocus(item)} />
+                        : item.kind === 'link'
+                          ? <PlayLinkCard item={item} variant="youtube" onOpenFocus={() => onOpenFocus(item)} />
+                          : <PlayCard item={item} variant="youtube" onPlayQueue={() => onOpenFocus(item)} />}
+                    </div>
+                  ))}
+                </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3 items-start">
                   {filtered.map((item, idx) => {
@@ -4366,6 +4440,7 @@ function PlayKindLargeCardsSection({
 function PlayLinksSection({
   title,
   channelSection,
+  layout = 'grid',
   icon,
   onOpenFocus,
   collapsible = true,
@@ -4378,6 +4453,8 @@ function PlayLinksSection({
 }: {
   title: string;
   channelSection?: PlayChannelSection;
+  /** 'netflix' (Filmes) · 'youtube' (Filmes +18) · 'grid' (padrão) */
+  layout?: 'grid' | 'netflix' | 'youtube';
   icon?: React.ReactNode;
   onOpenFocus: (it: OcultoPlayItem) => void;
   collapsible?: boolean;
@@ -4465,6 +4542,16 @@ function PlayLinksSection({
                 <div className="text-center py-8 text-xs text-muted-foreground">
                   Nenhum resultado para os filtros selecionados.
                 </div>
+              ) : layout === 'netflix' && !(filters.query || filters.tag || filters.creatorId) ? (
+                <NetflixMoviesLayout items={filtered} onOpenFocus={onOpenFocus} />
+              ) : layout === 'youtube' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-3 gap-y-5 items-start">
+                  {filtered.map((item) => (
+                    <div key={item.id} className="contain-paint">
+                      <PlayLinkCard item={item} variant="youtube" onOpenFocus={() => onOpenFocus(item)} />
+                    </div>
+                  ))}
+                </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-3 items-start">
                   {filtered.map((item) => (
@@ -4482,8 +4569,15 @@ function PlayLinksSection({
   return <div id={wrapperId} style={wrapperStyle} className={wrapperClassName}>{inner}</div>;
 }
 
-function PlayLinkCard({ item, onOpenFocus }: { item: OcultoPlayItem; onOpenFocus: () => void }) {
+function PlayLinkCard({ item, onOpenFocus, variant = 'default' }: {
+  item: OcultoPlayItem;
+  onOpenFocus: () => void;
+  /** 'netflix' = carrossel de filmes · 'youtube' = grade com canal/views/tempo */
+  variant?: 'default' | 'netflix' | 'youtube';
+}) {
   const { user } = useAuth();
+  const { profile: viewerProfile } = useProfile();
+  const freeze = useSetPlayItemFrozen();
   const qc = useQueryClient();
   const actions = useOcultoPlayActions();
   const shareToFeed = useShareOcultoPlayToFeed();
@@ -4492,7 +4586,9 @@ function PlayLinkCard({ item, onOpenFocus }: { item: OcultoPlayItem; onOpenFocus
   const provider = (item.link_provider || parsed?.kind || '').toLowerCase();
   const mediaAspect = provider === 'tiktok' ? 'aspect-[9/16]' : 'aspect-video';
 
-  const canManage = !!user && user.id === (item as any).author_id;
+  // author_id é o id do PERFIL (antes comparava com o id da conta e o dono
+  // podia não ver o próprio menu).
+  const canManage = (!!viewerProfile?.id && item.author_id === viewerProfile.id) || (!!user && user.id === item.author_id);
   const [editOpen, setEditOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
@@ -4524,9 +4620,15 @@ function PlayLinkCard({ item, onOpenFocus }: { item: OcultoPlayItem; onOpenFocus
 
   return (
     <>
-      <div className="group relative rounded-xl overflow-hidden bg-card border border-border/40 flex flex-col">
+      <div className={cn(
+        'group relative flex flex-col',
+        variant === 'default' && 'rounded-xl overflow-hidden bg-card border border-border/40',
+      )}>
         {/* Media */}
-        <div className={cn('relative w-full bg-black/50 overflow-hidden', mediaAspect)}>
+        <div className={cn(
+          'relative w-full bg-black/50 overflow-hidden',
+          variant === 'netflix' ? 'aspect-video rounded-md' : variant === 'youtube' ? 'aspect-video rounded-xl' : mediaAspect,
+        )}>
           <div
             role="button"
             tabIndex={0}
@@ -4559,6 +4661,14 @@ function PlayLinkCard({ item, onOpenFocus }: { item: OcultoPlayItem; onOpenFocus
               canManage={canManage}
               onEdit={canManage ? () => setEditOpen(true) : undefined}
               onDelete={canManage ? () => setDeleteConfirmOpen(true) : undefined}
+              onToggleFreeze={canManage ? () => {
+                freeze.mutate({ itemId: item.id, frozen: !item.is_frozen }, {
+                  onSuccess: () => toast.success(item.is_frozen ? 'Descongelado: visível para todos.' : 'Congelado: só você vê, no seu canal.'),
+                  onError: (e: any) => toast.error(e?.message ?? 'Não foi possível congelar.'),
+                });
+              } : undefined}
+              frozen={!!item.is_frozen}
+              isFreezePending={freeze.isPending}
               onShareToFeed={() => shareToFeed.mutate({ item })}
               onReport={() => setReportOpen(true)}
               isShareToFeedPending={shareToFeed.isPending}
@@ -4577,16 +4687,22 @@ function PlayLinkCard({ item, onOpenFocus }: { item: OcultoPlayItem; onOpenFocus
         </div>
 
         {/* Footer */}
-        <div className="p-2">
-          <p className="text-[11px] font-medium line-clamp-2">
-            {item.title || item.caption || 'Link'}
-          </p>
-          {item.author_username && (
-            <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-              @{item.author_username}
-            </p>
+        <div className={cn(variant === 'default' ? 'p-2' : 'pt-2 px-0.5')}>
+          {variant === 'youtube' ? (
+            <PlayYoutubeMeta item={item} views={views} />
+          ) : (
+            <>
+              <p className={cn('font-medium line-clamp-2', variant === 'netflix' ? 'text-[12px] font-semibold line-clamp-1' : 'text-[11px]')}>
+                {item.title || item.caption || 'Link'}
+              </p>
+              {(item.channel_name || item.author_username) && (
+                <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                  {item.channel_name ?? `@${item.author_username}`}
+                </p>
+              )}
+            </>
           )}
-          {item.genre_tags && item.genre_tags.length > 0 && (
+          {variant === 'default' && item.genre_tags && item.genre_tags.length > 0 && (
             <div className="mt-1.5 flex flex-wrap gap-1">
               {item.genre_tags.slice(0, 4).map((tag) => (
                 <span
@@ -4660,3 +4776,212 @@ function PlayLinkCard({ item, onOpenFocus }: { item: OcultoPlayItem; onOpenFocus
 
 
 
+
+/* ================================================================
+ * Layouts das seções (Canais Play)
+ *  - Áudios ........ estilo Spotify (Tocar tudo, Novidades, Mais ouvidas, gêneros)
+ *  - Vídeos / +18 .. estilo YouTube (capa + foto do canal, título, views, tempo)
+ *  - Filmes ........ estilo Netflix (destaque + fileiras horizontais)
+ * Os cards são os MESMOS de antes (curtir, comentar, salvar, menu, prévia…),
+ * só reorganizados. Fileiras fora da tela só montam quando chegam perto
+ * (LazyVisible) — leve para celular modesto.
+ * ================================================================ */
+
+function timeAgoPt(iso?: string | null): string {
+  if (!iso) return '';
+  const diff = Math.max(0, Date.now() - new Date(iso).getTime());
+  const min = Math.floor(diff / 60_000);
+  if (min < 1) return 'agora';
+  if (min < 60) return `há ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h} h`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `há ${d} ${d === 1 ? 'dia' : 'dias'}`;
+  const m = Math.floor(d / 30);
+  if (m < 12) return `há ${m} ${m === 1 ? 'mês' : 'meses'}`;
+  const y = Math.floor(m / 12);
+  return `há ${y} ${y === 1 ? 'ano' : 'anos'}`;
+}
+
+function PlayYoutubeMeta({ item, views }: { item: OcultoPlayItem; views: number }) {
+  const navigate = useNavigate();
+  const avatar = item.channel_avatar_url || item.author_avatar_url;
+  const name = item.channel_name || (item.author_username ? `@${item.author_username}` : '');
+  const goChannel = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (item.channel_slug) navigate(`/play/c/${item.channel_slug}`);
+  };
+  return (
+    <div className="flex gap-2">
+      <button
+        type="button"
+        onClick={goChannel}
+        className="h-8 w-8 shrink-0 overflow-hidden rounded-full bg-muted ring-1 ring-white/10"
+        aria-label={name ? `Abrir canal ${name}` : 'Canal'}
+      >
+        {avatar
+          ? <img src={avatar} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+          : <span className="grid h-full w-full place-items-center text-xs font-bold">{(name || '?').replace('@', '').slice(0, 1).toUpperCase()}</span>}
+      </button>
+      <div className="min-w-0 flex-1">
+        <p className="line-clamp-2 text-[12.5px] font-semibold leading-snug text-current">
+          {item.title || item.caption || 'Sem título'}
+        </p>
+        <p className="mt-0.5 truncate text-[11px] opacity-70">
+          {name && <button type="button" onClick={goChannel} className="hover:underline">{name}</button>}
+          {name ? ' · ' : ''}{formatViewsCompact(views)} views{item.published_at ? ` · ${timeAgoPt(item.published_at)}` : ''}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PlayHRow({ title, children, itemWidth = 'w-[42vw] max-w-[176px]' }: {
+  title: string;
+  children: React.ReactNode[];
+  itemWidth?: string;
+}) {
+  if (!children.length) return null;
+  return (
+    <LazyVisible minHeight={220} rootMargin="300px 0px">
+      <section>
+        <h3 className="mb-2 px-0.5 text-[15px] font-extrabold text-current">{title}</h3>
+        <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {children.map((child, i) => (
+            <div key={i} className={cn('shrink-0 snap-start contain-paint', itemWidth)}>{child}</div>
+          ))}
+        </div>
+      </section>
+    </LazyVisible>
+  );
+}
+
+function topGenres(items: OcultoPlayItem[], max: number, minItems: number) {
+  const count = new Map<string, OcultoPlayItem[]>();
+  for (const it of items) {
+    const tags = (it.genre_tags && it.genre_tags.length ? it.genre_tags : it.tags) ?? [];
+    for (const t of tags.slice(0, 4)) {
+      const key = String(t).trim();
+      if (!key) continue;
+      const list = count.get(key) ?? [];
+      list.push(it);
+      count.set(key, list);
+    }
+  }
+  return [...count.entries()]
+    .filter(([, list]) => list.length >= minItems)
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, max)
+    .map(([name, list]) => ({ name, items: list.slice(0, 12) }));
+}
+
+function SpotifyAudioLayout({ items, onOpenFocus }: { items: OcultoPlayItem[]; onOpenFocus: (it: OcultoPlayItem) => void }) {
+  const [showAll, setShowAll] = useState(false);
+  const newest = useMemo(() => items.slice(0, 12), [items]);
+  const mostPlayed = useMemo(() => [...items].sort((a, b) => (b.view_count ?? 0) - (a.view_count ?? 0)).slice(0, 8), [items]);
+  const genres = useMemo(() => topGenres(items, 3, 3), [items]);
+  const trackList = showAll ? items : mostPlayed;
+  const card = (it: OcultoPlayItem) => (
+    <AudioGridCard item={it} onOpenFocus={() => onOpenFocus(it)} />
+  );
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => items[0] && onOpenFocus(items[0])}
+          className="grid h-12 w-12 place-items-center rounded-full bg-emerald-500 text-black shadow-lg shadow-emerald-500/30 active:scale-95 transition"
+          aria-label="Tocar tudo"
+        >
+          <Play className="h-6 w-6 translate-x-0.5 fill-current" />
+        </button>
+        <div>
+          <p className="text-sm font-extrabold">Tocar tudo</p>
+          <p className="text-[11px] opacity-75">{items.length} {items.length === 1 ? 'faixa' : 'faixas'}</p>
+        </div>
+      </div>
+
+      <PlayHRow title="Novidades">{newest.map((it) => <Fragment key={it.id}>{card(it)}</Fragment>)}</PlayHRow>
+
+      <section>
+        <h3 className="mb-1.5 px-0.5 text-[15px] font-extrabold">{showAll ? 'Todas as faixas' : 'Mais ouvidas'}</h3>
+        <ol className="divide-y divide-white/10">
+          {trackList.map((it, i) => (
+            <li key={it.id}>
+              <button
+                type="button"
+                onClick={() => onOpenFocus(it)}
+                className="flex w-full items-center gap-3 rounded-lg px-1 py-2 text-left hover:bg-white/5 active:bg-white/10"
+              >
+                <span className="w-5 shrink-0 text-center text-xs font-semibold opacity-60">{i + 1}</span>
+                <span className="h-11 w-11 shrink-0 overflow-hidden rounded-md bg-black/30">
+                  {it.thumb_url
+                    ? <img src={it.thumb_url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                    : <Headphones className="m-3 h-5 w-5 opacity-60" />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold">{it.title || 'Sem título'}</span>
+                  <span className="block truncate text-[11px] opacity-70">
+                    {it.channel_name || (it.author_username ? `@${it.author_username}` : '')}
+                    {' · '}{formatViewsCompact(it.view_count ?? 0)} plays
+                  </span>
+                </span>
+                <Play className="h-4 w-4 shrink-0 opacity-70" />
+              </button>
+            </li>
+          ))}
+        </ol>
+        {items.length > mostPlayed.length && (
+          <button type="button" onClick={() => setShowAll((v) => !v)} className="mt-1 px-1 text-xs font-bold opacity-80 hover:opacity-100">
+            {showAll ? 'Mostrar menos' : `Ver todas as ${items.length} faixas`}
+          </button>
+        )}
+      </section>
+
+      {genres.map((g) => (
+        <PlayHRow key={g.name} title={g.name}>{g.items.map((it) => <Fragment key={it.id}>{card(it)}</Fragment>)}</PlayHRow>
+      ))}
+    </div>
+  );
+}
+
+function NetflixMoviesLayout({ items, onOpenFocus }: { items: OcultoPlayItem[]; onOpenFocus: (it: OcultoPlayItem) => void }) {
+  const hero = items[0];
+  const newest = useMemo(() => items.slice(0, 12), [items]);
+  const mostWatched = useMemo(() => [...items].sort((a, b) => (b.view_count ?? 0) - (a.view_count ?? 0)).slice(0, 12), [items]);
+  const genres = useMemo(() => topGenres(items, 4, 2), [items]);
+  const card = (it: OcultoPlayItem) => <PlayLinkCard item={it} variant="netflix" onOpenFocus={() => onOpenFocus(it)} />;
+
+  return (
+    <div className="space-y-5">
+      {hero && (
+        <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black">
+          {hero.thumb_url && (
+            <img src={hero.thumb_url} alt="" decoding="async" className="absolute inset-0 h-full w-full object-cover" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 p-3 sm:p-5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-red-400">Em destaque</p>
+            <p className="mt-0.5 line-clamp-2 text-lg font-extrabold text-white sm:text-2xl">{hero.title || 'Filme'}</p>
+            {hero.caption && <p className="mt-1 line-clamp-2 max-w-xl text-xs text-white/80">{hero.caption}</p>}
+            <button
+              type="button"
+              onClick={() => onOpenFocus(hero)}
+              className="mt-2.5 inline-flex items-center gap-1.5 rounded-md bg-white px-4 py-2 text-sm font-bold text-black active:scale-95 transition"
+            >
+              <Play className="h-4 w-4 fill-current" /> Assistir
+            </button>
+          </div>
+        </div>
+      )}
+      <PlayHRow title="Lançamentos" itemWidth="w-[64vw] max-w-[280px]">{newest.map((it) => <Fragment key={it.id}>{card(it)}</Fragment>)}</PlayHRow>
+      {items.length > 4 && (
+        <PlayHRow title="Mais assistidos" itemWidth="w-[64vw] max-w-[280px]">{mostWatched.map((it) => <Fragment key={it.id}>{card(it)}</Fragment>)}</PlayHRow>
+      )}
+      {genres.map((g) => (
+        <PlayHRow key={g.name} title={g.name} itemWidth="w-[64vw] max-w-[280px]">{g.items.map((it) => <Fragment key={it.id}>{card(it)}</Fragment>)}</PlayHRow>
+      ))}
+    </div>
+  );
+}

@@ -66,6 +66,13 @@ export interface OcultoPlayItem {
   trailer_url?: string | null;
   trailer_trim_start_seconds?: number | null;
   trailer_trim_end_seconds?: number | null;
+  /** Canais Play */
+  channel_id?: string | null;
+  channel_name?: string | null;
+  channel_slug?: string | null;
+  channel_avatar_url?: string | null;
+  content_origin?: 'original' | 'ai' | 'licensed' | null;
+  is_frozen?: boolean;
 }
 
 
@@ -124,6 +131,12 @@ export function normalizeOcultoPlayItem(row: Partial<OcultoPlayItem> & Record<st
     trailer_url: row.trailer_url ?? null,
     trailer_trim_start_seconds: row.trailer_trim_start_seconds != null ? Number(row.trailer_trim_start_seconds) : null,
     trailer_trim_end_seconds: row.trailer_trim_end_seconds != null ? Number(row.trailer_trim_end_seconds) : null,
+    channel_id: row.channel_id ?? null,
+    channel_name: row.channel_name ?? null,
+    channel_slug: row.channel_slug ?? null,
+    channel_avatar_url: row.channel_avatar_url ?? null,
+    content_origin: row.content_origin ?? null,
+    is_frozen: row.is_frozen === true,
   };
 }
 

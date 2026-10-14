@@ -11,8 +11,13 @@ import { lazy, Suspense, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, BadgeCheck, Clapperboard, Headphones, Loader2, MessageCircle, Pencil,
-  Play, Share2, ShieldAlert, Upload, Music, Image as ImageIcon, Film,
+  Play, Share2, ShieldAlert, Upload, Music, Image as ImageIcon, Film, Snowflake,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabaseExternal';
+import { OcultoPlayItemMenu } from '@/components/oculto-play/OcultoPlayItemMenu';
+import { OcultoPlayEditModal } from '@/components/oculto-play/OcultoPlayEditModal';
+import { OcultoPlayDeleteConfirmDialog } from '@/components/oculto-play/OcultoPlayDeleteConfirmDialog';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -21,6 +26,9 @@ import { useProfile } from '@/hooks/useProfile';
 import { useIsMasterAdmin } from '@/hooks/useUserRoles';
 import { useOcultoPlayActions, type OcultoPlayItem } from '@/hooks/useOcultoPlayContent';
 import {
+  PLAY_CHANNELS_KEY,
+  channelErrorMessage,
+  useSetPlayItemFrozen,
   usePlayChannelBySlug,
   usePlayChannelItems,
   type PlayChannelDetail,
@@ -264,21 +272,75 @@ function ChannelItemsTab({ channel, tab, isOwner, accent }: {
   accent: string;
 }) {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const { data: items, isLoading } = usePlayChannelItems(channel, tab);
   const actions = useOcultoPlayActions();
+  const setFrozen = useSetPlayItemFrozen();
   const [focus, setFocus] = useState<OcultoPlayItem | null>(null);
   const [commentsItem, setCommentsItem] = useState<OcultoPlayItem | null>(null);
+  const [editItem, setEditItem] = useState<OcultoPlayItem | null>(null);
+  const [deleteItem, setDeleteItem] = useState<OcultoPlayItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const list = items ?? [];
+  const visible = useMemo(() => list.filter((it) => !it.is_frozen), [list]);
   const videoQueue = useMemo(
-    () => list.filter((it) => (it.kind === 'short_video' || it.kind === 'vip_teaser') && !!it.media_url),
-    [list],
+    () => visible.filter((it) => (it.kind === 'short_video' || it.kind === 'vip_teaser') && !!it.media_url),
+    [visible],
   );
   const audios = useMemo(() => list.filter((it) => it.kind === 'audio'), [list]);
+  const playableAudios = useMemo(() => audios.filter((it) => !it.is_frozen), [audios]);
 
   const moveAudio = (from: OcultoPlayItem, delta: number) => {
-    const idx = audios.findIndex((a) => a.id === from.id);
-    const next = audios[idx + delta];
+    const idx = playableAudios.findIndex((a) => a.id === from.id);
+    const next = playableAudios[idx + delta];
     if (next) setFocus(next);
+  };
+
+  const toggleFreeze = async (it: OcultoPlayItem) => {
+    try {
+      await setFrozen.mutateAsync({ itemId: it.id, frozen: !it.is_frozen });
+      toast.success(it.is_frozen ? 'Descongelado: visível para todos de novo.' : 'Congelado: só você vê até descongelar.');
+    } catch (e) {
+      toast.error(channelErrorMessage(e));
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteItem) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase.from('oculto_play_items').delete().eq('id', deleteItem.id);
+      if (error) throw error;
+      qc.setQueriesData<OcultoPlayItem[] | undefined>({ queryKey: ['oculto-play'] }, (old) =>
+        Array.isArray(old) ? old.filter((x) => x?.id !== deleteItem.id) : old);
+      qc.invalidateQueries({ queryKey: PLAY_CHANNELS_KEY });
+      toast.success('Conteúdo excluído.');
+      setDeleteItem(null);
+    } catch (e) {
+      toast.error('Não foi possível excluir.', { description: (e as { message?: string })?.message });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const ownerMenu = (it: OcultoPlayItem, className?: string) => (isOwner ? (
+    <OcultoPlayItemMenu
+      canManage
+      onEdit={() => setEditItem(it)}
+      onDelete={() => setDeleteItem(it)}
+      onToggleFreeze={() => void toggleFreeze(it)}
+      frozen={!!it.is_frozen}
+      isFreezePending={setFrozen.isPending && setFrozen.variables?.itemId === it.id}
+      isDeletePending={deleting && deleteItem?.id === it.id}
+      className={className}
+    />
+  ) : null);
+
+  const openItem = (it: OcultoPlayItem) => {
+    if (it.is_frozen) {
+      toast.info('Este conteúdo está congelado. Descongele para que todos possam ver.');
+    }
+    setFocus(it);
   };
 
   if (isLoading) {
@@ -301,17 +363,23 @@ function ChannelItemsTab({ channel, tab, isOwner, accent }: {
     );
   }
 
+  const frozenBadge = (
+    <span className="inline-flex items-center gap-1 rounded-full bg-sky-500/90 px-1.5 py-0.5 text-[9.5px] font-bold text-white">
+      <Snowflake className="h-3 w-3" /> Congelado · só você vê
+    </span>
+  );
+
   return (
     <>
       {channel.kind === 'audio' || tab === 'audio' ? (
         <div>
-          <Button size="sm" className="mb-3 text-white" style={{ background: accent }} onClick={() => audios[0] && setFocus(audios[0])}>
+          <Button size="sm" className="mb-3 text-white" style={{ background: accent }} onClick={() => playableAudios[0] && setFocus(playableAudios[0])}>
             <Play className="mr-1.5 h-4 w-4 fill-current" /> Tocar tudo
           </Button>
           <ol className="divide-y divide-border/50">
             {audios.map((it, i) => (
-              <li key={it.id}>
-                <button type="button" onClick={() => setFocus(it)} className="flex w-full items-center gap-3 py-2 text-left active:bg-muted/40">
+              <li key={it.id} className={cn('flex items-center gap-1', it.is_frozen && 'opacity-60')}>
+                <button type="button" onClick={() => openItem(it)} className="flex min-w-0 flex-1 items-center gap-3 py-2 text-left active:bg-muted/40">
                   <span className="w-5 text-center text-xs text-muted-foreground">{i + 1}</span>
                   <span className="h-11 w-11 shrink-0 overflow-hidden rounded-md bg-muted">
                     {it.thumb_url
@@ -320,10 +388,13 @@ function ChannelItemsTab({ channel, tab, isOwner, accent }: {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold">{it.title || 'Sem título'}</span>
-                    <span className="block text-[11px] text-muted-foreground">{fmt(it.view_count ?? 0)} reproduções</span>
+                    <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      {it.is_frozen ? frozenBadge : <>{fmt(it.view_count ?? 0)} reproduções</>}
+                    </span>
                   </span>
                   <span className="text-[11px] text-muted-foreground">{fmtDuration(it.duration_sec)}</span>
                 </button>
+                {ownerMenu(it, 'h-8 w-8 bg-transparent border-0 shadow-none text-foreground hover:bg-muted')}
               </li>
             ))}
           </ol>
@@ -334,34 +405,38 @@ function ChannelItemsTab({ channel, tab, isOwner, accent }: {
             const vertical = it.kind === 'short_video' || it.kind === 'vip_teaser';
             const KindIcon = it.kind === 'link' ? Film : it.kind === 'meme' ? ImageIcon : Play;
             return (
-              <button
+              <div
                 key={it.id}
-                type="button"
-                onClick={() => setFocus(it)}
                 className={cn(
-                  'relative overflow-hidden rounded-lg bg-muted text-left',
+                  'relative overflow-hidden rounded-lg bg-muted',
                   vertical ? 'aspect-[9/16]' : it.kind === 'meme' ? 'aspect-square' : 'aspect-video',
                 )}
               >
-                {(it.thumb_url || (it.kind === 'meme' && it.media_url)) ? (
-                  <img
-                    src={(it.thumb_url || it.media_url) as string}
-                    alt=""
-                    loading="lazy"
-                    decoding="async"
-                    className={cn('h-full w-full object-cover', it.is_adult && tab !== 'links_adult' && 'blur-xl')}
-                  />
-                ) : (
-                  <span className="grid h-full w-full place-items-center"><KindIcon className="h-6 w-6 text-muted-foreground" /></span>
-                )}
-                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1.5 text-[10.5px] font-semibold text-white">
-                  <span className="line-clamp-2">{it.title || it.caption || ''}</span>
-                  <span className="mt-0.5 flex items-center gap-1 opacity-80"><Play className="h-3 w-3 fill-current" /> {fmt(it.view_count ?? 0)}</span>
+                <button type="button" onClick={() => openItem(it)} className="absolute inset-0 text-left">
+                  {(it.thumb_url || (it.kind === 'meme' && it.media_url)) ? (
+                    <img
+                      src={(it.thumb_url || it.media_url) as string}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      className={cn('h-full w-full object-cover', it.is_adult && tab !== 'links_adult' && 'blur-xl', it.is_frozen && 'opacity-50 grayscale')}
+                    />
+                  ) : (
+                    <span className="grid h-full w-full place-items-center"><KindIcon className="h-6 w-6 text-muted-foreground" /></span>
+                  )}
+                  <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1.5 text-[10.5px] font-semibold text-white">
+                    <span className="line-clamp-2">{it.title || it.caption || ''}</span>
+                    <span className="mt-0.5 flex items-center gap-1 opacity-80"><Play className="h-3 w-3 fill-current" /> {fmt(it.view_count ?? 0)}</span>
+                  </span>
+                </button>
+                <span className="pointer-events-none absolute left-1 top-1 flex flex-col items-start gap-1">
+                  {it.is_adult && (
+                    <span className="inline-flex items-center gap-0.5 rounded bg-red-600/90 px-1 text-[9px] font-bold text-white"><ShieldAlert className="h-2.5 w-2.5" />18</span>
+                  )}
+                  {it.is_frozen && frozenBadge}
                 </span>
-                {it.is_adult && (
-                  <span className="absolute left-1 top-1 inline-flex items-center gap-0.5 rounded bg-red-600/90 px-1 text-[9px] font-bold text-white"><ShieldAlert className="h-2.5 w-2.5" />18</span>
-                )}
-              </button>
+                {isOwner && <div className="absolute right-1 top-1 z-10">{ownerMenu(it, 'h-7 w-7')}</div>}
+              </div>
             );
           })}
         </div>
@@ -380,7 +455,7 @@ function ChannelItemsTab({ channel, tab, isOwner, accent }: {
             onDislike={(it) => actions.toggleDislike.mutate(it.id)}
             onSave={(it) => actions.toggleSave.mutate(it.id)}
             onComment={(it) => setCommentsItem(it)}
-            videoQueue={videoQueue}
+            videoQueue={focus.is_frozen ? [focus] : videoQueue}
             onAudioEnded={(it) => moveAudio(it, 1)}
             onAudioNext={(it) => moveAudio(it, 1)}
             onAudioPrev={(it) => moveAudio(it, -1)}
@@ -389,6 +464,24 @@ function ChannelItemsTab({ channel, tab, isOwner, accent }: {
       )}
       {commentsItem && (
         <PlayCommentsSheet itemId={commentsItem.id} open={!!commentsItem} onClose={() => setCommentsItem(null)} />
+      )}
+      {isOwner && (
+        <>
+          <OcultoPlayEditModal
+            item={editItem}
+            open={!!editItem}
+            onClose={() => {
+              setEditItem(null);
+              qc.invalidateQueries({ queryKey: PLAY_CHANNELS_KEY });
+            }}
+          />
+          <OcultoPlayDeleteConfirmDialog
+            open={!!deleteItem}
+            onOpenChange={(o) => { if (!o && !deleting) setDeleteItem(null); }}
+            onConfirm={confirmDelete}
+            pending={deleting}
+          />
+        </>
       )}
     </>
   );

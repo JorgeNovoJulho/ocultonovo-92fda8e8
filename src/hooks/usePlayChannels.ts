@@ -143,13 +143,33 @@ export function usePlayChannelsOf(userOrProfileId: string | null | undefined) {
   });
 }
 
-/** Itens publicados de um canal, filtrados pela aba. */
+/**
+ * Itens de um canal, filtrados pela aba. O servidor devolve também os
+ * CONGELADOS quando quem vê é o dono (ou o master).
+ */
 export function usePlayChannelItems(channel: PlayChannelDetail | null | undefined, tab: PlayChannelSection | 'home') {
   return useQuery({
     queryKey: [...PLAY_CHANNELS_KEY, 'items', channel?.id ?? null, tab],
     enabled: !!channel?.id,
     staleTime: 30_000,
     queryFn: async (): Promise<OcultoPlayItem[]> => {
+      const decorate = (r: any) => normalizeOcultoPlayItem({
+        ...r,
+        author_username: channel!.owner_username,
+        author_display_name: channel!.name,
+        author_avatar_url: channel!.avatar_url ?? channel!.owner_avatar_url,
+        channel_id: channel!.id,
+        channel_name: channel!.name,
+        channel_slug: channel!.slug,
+        channel_avatar_url: channel!.avatar_url ?? channel!.owner_avatar_url,
+      });
+      const rpc = await (supabase as any).rpc('play_channel_items', {
+        p_channel_id: channel!.id, p_tab: tab, p_limit: tab === 'home' ? 30 : 120,
+      });
+      if (!rpc.error) return ((rpc.data ?? []) as any[]).map(decorate);
+      if (!/does not exist|Could not find the function/i.test(rpc.error.message ?? '')) throw rpc.error;
+
+      // Servidor ainda sem a Fase 1b: leitura direta (só publicados).
       let q = (supabase as any)
         .from('oculto_play_items')
         .select('*')
@@ -168,12 +188,28 @@ export function usePlayChannelItems(channel: PlayChannelDetail | null | undefine
       const now = Date.now();
       return ((data ?? []) as any[])
         .filter((r) => !r.expires_at || new Date(r.expires_at).getTime() > now)
-        .map((r) => normalizeOcultoPlayItem({
-          ...r,
-          author_username: channel!.owner_username,
-          author_display_name: channel!.name,
-          author_avatar_url: channel!.avatar_url ?? channel!.owner_avatar_url,
-        }));
+        .map(decorate);
+    },
+  });
+}
+
+/** Congelar / descongelar um item (só quem publicou ou o master). */
+export function useSetPlayItemFrozen() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ itemId, frozen }: { itemId: string; frozen: boolean }) => {
+      const { error } = await (supabase as any).rpc('play_item_set_frozen', { p_item_id: itemId, p_frozen: frozen });
+      if (error) throw error;
+      return { itemId, frozen };
+    },
+    onSuccess: ({ itemId, frozen }) => {
+      // Some/volta do feed de todo mundo na hora (cache local).
+      if (frozen) {
+        qc.setQueriesData<OcultoPlayItem[] | undefined>({ queryKey: ['oculto-play'] }, (old) =>
+          Array.isArray(old) ? old.filter((x) => x?.id !== itemId) : old);
+      }
+      qc.invalidateQueries({ queryKey: PLAY_CHANNELS_KEY });
+      qc.invalidateQueries({ queryKey: ['oculto-play'] });
     },
   });
 }

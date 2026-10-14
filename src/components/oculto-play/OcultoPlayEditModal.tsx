@@ -40,6 +40,7 @@ import {
   resetLyricsAutosave,
   formatLastSavedTime,
 } from '@/lib/ocultoPlayLyricsAutosave';
+import { useIsMasterAdmin } from '@/hooks/useUserRoles';
 
 
 interface Props {
@@ -104,6 +105,9 @@ function probeLocalAudioDuration(url: string): Promise<number> {
 }
 
 export function OcultoPlayEditModal({ item, open, onClose }: Props) {
+  // Visibilidade paga (Premium/VIP) é do master até a monetização dos canais.
+  const { data: isMasterRole } = useIsMasterAdmin();
+  const canChangeVisibility = isMasterRole === true;
   const qc = useQueryClient();
   const [title, setTitle] = useState('');
   const [caption, setCaption] = useState('');
@@ -1218,6 +1222,7 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
           )}
 
           {/* Visibilidade */}
+          {canChangeVisibility && (
           <div>
             <Label className="text-xs">Visibilidade</Label>
             <div className="grid grid-cols-3 gap-2 mt-1">
@@ -1240,6 +1245,7 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
               ))}
             </div>
           </div>
+          )}
 
           {isAudio && (
             <>
