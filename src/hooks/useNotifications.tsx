@@ -8,7 +8,7 @@ import { Heart, Eye, UserPlus, Crown, MessageCircle, Flame, Sparkles, Lock, AtSi
 import React from 'react';
 import { extractNotificationActorId, getNotificationDisplayTitle, getNotificationDisplayBody } from '@/lib/notificationActors';
 import { isChatBlockedBetween } from '@/lib/chatIdentity';
-import { getDirectNotificationChatUrl, resolveNotificationChatUrl, isChatNotificationType } from '@/lib/notificationChatLink';
+import { resolveNotificationTarget } from '@/lib/notificationTarget';
 
 type RawNotificationType =
   | 'message'
@@ -432,48 +432,6 @@ export function useNotifications() {
     }
   }, [user, hasMore, notifications.length, filterBlockedMessageNotifications]);
 
-  const getNotificationUrl = useCallback((notification: any): string => {
-    const data = notification.data || {};
-    const postId = notification.post_id || notification.related_id || data.post_id || data.related_id;
-    // Roteamento especial para posts no mural
-    if (data?.kind === 'mural_post' && data?.profile_owner_id) {
-      return data.cta_url || `/creator/${data.profile_owner_id}#mural`;
-    }
-    switch (notification.type) {
-      case 'comment': case 'mention': case 'reply': case 'post_comment': case 'comment_like': case 'comment_dislike':
-        if (data?.kind === 'mural_post' && data?.profile_owner_id) {
-          return `/creator/${data.profile_owner_id}#mural`;
-        }
-        return postId ? `/profile?tab=posts&focus=comments&highlight=${postId}` : '/notifications';
-      case 'like': case 'post_like':
-        return postId ? `/profile?tab=posts&focus=likes&highlight=${postId}` : '/notifications';
-      case 'save':
-        return postId ? `/profile?tab=posts&focus=saved&highlight=${postId}` : '/notifications';
-      case 'follow':
-        return data.actor_id ? `/creator/${data.actor_id}` : '/followers';
-      case 'message': case 'new_message': case 'super_dm': case 'attention_ping': {
-        return getDirectNotificationChatUrl(notification) || '/messages';
-      }
-      case 'community_reply': {
-        const slug = data.slug || data.community_slug;
-        const topicId = data.topic_id;
-        const replyId = data.reply_id;
-        return slug && topicId
-          ? `/comunidades/${slug}/topico/${topicId}${replyId ? `#reply-${replyId}` : ''}`
-          : (slug ? `/comunidades/${slug}` : '/comunidades');
-      }
-      case 'match': case 'superlike': case 'looking_now_match': return '/matches';
-      case 'subscription': return '/subscriptions';
-      case 'gift_received': case 'goal_contribution': return '/earnings';
-      case 'looking_now': return '/radar';
-      case 'event_chat': return '/events';
-      case 'support_response': return '/support';
-      case 'audio_bio_request': return data?.cta_url || '/profile#voice-bio';
-      case 'oculto_play_new': return data?.cta_url || '/play';
-      default: return data?.cta_url || '/notifications';
-    }
-  }, []);
-
   const sendNativePush = useCallback(async (notification: Notification) => {
     try {
       if (!document.hidden) return;
@@ -487,14 +445,13 @@ export function useNotifications() {
           sender_id: senderId || undefined,
           title: notification.title,
           body: notification.body || '',
-          url: isChatNotificationType(notification.type)
-            ? await resolveNotificationChatUrl(notification)
-            : getNotificationUrl(notification),
+          // Mesmo destino do clique no sino (regra única).
+          url: (await resolveNotificationTarget(notification as any)).url,
           type: notification.type,
         }
       });
     } catch { /* silent */ }
-  }, [getNotificationUrl, user?.id]);
+  }, [user?.id]);
 
   // --- Realtime subscription with visibility-aware lifecycle ---
   useEffect(() => {

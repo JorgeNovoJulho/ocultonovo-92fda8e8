@@ -220,6 +220,22 @@ export default function MessagesPage() {
         markAsRead(cid);
         navigate(`/messages?c=${cid}`, { replace: true });
         refetchConversations();
+        // A conversa pode ter sido excluída ("Excluir para todos") depois que
+        // o link/notificação foi gerado. Sem esta checagem o usuário via um
+        // chat vazio e a lista "Nenhuma mensagem ainda".
+        void (async () => {
+          try {
+            const { data: rows, error: partErr } = await (supabase as any)
+              .from('conversation_participants')
+              .select('conversation_id')
+              .eq('conversation_id', cid)
+              .limit(1);
+            if (partErr || (Array.isArray(rows) && rows.length > 0)) return;
+            setSelectedConversation((cur) => (cur?.id === cid ? null : cur));
+            toast.info('Essa conversa não está mais disponível.');
+            navigate('/messages', { replace: true });
+          } catch { /* mantém aberta */ }
+        })();
       }
       return;
     }

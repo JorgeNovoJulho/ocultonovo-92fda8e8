@@ -272,12 +272,18 @@ export default function CreatorProfilePage() {
     if (!creator?.id) return;
     const hash = (typeof window !== 'undefined' ? window.location.hash : '').replace('#', '');
     if (!hash) return;
-    const ALLOWED = ['rating', 'testimonials', 'recommendations'];
+    const ALLOWED = ['rating', 'testimonials', 'recommendations', 'mural'];
     if (!ALLOWED.includes(hash)) return;
-    const t = window.setTimeout(() => {
+    // Seções carregam em momentos diferentes (o mural vem de outra consulta):
+    // tenta por alguns segundos até o elemento existir.
+    let tries = 0;
+    let t = 0;
+    const attempt = () => {
       const el = document.getElementById(hash);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 300);
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+      if (tries++ < 15) t = window.setTimeout(attempt, 300);
+    };
+    t = window.setTimeout(attempt, 300);
     return () => window.clearTimeout(t);
   }, [creator?.id]);
 

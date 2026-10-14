@@ -25,7 +25,7 @@ import { extractNotificationActorId, extractNotificationAvatarFallback, getNotif
 import { NotificationActorAvatar } from "@/components/notifications/NotificationActorAvatar";
 import { progressAuraQuest } from "@/lib/auraQuests";
 import { useAuth } from "@/hooks/useAuth";
-import { getDirectNotificationChatUrl, resolveNotificationChatUrl, isChatNotificationType } from "@/lib/notificationChatLink";
+import { resolveNotificationTarget } from "@/lib/notificationTarget";
 
 type FilterKey = 'all' | 'like' | 'comment' | 'save';
 type SortKey = 'desc' | 'asc';
@@ -119,156 +119,6 @@ function renderTitleWithActorLink(
   );
 }
 
-type PostFocus = 'likes' | 'comments' | 'saved' | 'shares';
-
-/**
- * Mapeia o tipo de notificação para um "foco" no meu perfil.
- * Retorna null para tipos que não envolvem um post próprio.
- */
-function resolvePostFocus(notification: Notification): PostFocus | null {
-  if (isSaveNotification(notification)) return 'saved';
-  if (isShareNotification(notification)) return 'shares';
-  switch (notification.type as string) {
-    case 'like':
-    case 'dislike':
-    case 'gift_received': // presente associado a um post abre o modal do post
-      return 'likes';
-    case 'comment':
-    case 'reply':
-    case 'mention':
-    case 'comment_like' as any:
-    case 'comment_dislike' as any:
-      return 'comments';
-    default:
-      return null;
-  }
-}
-
-function buildOwnProfileUrl(focus: PostFocus, postId?: string | null): string {
-  const params = new URLSearchParams({ tab: 'posts', focus });
-  if (postId) params.set('highlight', postId);
-  return `/profile?${params.toString()}`;
-}
-
-function getNavigation(notification: Notification, actorProfile?: ActorProfile | null): { url: string; state?: any; fallbackToast?: string } {
-  const data = (notification.data || {}) as Record<string, any>;
-  // Notificações antigas guardam o id em `related_id` (já normalizado para
-  // `notification.post_id` pelo hook). Sempre priorize o campo da linha.
-  const postId: string | undefined =
-    (notification as any).post_id || data.post_id || data.related_id || (notification as any).related_id;
-  const pollId: string | undefined = data.poll_id;
-
-  if (pollId && postId) {
-    return {
-      url: `/profile?tab=posts&focus=comments&highlight=${postId}&poll=${pollId}`,
-      state: { scrollToPost: postId, focus: 'comments', highlight: postId, pollId },
-    };
-  }
-
-  const focus = resolvePostFocus(notification);
-  if (focus && postId) {
-    return {
-      url: buildOwnProfileUrl(focus, postId),
-      state: { scrollToPost: postId, focus, highlight: postId },
-    };
-  }
-  if (focus) {
-    return {
-      url: '/feed',
-      state: { focus },
-      fallbackToast: 'Esta notificação não tem post vinculado — abrindo o feed.',
-    };
-  }
-
-  const actorId =
-    data.actor_id || data.sender_id || data.from_user_id || data.user_id || (notification as any).actor_id;
-  const actorUsername = data.sender_username || data.actor_username || data.username;
-  // Prioriza username/id do actorProfile resolvido (mais confiável que data bruto)
-  const resolvedUsername = (actorProfile as any)?.username || actorUsername;
-  const resolvedId = (actorProfile as any)?.id || actorId;
-  const profileTarget = resolvedUsername || resolvedId;
-
-  switch (notification.type as string) {
-    case 'visit':
-    case 'follow':
-      return { url: profileTarget ? `/creator/${profileTarget}` : '/followers' };
-    case 'looking_now':
-    case 'looking_now_match' as any:
-      // Aceno: sempre tenta abrir o perfil do usuário que acenou
-      return { url: profileTarget ? `/creator/${profileTarget}` : '/radar' };
-    case 'message':
-    case 'new_message':
-    case 'super_dm':
-    case 'attention_ping': {
-      const direct = getDirectNotificationChatUrl(notification);
-      if (direct) return { url: direct };
-      return { url: '/messages' };
-    }
-    case 'match':
-    case 'superlike':
-    case 'looking_now_match' as any: {
-      const cid = data.conversation_id;
-      if (cid) return { url: `/messages?c=${cid}` };
-      return { url: profileTarget ? `/creator/${profileTarget}` : '/matches' };
-    }
-    case 'subscription': return { url: '/subscriptions' };
-    case 'gift_received':
-      return {
-        url: '/my-gifts',
-        fallbackToast: 'Presente sem post vinculado — abrindo Meus Presentes.',
-      };
-    case 'goal_contribution': return { url: '/wallet' };
-    case 'verification_rejected': return { url: '/couple-verification' };
-    case 'audio_bio_request' as any:
-      return {
-        url: data?.cta_url || '/profile#voice-bio',
-        state: { focusSection: 'voice-bio' },
-      };
-    case 'community_reply':
-    case 'community_new_reply':
-    case 'community_new_topic':
-    case 'community_new_member':
-    case 'community_topic_approved':
-    case 'community_topic_rejected':
-    case 'community_membership_request': {
-      // Slug pode estar no data; senão será resolvido async no handleClick
-      const slug = data.slug || data.community_slug;
-      const communityId = data.community_id;
-      const topicId = data.topic_id;
-      const replyId = data.reply_id;
-      if (slug && topicId) {
-        const hash = replyId ? `#reply-${replyId}` : '';
-        return { url: `/comunidades/${slug}/topico/${topicId}${hash}` };
-      }
-      if (slug) return { url: `/comunidades/${slug}` };
-      // sinaliza resolução async via campo especial
-      if (!communityId) return { url: '/comunidades' };
-      return {
-        url: '',
-        state: { __communityResolve: { communityId, topicId, replyId } },
-      } as any;
-    }
-    case 'rating_received':
-    case 'testimonial_received':
-    case 'recommendation_received': {
-      const t = notification.type as string;
-      const section = data.section
-        || (t === 'testimonial_received' ? 'testimonials'
-          : t === 'recommendation_received' ? 'recommendations'
-          : 'rating');
-      return { url: `/profile#${section}`, state: { focusSection: section } };
-    }
-    case 'event_chat': return { url: data?.event_id ? `/events/${data.event_id}` : '/events' };
-    case 'support_response': return { url: '/support' };
-    case 'unlock':
-      return { url: data?.cta_url || (postId ? buildOwnProfileUrl('comments', postId) : '/notifications') };
-    case 'oculto_play_new':
-      return { url: data?.cta_url || (data.item_id ? `/oculto-play?item=${data.item_id}` : '/oculto-play') };
-    case 'approach_received':
-      return { url: data.url || '/feed?focus=newcomers', state: { focusSection: 'newcomers' } };
-    default: return { url: data?.cta_url || '/profile?tab=posts' };
-  }
-}
 
 
 
@@ -471,44 +321,15 @@ export default function NotificationsPage() {
       if (justReadTimerRef.current) window.clearTimeout(justReadTimerRef.current);
       justReadTimerRef.current = window.setTimeout(() => setJustReadId(null), 2200);
     }
-    // 2) Resolve destino e navega na sequência (sem atraso perceptível).
-    if (isChatNotificationType(n.type as string)) {
-      const chatUrl = await resolveNotificationChatUrl(n);
-      navigate(chatUrl);
-      return;
-    }
-    const { url, state, fallbackToast } = getNavigation(n, actorProfile);
-    if (fallbackToast) {
-      import('sonner').then((m) => m.toast.info(fallbackToast));
+    // 2) Resolve destino (regra única, com verificação de conversa/comunidade) e navega.
+    const { url, state, toast: msg } = await resolveNotificationTarget(n, actorProfile as any);
+    if (msg) {
+      import('sonner').then((m) => m.toast.info(msg));
     }
     if (state?.scrollToPost) {
       import('@/lib/feedScrollHint').then((m) =>
         m.rememberScrollToPost(state.scrollToPost, state.focus),
       );
-    }
-    // Resolução async para notificações de comunidade quando o slug não veio no data.
-    const communityResolve = (state as any)?.__communityResolve;
-    if (!url && communityResolve?.communityId) {
-      try {
-        const { supabase } = await import('@/lib/supabaseExternal');
-        const { data: ln } = await supabase
-          .from('oculto_communities')
-          .select('slug')
-          .eq('id', communityResolve.communityId)
-          .maybeSingle();
-        const slug = (ln as any)?.slug;
-        if (slug && communityResolve.topicId) {
-          const hash = communityResolve.replyId ? `#reply-${communityResolve.replyId}` : '';
-          navigate(`/comunidades/${slug}/topico/${communityResolve.topicId}${hash}`);
-          return;
-        }
-        if (slug) {
-          navigate(`/comunidades/${slug}`);
-          return;
-        }
-      } catch {/* fallback abaixo */}
-      navigate('/comunidades');
-      return;
     }
     navigate(url, state ? { state } : undefined);
   }, [markAsRead, navigate]);

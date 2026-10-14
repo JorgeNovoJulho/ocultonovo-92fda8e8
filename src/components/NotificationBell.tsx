@@ -24,7 +24,7 @@ import { Sparkles } from "lucide-react";
 import { useActorProfiles, getProfileTypeLabel, type ActorProfile } from "@/hooks/useActorProfiles";
 import { extractNotificationActorId, extractNotificationAvatarFallback, getNotificationDisplayTitle, getNotificationDisplayBody } from "@/lib/notificationActors";
 import { NotificationActorAvatar } from "@/components/notifications/NotificationActorAvatar";
-import { getDirectNotificationChatUrl, resolveNotificationChatUrl, isChatNotificationType } from "@/lib/notificationChatLink";
+import { resolveNotificationTarget } from "@/lib/notificationTarget";
 
 type FilterKey = 'all' | 'like' | 'comment' | 'save';
 type SortKey = 'desc' | 'asc';
@@ -42,151 +42,6 @@ function matchesFilter(n: Notification, filter: FilterKey): boolean {
   if (filter === 'comment') return n.type === 'comment' || n.type === 'reply' || n.type === 'mention';
   return true;
 }
-
-type PostFocus = 'likes' | 'comments' | 'saved' | 'shares';
-
-function resolvePostFocus(notification: Notification): PostFocus | null {
-  const data = (notification.data || {}) as Record<string, any>;
-  if (isSaveNotification(notification)) return 'saved';
-  if (data?.notification_type === 'share' || data?.kind === 'share' || (notification.type as string) === 'share') {
-    return 'shares';
-  }
-  switch (notification.type as string) {
-    case 'like':
-    case 'dislike':
-    case 'gift_received': // presente normalmente referencia um post → abre o modal
-      return 'likes';
-    case 'comment':
-    case 'reply':
-    case 'mention':
-    case 'comment_like' as any:
-    case 'comment_dislike' as any:
-      return 'comments';
-    default:
-      return null;
-  }
-}
-
-/** Constrói a URL que abre o post-alvo no modal do meu perfil. */
-function buildOwnProfileUrl(focus: PostFocus, postId?: string | null): string {
-  const params = new URLSearchParams({ tab: 'posts', focus });
-  if (postId) params.set('highlight', postId);
-  return `/profile?${params.toString()}`;
-}
-
-function getNotificationUrl(notification: Notification): { url: string; state?: any; fallbackToast?: string } {
-  const data = (notification.data || {}) as Record<string, any>;
-  // Notificações antigas guardam o id em `related_id` (já normalizado para
-  // `notification.post_id` pelo hook). Sempre priorize o campo da linha
-  // sobre o `data.post_id` para evitar o fallback "sem post vinculado".
-  const postId: string | undefined =
-    (notification as any).post_id || data.post_id || data.related_id || (notification as any).related_id;
-  const pollId: string | undefined = data.poll_id;
-
-  // Enquetes: abre o post com query ?poll=<id>; PostsGrid pode usar p/ destacar.
-  if (pollId && postId) {
-    return {
-      url: `/profile?tab=posts&focus=comments&highlight=${postId}&poll=${pollId}`,
-      state: { scrollToPost: postId, focus: 'comments', highlight: postId, pollId },
-    };
-  }
-
-  const focus = resolvePostFocus(notification);
-  if (focus && postId) {
-    return {
-      url: buildOwnProfileUrl(focus, postId),
-      state: { scrollToPost: postId, focus, highlight: postId },
-    };
-  }
-  // Fallback: like/dislike/save/share/comment sem post_id → feed + toast
-  if (focus) {
-    const labelMap: Record<string, string> = {
-      likes: 'A postagem desta notificação não está mais disponível — abrindo o feed.',
-      comments: 'Comentário sem post vinculado — abrindo o feed.',
-      saved: 'Salvamento sem post vinculado — abrindo o feed.',
-      shares: 'Compartilhamento sem post vinculado — abrindo o feed.',
-    };
-    return { url: '/feed', state: { focus }, fallbackToast: labelMap[focus] };
-  }
-
-  switch (notification.type as string) {
-    case 'visit':
-      return { url: data.actor_id ? `/creator/${data.actor_id}` : '/visits' };
-    case 'follow':
-      return { url: data.actor_id ? `/creator/${data.actor_id}` : '/followers' };
-    case 'rating_received':
-    case 'testimonial_received':
-    case 'recommendation_received': {
-      const t = notification.type as string;
-      const section = data.section
-        || (t === 'testimonial_received' ? 'testimonials'
-          : t === 'recommendation_received' ? 'recommendations'
-          : 'rating');
-      return { url: `/profile#${section}`, state: { focusSection: section } };
-    }
-    case 'message':
-    case 'new_message':
-    case 'super_dm': {
-      const direct = getDirectNotificationChatUrl(notification);
-      if (direct) return { url: direct };
-      return { url: '/messages' };
-    }
-    case 'community_reply':
-    case 'community_new_reply':
-    case 'community_new_topic':
-    case 'community_new_member': {
-      const slug = data.slug || data.community_slug;
-      const topicId = data.topic_id;
-      const replyId = data.reply_id;
-      if (slug && topicId) {
-        const hash = replyId ? `#reply-${replyId}` : '';
-        return { url: `/comunidades/${slug}/topico/${topicId}${hash}` };
-      }
-      if (slug) return { url: `/comunidades/${slug}` };
-      if (data.community_id) return { url: '', state: { __communityResolve: { communityId: data.community_id, topicId, replyId } } } as any;
-      return { url: '/comunidades' };
-    }
-    case 'match':
-    case 'superlike':
-    case 'looking_now_match': {
-      const cid = data.conversation_id;
-      if (cid) return { url: `/messages?c=${cid}` };
-      return { url: '/matches' };
-    }
-    case 'subscription': return { url: '/subscriptions' };
-    case 'gift_received':
-      return {
-        url: '/my-gifts',
-        fallbackToast: 'Presente sem post vinculado — abrindo Meus Presentes.',
-      };
-    case 'goal_contribution': return { url: '/my-gifts' };
-    case 'looking_now': return { url: '/radar' };
-    case 'audio_bio_request':
-      return {
-        url: data?.cta_url || '/profile#voice-bio',
-        state: { focusSection: 'voice-bio' },
-      };
-    case 'approach_received':
-      return { url: data.url || '/feed?focus=newcomers', state: { focusSection: 'newcomers' } };
-    case 'event_chat': return { url: data?.event_id ? `/events/${data.event_id}` : '/events' };
-    case 'support_response': return { url: '/support' };
-    case 'attention_ping': {
-      const direct = getDirectNotificationChatUrl(notification);
-      if (direct) return { url: direct };
-      return { url: '/messages' };
-    }
-    case 'unlock':
-      return { url: data?.cta_url || (postId ? buildOwnProfileUrl('comments', postId) : '/notifications') };
-    case 'oculto_play_new':
-      return { url: data?.cta_url || (data.item_id ? `/oculto-play?item=${data.item_id}` : '/oculto-play') };
-    case 'coupon_expiring': return { url: '/coupons' };
-    case 'verification_rejected': return { url: '/verification' };
-    case 'balance_frozen': return { url: '/earnings' };
-
-    default: return { url: data?.cta_url || '/notifications' };
-  }
-}
-
 
 type ExtendedNotificationType = Notification['type'] | 'coupon_expiring' | 'referral_expired' | 'looking_now_match' | 'save';
 
@@ -407,43 +262,18 @@ export function NotificationBell() {
         setShowSupportModal(true);
         return;
       }
-      if (isChatNotificationType(notification.type as string)) {
-        resolveNotificationChatUrl(notification).then((chatUrl) => navigate(chatUrl));
-        return;
-      }
-      const { url, state, fallbackToast } = getNotificationUrl(notification);
-      if (fallbackToast) toast.info(fallbackToast);
-      // Fallback persistente: garante o scroll mesmo se o state do router se perder.
-      if (state?.scrollToPost) {
-        import('@/lib/feedScrollHint').then(m => m.rememberScrollToPost(state.scrollToPost, state.focus));
-      }
-      const communityResolve = (state as any)?.__communityResolve;
-      if (!url && communityResolve?.communityId) {
-        import('@/lib/supabaseExternal').then(async ({ supabase }) => {
-          try {
-            const { data: row } = await supabase
-              .from('oculto_communities')
-              .select('slug')
-              .eq('id', communityResolve.communityId)
-              .maybeSingle();
-            const slug = (row as any)?.slug;
-            if (slug && communityResolve.topicId) {
-              const hash = communityResolve.replyId ? `#reply-${communityResolve.replyId}` : '';
-              navigate(`/comunidades/${slug}/topico/${communityResolve.topicId}${hash}`);
-              return;
-            }
-            if (slug) {
-              navigate(`/comunidades/${slug}`);
-              return;
-            }
-          } catch { /* fallback abaixo */ }
-          navigate('/comunidades');
-        });
-        return;
-      }
-      navigate(url, state ? { state } : undefined);
+      // Regra única de destino (mesma da página de notificações e do push).
+      const actor = getActorForNotification(notification);
+      resolveNotificationTarget(notification, actor as any).then(({ url, state, toast: msg }) => {
+        if (msg) toast.info(msg);
+        // Fallback persistente: garante o scroll mesmo se o state do router se perder.
+        if (state?.scrollToPost) {
+          import('@/lib/feedScrollHint').then(m => m.rememberScrollToPost(state.scrollToPost, state.focus));
+        }
+        navigate(url, state ? { state } : undefined);
+      });
     }, notification.is_read ? 0 : 350);
-  }, [markAsRead, navigate]);
+  }, [markAsRead, navigate, getActorForNotification]);
 
 
   // Infinite scroll: carrega mais quando chegar próximo ao fim
