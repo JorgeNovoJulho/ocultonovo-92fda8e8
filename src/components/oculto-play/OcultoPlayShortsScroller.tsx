@@ -1,23 +1,33 @@
 /**
- * OcultoPlayShortsScroller — feed vertical infinito estilo TikTok.
+ * OcultoPlayShortsScroller — feed vertical infinito estilo TikTok (v2).
  *
- * Renderiza N slides full-screen empilhados verticalmente com CSS scroll-snap.
- * O <OcultoPlayVideoItem variant="tiktok" autoplayOnVisible /> já usa
- * IntersectionObserver para tocar APENAS o vídeo visível, então:
- *   - Não há remontagem de <video> ao trocar de slide (sem flicker).
- *   - Áudio/vídeo nunca dessincronizam: cada slide tem seu próprio elemento
- *     <video> persistente; quem ganha viewport ganha o play.
- *   - O dedo do usuário controla o pacing — não há "salto" programático.
+ * Por que foi reescrito: a versão anterior usava UM único <video> que trocava
+ * de `src` a cada rolagem — cada troca recomeçava o download do zero (troca
+ * lenta), o slot tinha fundo preto por cima da capa (tela preta até carregar)
+ * e um monitor de quadros rodava o tempo todo (engasgos em celular).
  *
- * Ações laterais (like / dislike / save / comentar / compartilhar) são
- * renderizadas POR slide e cada uma usa `useOcultoPlayActions` para gravar
- * no banco e atualizar contadores otimisticamente (mesma engine do feed).
+ * Agora:
+ *   - POOL DE 3 PLAYERS fixos: o vídeo atual + os 2 próximos. Os próximos já
+ *     ficam carregando no próprio slide, então ao rolar o vídeo começa na hora.
+ *     Os elementos nunca são recriados — só trocam de vídeo quando saem da
+ *     janela (sem acúmulo de players / decoders).
+ *   - A CAPA fica visível até o primeiro quadro (o <video> aparece por cima
+ *     só quando tem imagem) — nunca tela preta.
+ *   - Começa mudo (regra dos navegadores) com aviso grande "Toque para ativar
+ *     o som". O toque libera o som nos 3 players de uma vez (iOS exige gesto
+ *     por elemento), então os próximos já tocam com som.
+ *   - Gestos: toque = pausa/continua · dois toques = curtir · segurar = 2x ·
+ *     arrastar para a esquerda = abrir o perfil do criador.
+ *   - Visualização conta após 2 s assistidos (tempo real de mídia, aba visível).
+ *   - Barra de progresso fina e indicador de carregamento só se demorar.
  *
- * "Infinito": quando o slide ativo chega aos últimos 3, chamamos
- * `onNearEnd()` para o pai injetar mais vídeos na fila.
+ * Ações laterais (like / dislike / save / comentar / compartilhar) seguem
+ * usando `useOcultoPlayActions` (mesma engine do feed). "Infinito": quando o
+ * slide ativo chega aos últimos 3, chamamos `onNearEnd()`.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { X, Volume2, VolumeX, Leaf } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject, type PointerEvent as ReactPointerEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { X, Volume2, VolumeX, Leaf, Play, Heart, Loader2 } from 'lucide-react';
 import { useDataSaver } from '@/hooks/useDataSaver';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
@@ -32,21 +42,12 @@ import { useOcultoPlaySessionScoreStore } from '@/store/useOcultoPlaySessionScor
 import { markOcultoPlayMediaPlaying, markOcultoPlayMediaStopped } from '@/lib/ocultoPlayActivity';
 import { stopOcultoPlayMedia } from '@/lib/ocultoPlayMediaStop';
 
-type PlaybackQuality = 'normal' | 'mobile' | 'low' | 'ultraLow';
-
-function pauseVideoElement(v: HTMLVideoElement) {
-  try { v.pause(); } catch { /* noop */ }
-  v.muted = true;
-}
-
-function shouldStartMutedForMobileAutoplay() {
-  try {
-    const ua = navigator.userAgent || '';
-    const isiOS = /iPad|iPhone|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && (navigator as any).maxTouchPoints > 1);
-    const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false;
-    return isiOS || coarse;
-  } catch { return true; }
-}
+const POOL_SIZE = 3;
+const VIEW_THRESHOLD_MS = 2_000;
+const STALL_SKIP_MS = 7_000;
+const BUFFER_HINT_DELAY_MS = 500;
+const DOUBLE_TAP_MS = 280;
+const HOLD_MS = 380;
 
 interface Props {
   items: OPItem[];
@@ -61,6 +62,337 @@ interface Props {
   onNearEnd?: () => void;
 }
 
+/* ------------------------------------------------------------------ */
+/* Pool de players                                                      */
+/* ------------------------------------------------------------------ */
+
+interface PoolEntry {
+  v: HTMLVideoElement;
+  itemId: string | null;
+  item: OPItem | null;
+  retried: boolean;
+}
+
+const trimStartOf = (it: OPItem | null | undefined) => {
+  const n = Number(it?.trim_start_seconds ?? 0);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+const trimEndOf = (it: OPItem | null | undefined) => {
+  const n = Number(it?.trim_end_seconds ?? 0);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+interface PoolOptions {
+  items: OPItem[];
+  activeIdx: number;
+  slotRefs: RefObject<Map<string, HTMLDivElement>>;
+  muted: boolean;
+  paused: boolean;
+  economic: boolean;
+  onAutoplayBlocked: () => void;
+  onView: (itemId: string) => void;
+  onEnded: () => void;
+  onBuffering: (buffering: boolean) => void;
+  onProgress: (ratio: number) => void;
+}
+
+function useShortsVideoPool(opts: PoolOptions) {
+  const poolRef = useRef<PoolEntry[]>([]);
+  const currentIdRef = useRef<string | null>(null);
+  const optsRef = useRef(opts);
+  optsRef.current = opts;
+  const viewAccumRef = useRef<Map<string, number>>(new Map());
+  const viewedRef = useRef<Set<string>>(new Set());
+  const lastMediaTimeRef = useRef<WeakMap<HTMLVideoElement, number>>(new WeakMap());
+  const lastProgressAtRef = useRef(0);
+  const bufferTimerRef = useRef<number | null>(null);
+  const bufferingRef = useRef(false);
+
+  const isCurrent = useCallback((e: PoolEntry) => !!e.itemId && e.itemId === currentIdRef.current, []);
+
+  const clearBuffer = useCallback(() => {
+    if (bufferTimerRef.current) {
+      window.clearTimeout(bufferTimerRef.current);
+      bufferTimerRef.current = null;
+    }
+    if (bufferingRef.current) {
+      bufferingRef.current = false;
+      optsRef.current.onBuffering(false);
+    }
+  }, []);
+
+  const startBuffer = useCallback(() => {
+    if (bufferTimerRef.current || bufferingRef.current) return;
+    bufferTimerRef.current = window.setTimeout(() => {
+      bufferTimerRef.current = null;
+      bufferingRef.current = true;
+      optsRef.current.onBuffering(true);
+    }, BUFFER_HINT_DELAY_MS);
+  }, []);
+
+  const safePlay = useCallback((e: PoolEntry) => {
+    const v = e.v;
+    let p: Promise<void> | undefined;
+    try { p = v.play(); } catch { return; }
+    if (p && typeof p.catch === 'function') {
+      p.catch((err: { name?: string } | undefined) => {
+        if (!isCurrent(e)) return;
+        // Navegador recusou som sem gesto: toca mudo e mostra o aviso.
+        if (err?.name === 'NotAllowedError' && !v.muted) {
+          v.muted = true;
+          optsRef.current.onAutoplayBlocked();
+          v.play().catch(() => { /* noop */ });
+        }
+      });
+    }
+  }, [isCurrent]);
+
+  const reloadAt = useCallback((e: PoolEntry) => {
+    const src = e.item?.media_url;
+    if (!src) return;
+    const at = Math.max(0, e.v.currentTime || 0);
+    e.retried = true;
+    try {
+      e.v.src = src;
+      e.v.load();
+    } catch { /* noop */ }
+    e.v.addEventListener('loadedmetadata', () => {
+      try { if (at > 0) e.v.currentTime = at; } catch { /* noop */ }
+      if (isCurrent(e) && !optsRef.current.paused) safePlay(e);
+    }, { once: true });
+  }, [isCurrent, safePlay]);
+
+  // Cria os 3 players UMA vez.
+  useEffect(() => {
+    const entries: PoolEntry[] = [];
+    for (let i = 0; i < POOL_SIZE; i += 1) {
+      const v = document.createElement('video');
+      v.className = 'absolute inset-0 h-full w-full object-cover pointer-events-none';
+      v.style.opacity = '0';
+      v.style.transition = 'opacity 120ms linear';
+      v.muted = true;
+      v.defaultMuted = true;
+      v.playsInline = true;
+      v.controls = false;
+      v.preload = 'metadata';
+      v.setAttribute('playsinline', 'true');
+      v.setAttribute('webkit-playsinline', 'true');
+      v.setAttribute('controlsList', 'nodownload noremoteplayback nofullscreen');
+      v.setAttribute('disablePictureInPicture', 'true');
+      v.setAttribute('disableRemotePlayback', 'true');
+      v.setAttribute('draggable', 'false');
+      const e: PoolEntry = { v, itemId: null, item: null, retried: false };
+
+      const show = () => { v.style.opacity = '1'; };
+      v.addEventListener('loadeddata', show);
+      v.addEventListener('loadedmetadata', () => {
+        const ts = trimStartOf(e.item);
+        if (ts > 0 && v.currentTime < ts) {
+          try { v.currentTime = ts; } catch { /* noop */ }
+        }
+      });
+      v.addEventListener('playing', () => {
+        show();
+        if (!isCurrent(e)) return;
+        lastProgressAtRef.current = performance.now();
+        clearBuffer();
+        markOcultoPlayMediaPlaying(`video:${e.itemId}`);
+      });
+      v.addEventListener('pause', () => {
+        if (e.itemId) markOcultoPlayMediaStopped(`video:${e.itemId}`);
+      });
+      v.addEventListener('waiting', () => { if (isCurrent(e)) startBuffer(); });
+      v.addEventListener('timeupdate', () => {
+        if (!isCurrent(e) || !e.itemId) return;
+        const id = e.itemId;
+        lastProgressAtRef.current = performance.now();
+        clearBuffer();
+        const t = Math.max(0, v.currentTime || 0);
+        const prev = lastMediaTimeRef.current.get(v) ?? t;
+        lastMediaTimeRef.current.set(v, t);
+        const delta = t - prev;
+        if (!viewedRef.current.has(id) && delta > 0 && delta < 1.5 && !document.hidden) {
+          const acc = (viewAccumRef.current.get(id) ?? 0) + delta * 1000;
+          viewAccumRef.current.set(id, acc);
+          if (acc >= VIEW_THRESHOLD_MS) {
+            viewedRef.current.add(id);
+            try { optsRef.current.onView(id); } catch { /* noop */ }
+          }
+        }
+        const ts = trimStartOf(e.item);
+        const te = trimEndOf(e.item);
+        const end = te ?? (Number.isFinite(v.duration) ? v.duration : 0);
+        if (end > ts) optsRef.current.onProgress(Math.min(1, Math.max(0, (t - ts) / (end - ts))));
+        if (te && t >= te) {
+          try { v.pause(); } catch { /* noop */ }
+          optsRef.current.onEnded();
+        }
+      });
+      v.addEventListener('ended', () => { if (isCurrent(e)) optsRef.current.onEnded(); });
+      v.addEventListener('error', () => {
+        if (!isCurrent(e) || !e.v.getAttribute('src')) return;
+        if (!e.retried) reloadAt(e);
+        else optsRef.current.onEnded(); // arquivo com defeito: não prende o usuário
+      });
+      entries.push(e);
+    }
+    poolRef.current = entries;
+
+    // Vigia de travamento: sem progresso por 7 s → recarrega uma vez, depois pula.
+    const watch = window.setInterval(() => {
+      const cur = entries.find(isCurrent);
+      if (!cur || optsRef.current.paused || cur.v.paused || cur.v.ended || document.hidden) return;
+      if (performance.now() - lastProgressAtRef.current < STALL_SKIP_MS) return;
+      lastProgressAtRef.current = performance.now();
+      if (!cur.retried) reloadAt(cur);
+      else optsRef.current.onEnded();
+    }, 1000);
+
+    return () => {
+      window.clearInterval(watch);
+      if (bufferTimerRef.current) window.clearTimeout(bufferTimerRef.current);
+      for (const e of entries) {
+        try { e.v.pause(); } catch { /* noop */ }
+        if (e.itemId) markOcultoPlayMediaStopped(`video:${e.itemId}`);
+        try { e.v.removeAttribute('src'); e.v.load(); } catch { /* noop */ }
+        try { e.v.remove(); } catch { /* noop */ }
+      }
+      poolRef.current = [];
+    };
+  }, [isCurrent, clearBuffer, startBuffer, reloadAt]);
+
+  // Distribui os players: atual + 2 próximos (só 1 próximo no modo econômico).
+  const wanted = useMemo(() => {
+    const list: OPItem[] = [];
+    const add = (it: OPItem | undefined) => {
+      if (it?.media_url && !list.some((x) => x.id === it.id)) list.push(it);
+    };
+    add(opts.items[opts.activeIdx]);
+    add(opts.items[opts.activeIdx + 1]);
+    if (!opts.economic) add(opts.items[opts.activeIdx + 2]);
+    return list;
+  }, [opts.items, opts.activeIdx, opts.economic]);
+  const wantedKey = wanted.map((w) => `${w.id}|${w.media_url}`).join(',');
+  const activeId = opts.items[opts.activeIdx]?.id ?? null;
+
+  useEffect(() => {
+    const entries = poolRef.current;
+    if (!entries.length) return;
+    const o = optsRef.current;
+    const wantedIds = new Set(wanted.map((w) => w.id));
+
+    if (currentIdRef.current !== activeId) {
+      currentIdRef.current = activeId;
+      lastProgressAtRef.current = performance.now();
+      clearBuffer();
+      o.onProgress(0);
+    }
+
+    // Libera players cujo vídeo saiu da janela.
+    const free: PoolEntry[] = [];
+    for (const e of entries) {
+      if (e.itemId && wantedIds.has(e.itemId)) continue;
+      if (e.itemId) {
+        try { e.v.pause(); } catch { /* noop */ }
+        markOcultoPlayMediaStopped(`video:${e.itemId}`);
+        try { e.v.removeAttribute('src'); e.v.load(); } catch { /* noop */ }
+        try { e.v.remove(); } catch { /* noop */ }
+      }
+      e.v.style.opacity = '0';
+      e.itemId = null;
+      e.item = null;
+      e.retried = false;
+      free.push(e);
+    }
+
+    wanted.forEach((it, rank) => {
+      let e = entries.find((x) => x.itemId === it.id);
+      if (!e) {
+        e = free.shift();
+        if (!e) return;
+        e.itemId = it.id;
+        e.item = it;
+        e.retried = false;
+        e.v.style.opacity = '0';
+        e.v.preload = rank <= 1 ? 'auto' : 'metadata';
+        lastMediaTimeRef.current.delete(e.v);
+        try {
+          e.v.src = it.media_url as string;
+          e.v.load();
+        } catch { /* noop */ }
+      } else {
+        e.item = it;
+        if (rank <= 1 && e.v.preload !== 'auto') e.v.preload = 'auto';
+      }
+      const slot = o.slotRefs.current?.get(it.id);
+      if (slot && e.v.parentElement !== slot) slot.appendChild(e.v);
+
+      if (rank === 0) {
+        e.v.muted = o.muted;
+        e.v.playbackRate = 1;
+        if (!o.paused) safePlay(e);
+      } else {
+        if (!e.v.paused) { try { e.v.pause(); } catch { /* noop */ } }
+        e.v.muted = true;
+        const ts = trimStartOf(it);
+        if (e.v.readyState >= 1 && Math.abs((e.v.currentTime || 0) - ts) > 0.3) {
+          try { e.v.currentTime = ts; } catch { /* noop */ }
+        }
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantedKey, activeId, safePlay, clearBuffer]);
+
+  // Som / pausa do vídeo atual.
+  useEffect(() => {
+    const e = poolRef.current.find(isCurrent);
+    if (!e) return;
+    e.v.muted = opts.muted;
+    if (opts.paused) {
+      try { e.v.pause(); } catch { /* noop */ }
+    } else if (e.v.paused && !e.v.ended) {
+      safePlay(e);
+    }
+  }, [opts.muted, opts.paused, isCurrent, safePlay]);
+
+  /** Chamar DENTRO de um toque do usuário: libera som nos 3 players. */
+  const unlockSound = useCallback(() => {
+    for (const e of poolRef.current) {
+      if (isCurrent(e)) {
+        e.v.muted = false;
+        safePlay(e);
+        continue;
+      }
+      if (!e.v.getAttribute('src')) continue;
+      try {
+        e.v.muted = false;
+        const p = e.v.play();
+        e.v.pause();
+        e.v.muted = true;
+        if (p && typeof p.catch === 'function') p.catch(() => { /* noop */ });
+      } catch { /* noop */ }
+    }
+  }, [isCurrent, safePlay]);
+
+  const setRate = useCallback((rate: number) => {
+    const e = poolRef.current.find(isCurrent);
+    if (e) { try { e.v.playbackRate = rate; } catch { /* noop */ } }
+  }, [isCurrent]);
+
+  const restartCurrent = useCallback(() => {
+    const e = poolRef.current.find(isCurrent);
+    if (!e) return;
+    try { e.v.currentTime = trimStartOf(e.item); } catch { /* noop */ }
+    safePlay(e);
+  }, [isCurrent, safePlay]);
+
+  return useMemo(() => ({ unlockSound, setRate, restartCurrent }), [unlockSound, setRate, restartCurrent]);
+}
+
+/* ------------------------------------------------------------------ */
+/* Scroller                                                             */
+/* ------------------------------------------------------------------ */
+
 export function OcultoPlayShortsScroller({
   items,
   seedId,
@@ -72,17 +404,17 @@ export function OcultoPlayShortsScroller({
   onReport,
   onNearEnd,
 }: Props) {
+  const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const slideRefs = useRef<Map<string, HTMLElement>>(new Map());
   const playerSlotRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const progressBarRef = useRef<HTMLDivElement | null>(null);
   const actions = useOcultoPlayActions();
   const registerCardView = useRegisterOcultoPlayCardView();
-  const viewedRef = useRef<Set<string>>(new Set());
   const bumpScore = useOcultoPlaySessionScoreStore((s) => s.bump);
 
-  // Garante o seed no topo da fila uma única vez + DEDUP por id.
-  // Sem dedup, anexar mais vídeos via onNearEnd duplica os existentes e o
-  // usuário rola "infinitamente" sobre os mesmos clipes.
+  // Seed no topo da fila + DEDUP por id (anexar via onNearEnd não pode
+  // duplicar clipes já na fila).
   const orderedItems = useMemo<OPItem[]>(() => {
     if (!items.length) return [];
     const seen = new Set<string>();
@@ -98,69 +430,20 @@ export function OcultoPlayShortsScroller({
   }, [items, seedId]);
 
   const [activeId, setActiveId] = useState<string>(seedId);
-  const [globalMuted, setGlobalMuted] = useState<boolean>(() => shouldStartMutedForMobileAutoplay());
+  // Sempre começa mudo: é a única forma de autoplay garantido em todos os
+  // navegadores. O aviso "Toque para ativar o som" libera o som.
+  const [globalMuted, setGlobalMuted] = useState<boolean>(true);
+  const [userChoseMute, setUserChoseMute] = useState<boolean>(false);
   const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [buffering, setBuffering] = useState<boolean>(false);
+  const [fastForward, setFastForward] = useState<boolean>(false);
+  const [hearts, setHearts] = useState<Array<{ key: number; x: number; y: number }>>([]);
   const [leanMobile, setLeanMobile] = useState<boolean>(false);
-  const [antiStall, setAntiStall] = useState<boolean>(false);
   const activeIdRef = useRef(seedId);
-  const antiStallUntilRef = useRef(0);
-  // Modo Econômico: auto-ativado SÓ em redes móveis lentas / saveData / hw fraco.
-  // Wi-Fi mantém qualidade padrão. Preferência manual é persistida por-usuário.
   const { isDataSaverEnabled, toggleDataSaver, source: ecoSource, qualityLabel, connectionKind } = useDataSaver();
   const isEconomic = isDataSaverEnabled;
 
-  useEffect(() => {
-    activeIdRef.current = activeId;
-  }, [activeId]);
-
-  const activateAntiStall = useCallback(() => {
-    antiStallUntilRef.current = Date.now() + 45_000;
-    setAntiStall(true);
-  }, []);
-
-  const pauseInactiveVideos = useCallback((nextActiveId: string) => {
-    const root = containerRef.current;
-    if (!root) return;
-    const nextActiveSection = root.querySelector<HTMLElement>(`section[data-item-id="${CSS.escape(nextActiveId)}"]`);
-    root.querySelectorAll<HTMLVideoElement>('video').forEach((v) => {
-      if (nextActiveSection?.contains(v)) return;
-      pauseVideoElement(v);
-    });
-  }, []);
-
-  // Monitor leve de FPS/long frames. Se o dispositivo engasgar, entra em modo
-  // anti-travamento; após uma janela estável, volta automaticamente à qualidade normal.
-  useEffect(() => {
-    let raf = 0;
-    let last = performance.now();
-    let frames = 0;
-    let slowFrames = 0;
-    let stableWindows = 0;
-    const loop = (now: number) => {
-      const dt = now - last;
-      last = now;
-      frames += 1;
-      if (dt > 34) slowFrames += 1;
-      if (dt > 180) activateAntiStall();
-      if (frames >= 90) {
-        const slowRatio = slowFrames / frames;
-        if (slowRatio > 0.22) {
-          stableWindows = 0;
-          activateAntiStall();
-        } else if (slowRatio < 0.08) {
-          stableWindows += 1;
-          if (stableWindows >= 3 && Date.now() > antiStallUntilRef.current) setAntiStall(false);
-        } else {
-          stableWindows = 0;
-        }
-        frames = 0;
-        slowFrames = 0;
-      }
-      raf = window.requestAnimationFrame(loop);
-    };
-    raf = window.requestAnimationFrame(loop);
-    return () => window.cancelAnimationFrame(raf);
-  }, [activateAntiStall]);
+  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
 
   useEffect(() => {
     if (!orderedItems.length) return;
@@ -183,22 +466,16 @@ export function OcultoPlayShortsScroller({
     return () => window.removeEventListener('resize', compute);
   }, []);
 
-  // Posiciona scroll inicial no seed sem animação para evitar flicker.
+  // Posiciona o scroll inicial no seed sem animação.
   useEffect(() => {
     const el = slideRefs.current.get(seedId);
     if (el) {
-      // jsdom-safe
-      try {
-        el.scrollIntoView({ behavior: 'auto', block: 'start' });
-      } catch { /* noop */ }
+      try { el.scrollIntoView({ behavior: 'auto', block: 'start' }); } catch { /* noop */ }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Identifica o slide ativo via IntersectionObserver (comportamento TikTok):
-  // o slide cuja maior porção está na viewport vira o ativo — preparar/tocar
-  // só acontece a partir desse sinal. Mais preciso e estável que scrollTop
-  // em swipes rápidos / momentum scroll do iOS.
+  // Slide ativo = o que ocupa mais da tela (estável em swipes rápidos/iOS).
   useEffect(() => {
     const root = containerRef.current;
     if (!root || orderedItems.length === 0) return;
@@ -216,7 +493,6 @@ export function OcultoPlayShortsScroller({
           if (r > bestRatio) { bestRatio = r; bestId = id; }
         });
         if (bestId && bestRatio >= 0.6 && bestId !== activeIdRef.current) {
-          pauseInactiveVideos(bestId);
           activeIdRef.current = bestId;
           setActiveId(bestId);
         }
@@ -225,104 +501,29 @@ export function OcultoPlayShortsScroller({
     );
     slideRefs.current.forEach((el) => io.observe(el));
     return () => io.disconnect();
-  }, [orderedItems, pauseInactiveVideos]);
+  }, [orderedItems]);
 
-  const prepareNearbyVideo = useCallback((id: string) => {
-    if (antiStall) return;
-    const root = containerRef.current;
-    if (!root) return;
-    const section = root.querySelector<HTMLElement>(
-      `section[data-item-id="${CSS.escape(id)}"]`,
-    );
-    const v = section?.querySelector<HTMLVideoElement>('video[data-op-warm="true"]');
-    if (!v || v.readyState >= 1) return;
-    try {
-      v.muted = true;
-      v.preload = 'metadata';
-      if (v.networkState === HTMLMediaElement.NETWORK_EMPTY) v.load();
-    } catch { /* noop */ }
-  }, [antiStall]);
+  const activeIdx = Math.max(0, orderedItems.findIndex((it) => it.id === activeId));
+  const activeItem = orderedItems[activeIdx] ?? orderedItems[0];
 
-  // Pré-carregamento de rede (±1 vizinho) — DESATIVADO.
-  // O hint `<link rel="preload" as="video">` força o browser a baixar o
-  // arquivo inteiro em background com alta prioridade, o que: (a) briga
-  // pela banda do vídeo ATIVO (causando travamento/lentidão na execução em
-  // mobile) e (b) continua baixando depois que o usuário fecha o player,
-  // mantendo o arquivo "vivo" e podendo retomar áudio em outras telas.
-  // Mantemos apenas o aquecimento via <video preload="metadata"> dos slides
-  // vizinhos já renderizados (data-op-warm), que pega só os headers.
-  const clearPreloadLinks = useCallback(() => {
-    try {
-      document.head
-        .querySelectorAll<HTMLLinkElement>('link[data-op-preload-video]')
-        .forEach((l) => { try { l.remove(); } catch { /* noop */ } });
-    } catch { /* noop */ }
-  }, []);
-
-  // Notifica pai + aquece o próximo vídeo + dispara onNearEnd.
-  // A view fica no onFirstPlay: atualizar cache/RPC durante o swipe competia
-  // com o início do decode e causava engasgos em celulares antigos.
+  // Ao trocar de vídeo: volta a tocar, velocidade normal, avisa o pai e
+  // pede mais itens perto do fim.
   useEffect(() => {
-    const it = orderedItems.find((x) => x.id === activeId);
+    setIsPaused(false);
+    setFastForward(false);
+    setBuffering(false);
+    const it = orderedItems[activeIdx];
     if (!it) return;
     onActiveChange?.(it);
-    const idx = orderedItems.findIndex((x) => x.id === it.id);
-    if (idx >= 0) {
-      // Aquecimento somente via metadata do <video> warm já renderizado.
-      // Sem link rel=preload (ver bloco acima).
-      clearPreloadLinks();
-      const next = orderedItems[idx + 1];
-      const prev = orderedItems[idx - 1];
-      const idle = (window as any).requestIdleCallback as undefined | ((cb: () => void, opts?: { timeout?: number }) => number);
-      if (next?.id) {
-        const run = () => prepareNearbyVideo(next.id);
-        if (idle) idle(run, { timeout: 900 });
-        else window.setTimeout(run, 420);
-      }
-      if (prev?.id) {
-        const run = () => prepareNearbyVideo(prev.id);
-        if (idle) idle(run, { timeout: 1200 });
-        else window.setTimeout(run, 700);
-      }
-    }
-    if (onNearEnd && idx >= 0 && idx >= orderedItems.length - 3) onNearEnd();
-  }, [activeId, orderedItems, onActiveChange, onNearEnd, prepareNearbyVideo, clearPreloadLinks]);
-
-  // Kill switch global: ao desmontar o scroller (fechar modal, sair de
-  // /oculto-play, SPA nav), pausa + zera src + load() de TODOS os <video>
-  // dentro do container e remove preloads residuais. Isso elimina o caso
-  // em que o vídeo continuava baixando e voltava a tocar áudio em outra tela.
-  useEffect(() => () => {
-    clearPreloadLinks();
-    try { stopOcultoPlayMedia(containerRef.current, { pauseSharedAudio: false }); } catch { /* noop */ }
-  }, [clearPreloadLinks]);
-
-
-  // Cinto de segurança global: a cada troca de slide, pausa imediatamente
-  // qualquer <video> que não pertença ao slide ativo. A desmontagem React dos
-  // slides não ativos libera o recurso; remover `src` manualmente causava
-  // corridas no mobile e podia zerar a fonte do vídeo recém-ativo.
-  useEffect(() => {
-    const root = containerRef.current;
-    if (!root) return;
-    const activeSection = root.querySelector<HTMLElement>(`section[data-item-id="${CSS.escape(activeId)}"]`);
-    root.querySelectorAll<HTMLVideoElement>('video').forEach((v) => {
-      if (activeSection?.contains(v)) return;
-      pauseVideoElement(v);
-    });
+    if (onNearEnd && activeIdx >= orderedItems.length - 3) onNearEnd();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId]);
 
-  const setSlideRef = useCallback((id: string, el: HTMLElement | null) => {
-    if (!el) { slideRefs.current.delete(id); return; }
-    slideRefs.current.set(id, el);
+  // Ao desmontar (fechar modal, sair da página): para tudo dentro do container.
+  useEffect(() => () => {
+    try { stopOcultoPlayMedia(containerRef.current, { pauseSharedAudio: false }); } catch { /* noop */ }
   }, []);
 
-  const setPlayerSlotRef = useCallback((id: string, el: HTMLDivElement | null) => {
-    if (!el) { playerSlotRefs.current.delete(id); return; }
-    playerSlotRefs.current.set(id, el);
-  }, []);
-
-  // Navegação programática (atalhos / botões).
   const goToIndex = useCallback((idx: number, behavior: ScrollBehavior = 'smooth') => {
     if (!orderedItems.length) return;
     const targetIndex = ((idx % orderedItems.length) + orderedItems.length) % orderedItems.length;
@@ -330,65 +531,86 @@ export function OcultoPlayShortsScroller({
     if (!target) return;
     const el = slideRefs.current.get(target.id);
     if (el) {
-      pauseInactiveVideos(target.id);
       try { el.scrollIntoView({ behavior, block: 'start' }); } catch { /* noop */ }
+      activeIdRef.current = target.id;
       setActiveId(target.id);
     }
-  }, [orderedItems, pauseInactiveVideos]);
+  }, [orderedItems]);
 
   const goNext = useCallback(() => {
-    const idx = orderedItems.findIndex((it) => it.id === activeId);
+    const idx = orderedItems.findIndex((it) => it.id === activeIdRef.current);
     const wraps = idx >= orderedItems.length - 1;
     goToIndex(idx < 0 ? 0 : idx + 1, wraps ? 'auto' : 'smooth');
-  }, [activeId, orderedItems, goToIndex]);
+  }, [orderedItems, goToIndex]);
 
   const goPrev = useCallback(() => {
-    const idx = orderedItems.findIndex((it) => it.id === activeId);
+    const idx = orderedItems.findIndex((it) => it.id === activeIdRef.current);
     const wraps = idx <= 0;
     goToIndex(idx < 0 ? orderedItems.length - 1 : idx - 1, wraps ? 'auto' : 'smooth');
-  }, [activeId, orderedItems, goToIndex]);
+  }, [orderedItems, goToIndex]);
 
-  // Toggle play/pause manual (preserva mute, sem remontagem → sem piscadas).
-  const togglePause = useCallback(() => {
-    const root = containerRef.current;
-    if (!root) return;
-    const v = root.querySelector<HTMLVideoElement>(
-      `section[data-item-id="${CSS.escape(activeId)}"] video`,
-    );
-    if (!v) return;
-    if (v.paused) {
-      setIsPaused(false);
-      const p = v.play();
-      if (p && typeof p.catch === 'function') p.catch(() => {});
+  const handleEnded = useCallback(() => {
+    if (orderedItems.length <= 1) { pool.restartCurrent(); return; }
+    goNext();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderedItems.length, goNext]);
+
+  const handleView = useCallback((itemId: string) => {
+    try { registerCardView(itemId); } catch { /* noop */ }
+  }, [registerCardView]);
+
+  const handleProgress = useCallback((ratio: number) => {
+    const bar = progressBarRef.current;
+    if (bar) bar.style.transform = `scaleX(${ratio})`;
+  }, []);
+
+  const pool = useShortsVideoPool({
+    items: orderedItems,
+    activeIdx,
+    slotRefs: playerSlotRefs,
+    muted: globalMuted,
+    paused: isPaused,
+    economic: isEconomic,
+    onAutoplayBlocked: () => { setGlobalMuted(true); setUserChoseMute(false); },
+    onView: handleView,
+    onEnded: handleEnded,
+    onBuffering: setBuffering,
+    onProgress: handleProgress,
+  });
+
+  const enableSound = useCallback(() => {
+    pool.unlockSound();
+    setUserChoseMute(false);
+    setGlobalMuted(false);
+  }, [pool]);
+
+  const toggleMute = useCallback(() => {
+    if (globalMuted) {
+      enableSound();
     } else {
-      setIsPaused(true);
-      v.pause();
+      setUserChoseMute(true);
+      setGlobalMuted(true);
     }
-  }, [activeId]);
+  }, [globalMuted, enableSound]);
+
+  const togglePause = useCallback(() => setIsPaused((p) => !p), []);
 
   // Atalhos de teclado: ↑/↓/PageUp/PageDown/J/K = navegar,
-  // Espaço/K = play/pause, M = mute, Esc = fechar.
+  // Espaço = play/pause, M = som, Esc = fechar.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       switch (e.key) {
-        case 'ArrowDown':
-        case 'PageDown':
-        case 'j':
-        case 'J':
+        case 'ArrowDown': case 'PageDown': case 'j': case 'J':
           e.preventDefault(); goNext(); break;
-        case 'ArrowUp':
-        case 'PageUp':
-        case 'k':
-        case 'K':
+        case 'ArrowUp': case 'PageUp': case 'k': case 'K':
           e.preventDefault(); goPrev(); break;
         case ' ':
           e.preventDefault(); togglePause(); break;
-        case 'm':
-        case 'M':
-          e.preventDefault(); setGlobalMuted((m) => !m); break;
+        case 'm': case 'M':
+          e.preventDefault(); toggleMute(); break;
         case 'Escape':
           e.preventDefault(); onClose(); break;
         default: break;
@@ -396,16 +618,15 @@ export function OcultoPlayShortsScroller({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [goNext, goPrev, togglePause, onClose]);
+  }, [goNext, goPrev, togglePause, toggleMute, onClose]);
 
-  // Loop também nos gestos de limite: último + avançar volta ao primeiro;
-  // primeiro + voltar pula para o último, mantendo a sessão infinita.
+  // Loop nas pontas: último + avançar volta ao primeiro, e vice-versa.
   useEffect(() => {
     const root = containerRef.current;
     if (!root) return;
     let startY: number | null = null;
     const atEdge = () => {
-      const idx = orderedItems.findIndex((it) => it.id === activeId);
+      const idx = orderedItems.findIndex((it) => it.id === activeIdRef.current);
       return { first: idx === 0, last: idx === orderedItems.length - 1 };
     };
     const onWheel = (e: WheelEvent) => {
@@ -433,7 +654,7 @@ export function OcultoPlayShortsScroller({
       root.removeEventListener('touchstart', onTouchStart);
       root.removeEventListener('touchend', onTouchEnd);
     };
-  }, [activeId, orderedItems, goToIndex]);
+  }, [orderedItems, goToIndex]);
 
   const handleLike = useCallback((it: OPItem) => {
     actions.toggleLike.mutate(it.id);
@@ -456,26 +677,103 @@ export function OcultoPlayShortsScroller({
     bumpScore('comment');
     onComment?.(it);
   }, [onComment, bumpScore]);
-  const handleAutoplayMutedFallback = useCallback(() => setGlobalMuted(true), []);
+
+  const openAuthor = useCallback((it: OPItem) => {
+    const target = it.author_username || it.author_id;
+    if (!target) return;
+    onClose();
+    navigate(`/creator/${encodeURIComponent(target)}`);
+  }, [navigate, onClose]);
+
+  // ---- Gestos na área do vídeo ----
+  const gestureRef = useRef<{
+    x: number; y: number; t: number; moved: boolean; holding: boolean; holdTimer: number | null;
+  } | null>(null);
+  const lastTapRef = useRef<{ t: number; timer: number | null }>({ t: 0, timer: null });
+
+  const endHold = useCallback(() => {
+    const g = gestureRef.current;
+    if (g?.holdTimer) { window.clearTimeout(g.holdTimer); g.holdTimer = null; }
+    if (g?.holding) {
+      g.holding = false;
+      pool.setRate(1);
+      setFastForward(false);
+    }
+  }, [pool]);
+
+  const onGesturePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    const g = { x: e.clientX, y: e.clientY, t: performance.now(), moved: false, holding: false, holdTimer: null as number | null };
+    g.holdTimer = window.setTimeout(() => {
+      g.holdTimer = null;
+      if (g.moved) return;
+      g.holding = true;
+      pool.setRate(2);
+      setFastForward(true);
+    }, HOLD_MS);
+    gestureRef.current = g;
+  }, [pool]);
+
+  const onGesturePointerMove = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    const g = gestureRef.current;
+    if (!g || g.moved) return;
+    if (Math.abs(e.clientX - g.x) > 12 || Math.abs(e.clientY - g.y) > 12) {
+      g.moved = true;
+      if (g.holdTimer) { window.clearTimeout(g.holdTimer); g.holdTimer = null; }
+    }
+  }, []);
+
+  const onGesturePointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>, it: OPItem) => {
+    const g = gestureRef.current;
+    gestureRef.current = null;
+    if (!g) return;
+    if (g.holdTimer) { window.clearTimeout(g.holdTimer); g.holdTimer = null; }
+    if (g.holding) {
+      pool.setRate(1);
+      setFastForward(false);
+      return;
+    }
+    const dx = e.clientX - g.x;
+    const dy = e.clientY - g.y;
+    // Arrastar para a esquerda → perfil do criador.
+    if (dx < -70 && Math.abs(dy) < 50) { openAuthor(it); return; }
+    if (g.moved || performance.now() - g.t > 350) return;
+
+    const now = performance.now();
+    const last = lastTapRef.current;
+    if (now - last.t < DOUBLE_TAP_MS) {
+      // Dois toques → curtir (sem descurtir, como no TikTok) + coração.
+      if (last.timer) { window.clearTimeout(last.timer); last.timer = null; }
+      last.t = 0;
+      if (!it.liked_by_me) handleLike(it);
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const key = now;
+      setHearts((h) => [...h, { key, x: e.clientX - rect.left, y: e.clientY - rect.top }]);
+      window.setTimeout(() => setHearts((h) => h.filter((x) => x.key !== key)), 800);
+      return;
+    }
+    last.t = now;
+    last.timer = window.setTimeout(() => {
+      last.timer = null;
+      togglePause();
+    }, DOUBLE_TAP_MS);
+  }, [pool, openAuthor, handleLike, togglePause]);
+
+  const setSlideRef = useCallback((id: string, el: HTMLElement | null) => {
+    if (!el) { slideRefs.current.delete(id); return; }
+    slideRefs.current.set(id, el);
+  }, []);
+
+  const setPlayerSlotRef = useCallback((id: string, el: HTMLDivElement | null) => {
+    if (!el) { playerSlotRefs.current.delete(id); return; }
+    playerSlotRefs.current.set(id, el);
+  }, []);
 
   if (!orderedItems.length) return null;
 
-  const activeIdx = orderedItems.findIndex((it) => it.id === activeId);
-  const resolvedActiveId = activeIdx >= 0 ? activeId : (orderedItems[0]?.id ?? activeId);
-  const resolvedActiveIdx = activeIdx >= 0 ? activeIdx : 0;
-  const activeItem = orderedItems[resolvedActiveIdx] ?? orderedItems[0];
-  const adaptiveQuality: PlaybackQuality = antiStall
-    ? 'ultraLow'
-    : isEconomic
-      ? 'low'
-      : leanMobile
-        ? 'mobile'
-        : 'normal';
-
+  const showSoundPrompt = globalMuted && !userChoseMute;
 
   return (
-    <div className={cn('relative w-full h-full bg-black', (leanMobile || isEconomic || antiStall) && 'oculto-play-lean') }>
-      {/* Botão fechar global */}
+    <div className={cn('relative w-full h-full bg-black', (leanMobile || isEconomic) && 'oculto-play-lean')}>
       {showCloseButton && (
         <button
           type="button"
@@ -489,7 +787,6 @@ export function OcultoPlayShortsScroller({
         </button>
       )}
 
-      {/* Placar mock de sessão — abaixo do botão fechar */}
       <div
         className="absolute left-3 z-[60]"
         style={{ top: 'calc(max(0.75rem, env(safe-area-inset-top)) + 3.25rem)' }}
@@ -497,40 +794,23 @@ export function OcultoPlayShortsScroller({
         <OcultoPlaySessionScoreHUD />
       </div>
 
-      {/* Controles mute + ECO — centralizados no espaço vazio do topo, entre o botão fechar
-          (esquerda) e a coluna de ações (direita). Sempre acima do scroller (z-[70]). */}
+      {/* Som + ECO no topo, entre o X e a coluna de ações. */}
       <div
-        className={cn(
-          'absolute z-[70] flex flex-row items-center justify-center gap-2',
-          'left-1/2 -translate-x-1/2 animate-fade-in',
-          // garante que em telas estreitas não invada a coluna de ações nem o botão fechar
-          'max-[360px]:gap-1.5',
-        )}
-        style={{
-          top: 'max(0.75rem, env(safe-area-inset-top))',
-          // margem segura: 4rem para o X à esquerda, 4rem para a coluna de ações à direita
-          maxWidth: 'calc(100% - 8rem)',
-        }}
+        className="absolute z-[70] flex flex-row items-center justify-center gap-2 left-1/2 -translate-x-1/2 max-[360px]:gap-1.5"
+        style={{ top: 'max(0.75rem, env(safe-area-inset-top))', maxWidth: 'calc(100% - 8rem)' }}
         role="toolbar"
         aria-label="Controles de áudio e qualidade"
       >
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); setGlobalMuted((m) => !m); }}
+          onClick={(e) => { e.stopPropagation(); toggleMute(); }}
           aria-label={globalMuted ? 'Ativar som do vídeo' : 'Silenciar vídeo'}
           aria-pressed={globalMuted}
           title={globalMuted ? 'Ativar som (M)' : 'Silenciar (M)'}
-          className={cn(
-            'h-11 w-11 min-h-11 min-w-11 grid place-items-center rounded-full',
-            'bg-black/70 backdrop-blur ring-2 ring-white/30 text-white shadow-xl',
-            'hover:bg-black/90 active:scale-95 transition',
-            'focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-black/40',
-          )}
+          className="h-11 w-11 min-h-11 min-w-11 grid place-items-center rounded-full bg-black/70 backdrop-blur ring-2 ring-white/30 text-white shadow-xl hover:bg-black/90 active:scale-95 transition focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-300/80"
         >
           {globalMuted ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
         </button>
-
-        {/* Modo Econômico — toggle (auto-ativado em rede móvel lenta / saveData). */}
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); toggleDataSaver(); }}
@@ -538,64 +818,20 @@ export function OcultoPlayShortsScroller({
           title={
             isEconomic
               ? `Modo Econômico ativo • ${qualityLabel}${ecoSource === 'auto' ? ` (auto · ${connectionKind === 'cellular' ? 'rede móvel' : 'conexão lenta'})` : ' (manual)'} — toque para desligar`
-              : `Ativar Modo Econômico (baixa qualidade, fluido)${connectionKind === 'wifi' ? ' — Wi-Fi detectado, qualidade padrão por padrão' : ''}`
+              : 'Ativar Modo Econômico (carrega menos vídeos à frente)'
           }
           aria-pressed={isEconomic}
           className={cn(
-            'h-11 min-h-11 px-3 grid grid-flow-col items-center gap-1.5 rounded-full backdrop-blur ring-2 text-white shadow-xl active:scale-95 transition',
-            'focus:outline-none focus-visible:ring-4 focus-visible:ring-emerald-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-black/40',
-            isEconomic
-              ? 'bg-emerald-500/90 ring-emerald-300/60 hover:bg-emerald-500'
-              : 'bg-black/70 ring-white/30 hover:bg-black/90',
+            'h-11 min-h-11 px-3 grid grid-flow-col items-center gap-1.5 rounded-full backdrop-blur ring-2 text-white shadow-xl active:scale-95 transition focus:outline-none focus-visible:ring-4 focus-visible:ring-emerald-300/80',
+            isEconomic ? 'bg-emerald-500/90 ring-emerald-300/60 hover:bg-emerald-500' : 'bg-black/70 ring-white/30 hover:bg-black/90',
           )}
         >
           <Leaf className="h-4 w-4" strokeWidth={2.5} aria-hidden="true" />
           <span className="text-[11px] font-bold leading-none">ECO</span>
-          {isEconomic && (
-            <span className="text-[10px] font-semibold leading-none opacity-90 border-l border-white/40 pl-1.5">
-              {qualityLabel}
-            </span>
-          )}
         </button>
       </div>
 
-
-      {/* Badges ECO / ANTI-TRAVA — empilhados à esquerda, abaixo do HUD do troféu */}
-      {(isEconomic || antiStall) && (
-        <div
-          className="absolute left-3 z-[60] flex flex-col items-start gap-2"
-          style={{ top: 'calc(max(0.75rem, env(safe-area-inset-top)) + 6.5rem)' }}
-        >
-          {isEconomic && (
-            <div
-              role="status"
-              aria-live="polite"
-              className="pointer-events-none inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-500/85 backdrop-blur text-white text-[10px] font-bold leading-none shadow-lg ring-1 ring-emerald-300/50"
-            >
-              <Leaf className="h-3 w-3" strokeWidth={2.5} />
-              <span>ECO · {qualityLabel}</span>
-              <span className="opacity-80 font-medium border-l border-white/40 pl-1.5">
-                {ecoSource === 'auto'
-                  ? connectionKind === 'cellular' ? 'rede móvel' : 'auto'
-                  : 'manual'}
-              </span>
-            </div>
-          )}
-          {antiStall && (
-            <div
-              role="status"
-              aria-live="polite"
-              className="pointer-events-none inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-500/90 backdrop-blur text-white text-[10px] font-bold leading-none shadow-lg ring-1 ring-amber-200/60"
-            >
-              <Leaf className="h-3 w-3" strokeWidth={2.5} />
-              <span>ANTI-TRAVA · 360p</span>
-            </div>
-          )}
-        </div>
-      )}
-
-
-      {/* Atalhos desktop: botões de navegação anterior/próximo (md+) */}
+      {/* Navegação desktop (md+) */}
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); goPrev(); }}
@@ -603,7 +839,7 @@ export function OcultoPlayShortsScroller({
         title="Anterior (↑ / K)"
         className="hidden md:grid absolute right-3 top-1/2 -translate-y-[3.25rem] z-[55] h-11 w-11 place-items-center rounded-full bg-black/55 backdrop-blur ring-1 ring-white/20 text-white hover:bg-black/80 active:scale-95 transition"
       >
-        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 15l6-6 6 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 15l6-6 6 6" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </button>
       <button
         type="button"
@@ -612,8 +848,21 @@ export function OcultoPlayShortsScroller({
         title="Próximo (↓ / J)"
         className="hidden md:grid absolute right-3 top-1/2 translate-y-2 z-[55] h-11 w-11 place-items-center rounded-full bg-black/55 backdrop-blur ring-1 ring-white/20 text-white hover:bg-black/80 active:scale-95 transition"
       >
-        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </button>
+
+      {/* Aviso grande de som */}
+      {showSoundPrompt && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); enableSound(); }}
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[65] flex items-center gap-2.5 rounded-full bg-black/75 px-5 py-3.5 text-white text-base font-bold shadow-2xl ring-2 ring-white/40 backdrop-blur active:scale-95 transition animate-fade-in"
+          aria-label="Toque para ativar o som"
+        >
+          <Volume2 className="h-6 w-6" />
+          Toque para ativar o som
+        </button>
+      )}
 
       {/* Scroller vertical snap */}
       <div
@@ -622,37 +871,34 @@ export function OcultoPlayShortsScroller({
         style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' as any }}
       >
         {orderedItems.map((it, idx) => {
-          const isActive = it.id === resolvedActiveId;
-          // Player único: o <video> real é uma instância imperativa reutilizada
-          // e movida para o slot do slide ativo. Os slides só renderizam poster.
-          // Distância física no DOM, sem distância circular. A lógica circular
-          // montava o último vídeo quando o primeiro estava ativo (e vice-versa),
-          // criando decoder/rede invisível em mobile.
-          const distance = Math.abs(idx - resolvedActiveIdx);
-          const renderChrome = isActive;
+          const isActive = idx === activeIdx;
+          const distance = idx - activeIdx;
+          // Capa só perto do ativo (economiza memória em filas longas).
+          const showThumb = !!it.thumb_url && distance >= -2 && distance <= 3;
           return (
             <section
               key={it.id}
               data-item-id={it.id}
               ref={(el) => setSlideRef(it.id, el)}
-              className="snap-start h-full w-full relative bg-black"
+              className="snap-start snap-always h-full w-full relative bg-black"
               style={{ height: '100%', contain: 'layout paint size' }}
             >
               {it.media_url ? (
                 <div className="absolute inset-0 bg-black">
-                  {it.thumb_url && (isActive || !(leanMobile || isEconomic) || distance <= 1) ? (
+                  {showThumb && (
                     <img
-                      src={it.thumb_url}
+                      src={it.thumb_url as string}
                       alt=""
-                      loading={isActive || distance <= 1 ? 'eager' : 'lazy'}
+                      loading={Math.abs(distance) <= 1 ? 'eager' : 'lazy'}
                       decoding="async"
                       draggable={false}
-                      className={cn('absolute inset-0 h-full w-full object-cover pointer-events-none', isActive ? 'opacity-100' : 'opacity-90')}
+                      className="absolute inset-0 h-full w-full object-cover pointer-events-none"
                     />
-                  ) : null}
+                  )}
+                  {/* Slot do player: SEM fundo — a capa fica visível até o 1º quadro. */}
                   <div
                     ref={(el) => setPlayerSlotRef(it.id, el)}
-                    className="absolute inset-0 z-[2] bg-black"
+                    className="absolute inset-0 z-[2]"
                     data-reusable-video-slot={it.id}
                   />
                 </div>
@@ -662,8 +908,46 @@ export function OcultoPlayShortsScroller({
                 </div>
               )}
 
-              {renderChrome && (
+              {isActive && (
                 <>
+                  {/* Camada de gestos (toque, 2 toques, segurar, arrastar) */}
+                  <div
+                    className="absolute inset-0 z-[20] select-none"
+                    style={{ touchAction: 'pan-y', WebkitTapHighlightColor: 'transparent' }}
+                    onPointerDown={onGesturePointerDown}
+                    onPointerMove={onGesturePointerMove}
+                    onPointerUp={(e) => onGesturePointerUp(e, it)}
+                    onPointerCancel={() => { endHold(); gestureRef.current = null; }}
+                    onPointerLeave={() => endHold()}
+                    onContextMenu={(e) => e.preventDefault()}
+                    aria-hidden="true"
+                  >
+                    {hearts.map((h) => (
+                      <Heart
+                        key={h.key}
+                        className="absolute h-24 w-24 -translate-x-1/2 -translate-y-1/2 fill-rose-500 text-rose-500 drop-shadow-2xl pointer-events-none animate-[ping_0.8s_ease-out_1]"
+                        style={{ left: h.x, top: h.y }}
+                      />
+                    ))}
+                    {isPaused && (
+                      <div className="absolute inset-0 grid place-items-center pointer-events-none">
+                        <div className="h-20 w-20 rounded-full bg-black/45 grid place-items-center">
+                          <Play className="h-10 w-10 text-white fill-white translate-x-0.5" />
+                        </div>
+                      </div>
+                    )}
+                    {buffering && !isPaused && (
+                      <div className="absolute inset-0 grid place-items-center pointer-events-none">
+                        <Loader2 className="h-10 w-10 text-white/90 animate-spin drop-shadow-lg" />
+                      </div>
+                    )}
+                    {fastForward && (
+                      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-white text-sm font-bold pointer-events-none">
+                        2x ▶▶
+                      </div>
+                    )}
+                  </div>
+
                   {/* Ações verticais */}
                   <div className="absolute right-2 bottom-28 z-40 pointer-events-auto" data-no-swipe>
                     <OcultoPlayActions
@@ -698,7 +982,11 @@ export function OcultoPlayShortsScroller({
 
                   {/* Autor + título */}
                   <div className="absolute left-3 right-20 bottom-16 z-30 text-white pointer-events-none">
-                    <div className="flex items-center gap-2 pointer-events-auto">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); openAuthor(it); }}
+                      className="flex items-center gap-2 pointer-events-auto"
+                    >
                       <Avatar className="h-7 w-7 ring-2 ring-fuchsia-400/60">
                         {it.author_avatar_url && <AvatarImage src={it.author_avatar_url} />}
                         <AvatarFallback className="text-[10px]">
@@ -708,12 +996,21 @@ export function OcultoPlayShortsScroller({
                       <span className="text-xs font-bold drop-shadow-md truncate">
                         @{it.author_username ?? 'usuario'}
                       </span>
-                    </div>
+                    </button>
                     {(it.title || it.caption) && (
                       <p className="mt-1 text-sm font-semibold line-clamp-2 break-words drop-shadow-md">
                         {it.title || it.caption}
                       </p>
                     )}
+                  </div>
+
+                  {/* Barra de progresso */}
+                  <div className="absolute left-0 right-0 bottom-0 z-30 h-[3px] bg-white/20 pointer-events-none">
+                    <div
+                      ref={progressBarRef}
+                      className="h-full w-full origin-left bg-white/90"
+                      style={{ transform: 'scaleX(0)' }}
+                    />
                   </div>
                 </>
               )}
@@ -722,27 +1019,10 @@ export function OcultoPlayShortsScroller({
         })}
       </div>
 
-      {activeItem?.media_url && (
-        <ReusableTikTokVideoPlayer
-          key="oculto-play-reusable-video"
-          item={activeItem}
-          slotRefs={playerSlotRefs}
-          muted={globalMuted}
-          paused={isPaused}
-          economic={isEconomic}
-          mobileOptimized={leanMobile}
-          playbackQuality={adaptiveQuality}
-          onAutoplayMutedFallback={handleAutoplayMutedFallback}
-          onPlaybackStress={activateAntiStall}
-          onFirstPlay={(itemId) => {
-            if (!viewedRef.current.has(itemId)) {
-              viewedRef.current.add(itemId);
-              try { registerCardView(itemId); } catch { /* noop */ }
-            }
-          }}
-          onEnded={goNext}
-        />
-      )}
+      {/* Mantém referência para o item ativo (acessibilidade / leitores de tela) */}
+      <span className="sr-only" aria-live="polite">
+        {activeItem ? `Vídeo ${activeIdx + 1} de ${orderedItems.length}${activeItem.title ? `: ${activeItem.title}` : ''}` : ''}
+      </span>
 
       <style>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -753,453 +1033,7 @@ export function OcultoPlayShortsScroller({
           -webkit-backdrop-filter: none !important;
           backdrop-filter: none !important;
         }
-        .oculto-play-lean * {
-          transition-property: opacity, transform !important;
-          transition-duration: 80ms !important;
-          animation-duration: 400ms !important;
-        }
       `}</style>
     </div>
   );
-}
-
-function buildPlaybackUrl(src: string, economic: boolean, mobileOptimized: boolean, playbackQuality: PlaybackQuality) {
-  // Storage/CDN atual entrega MP4 único. Query fake (?q=low&h=360) não
-  // transcodifica, apenas cria uma URL nova e força re-download/cache miss —
-  // exatamente o travamento sentido ao alternar qualidade. Mantemos URL estável.
-  void economic;
-  void mobileOptimized;
-  void playbackQuality;
-  return src;
-}
-
-function ReusableTikTokVideoPlayer({
-  item,
-  slotRefs,
-  muted,
-  paused,
-  economic,
-  mobileOptimized,
-  playbackQuality,
-  onAutoplayMutedFallback,
-  onPlaybackStress,
-  onFirstPlay,
-  onEnded,
-}: {
-  item: OPItem;
-  slotRefs: RefObject<Map<string, HTMLDivElement>>;
-  muted: boolean;
-  paused: boolean;
-  economic: boolean;
-  mobileOptimized: boolean;
-  playbackQuality: PlaybackQuality;
-  onAutoplayMutedFallback?: () => void;
-  onPlaybackStress?: () => void;
-  onFirstPlay?: (itemId: string) => void;
-  onEnded?: () => void;
-}) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const activeItemIdRef = useRef(item.id);
-  const retryTimerRef = useRef<number | null>(null);
-  const stallWatchTimerRef = useRef<number | null>(null);
-  const decodeWatchTimerRef = useRef<number | null>(null);
-  const frameCallbackIdRef = useRef<number | null>(null);
-  const retryCountRef = useRef(0);
-  const decoderRecoveryCountRef = useRef(0);
-  const positionsRef = useRef<Map<string, number>>(new Map());
-  const firstPlayRef = useRef<Set<string>>(new Set());
-  // Acumula tempo de reprodução por item para registrar a view só após 10s reais.
-  const viewFiredRef = useRef<Set<string>>(new Set());
-  const playAccumByItemRef = useRef<Map<string, number>>(new Map());
-  const playingSinceRef = useRef<number | null>(null);
-  const VIEW_THRESHOLD_MS = 10_000;
-  const lastProgressAtRef = useRef(0);
-  const lastProgressTimeRef = useRef(0);
-  const lastFrameAtRef = useRef(0);
-  const lastFrameMediaTimeRef = useRef(0);
-  const supportsFrameCallbackRef = useRef(false);
-  const mutedRef = useRef(muted);
-  const pausedRef = useRef(paused);
-  const playbackSrcRef = useRef('');
-  const onAutoplayMutedFallbackRef = useRef(onAutoplayMutedFallback);
-  const onPlaybackStressRef = useRef(onPlaybackStress);
-  const onFirstPlayRef = useRef(onFirstPlay);
-  const onEndedRef = useRef(onEnded);
-
-  const playbackSrc = useMemo(
-    () => buildPlaybackUrl(item.media_url ?? '', economic, mobileOptimized, playbackQuality),
-    [item.media_url, economic, mobileOptimized, playbackQuality],
-  );
-
-  useEffect(() => { mutedRef.current = muted; }, [muted]);
-  useEffect(() => { pausedRef.current = paused; }, [paused]);
-  useEffect(() => { playbackSrcRef.current = playbackSrc; }, [playbackSrc]);
-  useEffect(() => { onAutoplayMutedFallbackRef.current = onAutoplayMutedFallback; }, [onAutoplayMutedFallback]);
-  useEffect(() => { onPlaybackStressRef.current = onPlaybackStress; }, [onPlaybackStress]);
-  useEffect(() => { onFirstPlayRef.current = onFirstPlay; }, [onFirstPlay]);
-  useEffect(() => { onEndedRef.current = onEnded; }, [onEnded]);
-
-  const clearRetry = useCallback(() => {
-    if (retryTimerRef.current) {
-      window.clearTimeout(retryTimerRef.current);
-      retryTimerRef.current = null;
-    }
-    if (stallWatchTimerRef.current) {
-      window.clearTimeout(stallWatchTimerRef.current);
-      stallWatchTimerRef.current = null;
-    }
-  }, []);
-
-  const safePlay = useCallback((v: HTMLVideoElement) => {
-    if (pausedRef.current) return;
-    const p = v.play();
-    if (p && typeof p.catch === 'function') {
-      p.catch(() => {
-        try {
-          v.muted = true;
-          onAutoplayMutedFallbackRef.current?.();
-          const retry = v.play();
-          if (retry && typeof retry.catch === 'function') retry.catch(() => {});
-        } catch { /* noop */ }
-      });
-    }
-  }, []);
-
-  const recoverFrozenDecoder = useCallback((reason: 'frame-freeze' | 'hard-freeze') => {
-    const el = videoRef.current;
-    const currentId = activeItemIdRef.current;
-    if (!el || !currentId || pausedRef.current || el.ended) return;
-    onPlaybackStressRef.current?.();
-    const resumeAt = Math.max(0, el.currentTime || positionsRef.current.get(currentId) || 0);
-    positionsRef.current.set(currentId, resumeAt);
-    decoderRecoveryCountRef.current += 1;
-    if (decoderRecoveryCountRef.current > 5) {
-      // Se o arquivo tem lacunas reais de frames, nenhum reload consegue criar
-      // quadros. Avança para não deixar o usuário ouvindo áudio com imagem morta.
-      try { el.pause(); } catch { /* noop */ }
-      window.setTimeout(() => onEndedRef.current?.(), 80);
-      return;
-    }
-
-    try {
-      if (reason === 'frame-freeze' && decoderRecoveryCountRef.current <= 4) {
-        // Primeiro tenta destravar o compositor; se o arquivo tiver lacunas reais
-        // de PTS, pula progressivamente até o próximo quadro válido.
-        const jumps = [0.08, 1.5, 4, 8];
-        const jump = jumps[Math.min(jumps.length - 1, decoderRecoveryCountRef.current - 1)] ?? 0.08;
-        const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : Number.POSITIVE_INFINITY;
-        el.currentTime = Math.max(0, Math.min(duration - 0.08, resumeAt + jump));
-        safePlay(el);
-        return;
-      }
-      // Depois recria o pipeline do decoder, preservando o tempo. Isso corrige
-      // o caso clássico: áudio segue, imagem congelada, especialmente no iOS.
-      el.pause();
-      el.preload = 'metadata';
-      el.src = playbackSrcRef.current;
-      el.load();
-      const restore = () => {
-        if (activeItemIdRef.current !== currentId) return;
-        try { if (resumeAt > 0 && Number.isFinite(resumeAt)) el.currentTime = resumeAt; } catch { /* noop */ }
-        safePlay(el);
-      };
-      if (el.readyState >= 1) restore();
-      else el.addEventListener('loadedmetadata', restore, { once: true });
-    } catch {
-      safePlay(el);
-    }
-  }, [safePlay]);
-
-  const scheduleRetry = useCallback((reason: 'error' | 'stalled' | 'waiting') => {
-    const v = videoRef.current;
-    const currentId = activeItemIdRef.current;
-    if (!v || !currentId) return;
-    onPlaybackStressRef.current?.();
-    positionsRef.current.set(currentId, Math.max(0, v.currentTime || 0));
-    clearRetry();
-    const nextAttempt = retryCountRef.current + 1;
-    if (nextAttempt > 3) {
-      clearRetry();
-      try { v.pause(); } catch { /* noop */ }
-      // Não deixa um arquivo legado/corrompido prender o usuário no slide.
-      window.setTimeout(() => onEndedRef.current?.(), 120);
-      return;
-    }
-    const attempt = Math.min(3, nextAttempt);
-    retryCountRef.current = attempt;
-    const delay = reason === 'waiting' || reason === 'stalled' ? 250 : 450 + attempt * 650;
-    retryTimerRef.current = window.setTimeout(() => {
-      const el = videoRef.current;
-      if (!el || activeItemIdRef.current !== currentId) return;
-      const resumeAt = positionsRef.current.get(currentId) ?? 0;
-      try {
-        el.preload = 'metadata';
-        el.muted = mutedRef.current;
-        if (reason === 'error' || attempt >= 2 || el.networkState === HTMLMediaElement.NETWORK_NO_SOURCE) {
-          el.src = playbackSrcRef.current;
-          el.load();
-        } else if (resumeAt > 0 && Number.isFinite(resumeAt)) {
-          el.currentTime = Math.max(0, resumeAt + 0.01);
-        }
-      } catch { /* noop */ }
-      const restoreAndPlay = () => {
-        if (activeItemIdRef.current !== currentId) return;
-        try {
-          if (resumeAt > 0 && Number.isFinite(resumeAt)) el.currentTime = resumeAt;
-        } catch { /* noop */ }
-        safePlay(el);
-      };
-      if (el.readyState >= 1) restoreAndPlay();
-      else el.addEventListener('loadedmetadata', restoreAndPlay, { once: true });
-    }, delay);
-  }, [clearRetry, safePlay]);
-
-  const watchPotentialStall = useCallback((reason: 'stalled' | 'waiting') => {
-    const v = videoRef.current;
-    if (!v || pausedRef.current || v.ended) return;
-    if (v.readyState >= 3) {
-      safePlay(v);
-      return;
-    }
-    onPlaybackStressRef.current?.();
-    if (stallWatchTimerRef.current) return;
-    const id = activeItemIdRef.current;
-    const observedTime = Math.max(0, v.currentTime || 0);
-    try { v.play().catch(() => { /* noop */ }); } catch { /* noop */ }
-    stallWatchTimerRef.current = window.setTimeout(() => {
-      stallWatchTimerRef.current = null;
-      const el = videoRef.current;
-      if (!el || activeItemIdRef.current !== id || pausedRef.current || el.ended) return;
-      const advanced = Math.max(0, el.currentTime || 0) > observedTime + 0.08;
-      const recentlyProgressed = performance.now() - lastProgressAtRef.current < 1800;
-      if (!advanced && !recentlyProgressed && el.readyState < 3) scheduleRetry(reason);
-      else safePlay(el);
-    }, reason === 'waiting' ? 3200 : 2400);
-  }, [safePlay, scheduleRetry]);
-
-  useEffect(() => {
-    if (videoRef.current) return;
-    const v = document.createElement('video');
-    videoRef.current = v;
-    v.className = 'absolute inset-0 h-full w-full bg-black object-cover pointer-events-none';
-    v.controls = false;
-    v.muted = mutedRef.current;
-    v.defaultMuted = true;
-    v.playsInline = true;
-    v.preload = 'metadata';
-    v.autoplay = true;
-    v.setAttribute('webkit-playsinline', 'true');
-    v.setAttribute('controlsList', 'nodownload noremoteplayback nofullscreen');
-    v.setAttribute('disablePictureInPicture', 'true');
-    v.setAttribute('disableRemotePlayback', 'true');
-    v.setAttribute('draggable', 'false');
-    v.setAttribute('fetchpriority', 'high');
-
-    // Acumula tempo de reprodução real do item ativo e dispara onFirstPlay
-    // (registrar visualização) somente quando passar de 10s acumulados.
-    const flushPlayAccum = () => {
-      const id = activeItemIdRef.current;
-      const startedAt = playingSinceRef.current;
-      playingSinceRef.current = null;
-      if (!id || startedAt == null) return;
-      // Já contabilizado nesta sessão — não acumula mais nada para este item,
-      // mesmo que o usuário pause, dê replay ou faça seek.
-      if (viewFiredRef.current.has(id)) return;
-      const delta = performance.now() - startedAt;
-      if (delta <= 0) return;
-      const prev = playAccumByItemRef.current.get(id) ?? 0;
-      const next = prev + delta;
-      playAccumByItemRef.current.set(id, next);
-      if (next >= VIEW_THRESHOLD_MS) {
-        viewFiredRef.current.add(id);
-        try { onFirstPlayRef.current?.(id); } catch { /* noop */ }
-      }
-    };
-
-    const onTime = () => {
-      positionsRef.current.set(activeItemIdRef.current, Math.max(0, v.currentTime || 0));
-      lastProgressAtRef.current = performance.now();
-      lastProgressTimeRef.current = Math.max(0, v.currentTime || 0);
-      // Tick de acumulação enquanto o vídeo segue tocando (curto-circuita se já firou).
-      if (playingSinceRef.current != null && !viewFiredRef.current.has(activeItemIdRef.current)) {
-        flushPlayAccum();
-        playingSinceRef.current = performance.now();
-      }
-    };
-    const onPlaying = () => {
-      retryCountRef.current = 0;
-      decoderRecoveryCountRef.current = 0;
-      clearRetry();
-      lastProgressAtRef.current = performance.now();
-      lastProgressTimeRef.current = Math.max(0, v.currentTime || 0);
-      lastFrameAtRef.current = performance.now();
-      lastFrameMediaTimeRef.current = Math.max(0, v.currentTime || 0);
-      markOcultoPlayMediaPlaying(`video:${activeItemIdRef.current}`);
-      firstPlayRef.current.add(activeItemIdRef.current);
-      // Só (re)inicia o cronômetro se a view ainda não foi contabilizada.
-      // Replay/pause/seek após os 10s não geram nova contagem.
-      if (!viewFiredRef.current.has(activeItemIdRef.current)) {
-        playingSinceRef.current = performance.now();
-      } else {
-        playingSinceRef.current = null;
-      }
-    };
-    const onPause = () => {
-      flushPlayAccum();
-      markOcultoPlayMediaStopped(`video:${activeItemIdRef.current}`);
-    };
-    const onEndedInternal = () => {
-      flushPlayAccum();
-      markOcultoPlayMediaStopped(`video:${activeItemIdRef.current}`);
-      onEndedRef.current?.();
-    };
-    const onError = () => { flushPlayAccum(); scheduleRetry('error'); };
-    const onStalled = () => watchPotentialStall('stalled');
-    const onWaiting = () => {
-      if (v.readyState < 3) watchPotentialStall('waiting');
-    };
-
-    v.addEventListener('timeupdate', onTime);
-    v.addEventListener('playing', onPlaying);
-    v.addEventListener('pause', onPause);
-    v.addEventListener('ended', onEndedInternal);
-    v.addEventListener('error', onError);
-    v.addEventListener('stalled', onStalled);
-    v.addEventListener('waiting', onWaiting);
-
-    // Pausa o cronômetro de visualização quando o usuário troca de aba,
-    // minimiza/bloqueia o navegador, perde foco da janela ou está prestes
-    // a sair da página. Sem isto, contaríamos como "assistido" um vídeo
-    // que ficou apenas tocando em segundo plano (ou descartado pelo SO).
-    const pauseAccumDueToBlur = () => { flushPlayAccum(); };
-    const resumeAccumIfPlaying = () => {
-      const vid = videoRef.current;
-      if (!vid || vid.paused || vid.ended) return;
-      if (viewFiredRef.current.has(activeItemIdRef.current)) return;
-      if (playingSinceRef.current == null) playingSinceRef.current = performance.now();
-    };
-    const onVisibility = () => {
-      if (document.hidden) pauseAccumDueToBlur();
-      else resumeAccumIfPlaying();
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('blur', pauseAccumDueToBlur);
-    window.addEventListener('focus', resumeAccumIfPlaying);
-    window.addEventListener('pagehide', pauseAccumDueToBlur);
-    window.addEventListener('beforeunload', pauseAccumDueToBlur);
-
-
-    const scheduleFrameWatch = () => {
-      const rvfc = (v as HTMLVideoElement & {
-        requestVideoFrameCallback?: (cb: (now: number, metadata: { mediaTime: number }) => void) => number;
-        cancelVideoFrameCallback?: (id: number) => void;
-      }).requestVideoFrameCallback;
-      supportsFrameCallbackRef.current = typeof rvfc === 'function';
-      if (!rvfc) return;
-      const loop = (now: number, metadata: { mediaTime: number }) => {
-        lastFrameAtRef.current = now;
-        lastFrameMediaTimeRef.current = Number(metadata.mediaTime || 0);
-        try { frameCallbackIdRef.current = rvfc.call(v, loop); } catch { frameCallbackIdRef.current = null; }
-      };
-      try { frameCallbackIdRef.current = rvfc.call(v, loop); } catch { frameCallbackIdRef.current = null; }
-    };
-    scheduleFrameWatch();
-
-    decodeWatchTimerRef.current = window.setInterval(() => {
-      if (pausedRef.current || v.paused || v.ended || document.hidden) return;
-      const now = performance.now();
-      const current = Math.max(0, v.currentTime || 0);
-      const audioAdvanced = current > lastFrameMediaTimeRef.current + 1.1;
-      const noRecentFrame = now - lastFrameAtRef.current > 2600;
-      const noRecentTime = now - lastProgressAtRef.current > 3600;
-      if (supportsFrameCallbackRef.current && audioAdvanced && noRecentFrame) recoverFrozenDecoder('frame-freeze');
-      else if (noRecentTime && v.readyState >= 2) recoverFrozenDecoder('hard-freeze');
-    }, 1200);
-
-    return () => {
-      clearRetry();
-      if (decodeWatchTimerRef.current) {
-        window.clearInterval(decodeWatchTimerRef.current);
-        decodeWatchTimerRef.current = null;
-      }
-      const typedVideo = v as HTMLVideoElement & { cancelVideoFrameCallback?: (id: number) => void };
-      if (frameCallbackIdRef.current != null && typedVideo.cancelVideoFrameCallback) {
-        try { typedVideo.cancelVideoFrameCallback(frameCallbackIdRef.current); } catch { /* noop */ }
-      }
-      frameCallbackIdRef.current = null;
-      v.removeEventListener('timeupdate', onTime);
-      v.removeEventListener('playing', onPlaying);
-      v.removeEventListener('pause', onPause);
-      v.removeEventListener('ended', onEndedInternal);
-      v.removeEventListener('error', onError);
-      v.removeEventListener('stalled', onStalled);
-      v.removeEventListener('waiting', onWaiting);
-      document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('blur', pauseAccumDueToBlur);
-      window.removeEventListener('focus', resumeAccumIfPlaying);
-      window.removeEventListener('pagehide', pauseAccumDueToBlur);
-      window.removeEventListener('beforeunload', pauseAccumDueToBlur);
-      // Flush final: garante que o cronômetro pare ao desmontar o player.
-      flushPlayAccum();
-      try { v.pause(); } catch { /* noop */ }
-      try { v.remove(); } catch { /* noop */ }
-      videoRef.current = null;
-    };
-  }, [clearRetry, recoverFrozenDecoder, scheduleRetry, watchPotentialStall]);
-
-  useEffect(() => {
-    const v = videoRef.current;
-    const slot = slotRefs.current?.get(item.id);
-    if (!v || !slot || !item.media_url) return;
-    const prevId = activeItemIdRef.current;
-    const switchingItem = prevId !== item.id;
-    if (prevId && prevId !== item.id) {
-      positionsRef.current.set(prevId, Math.max(0, v.currentTime || 0));
-      markOcultoPlayMediaStopped(`video:${prevId}`);
-      // Scroll rápido: encerra qualquer cronômetro pendente sem creditar
-      // o item anterior; se ele não atingiu 10s, o progresso parcial é
-      // descartado para evitar somar tempo entre vídeos diferentes.
-      playingSinceRef.current = null;
-      if (!viewFiredRef.current.has(prevId)) {
-        playAccumByItemRef.current.delete(prevId);
-      }
-    }
-    activeItemIdRef.current = item.id;
-    clearRetry();
-    retryCountRef.current = 0;
-    decoderRecoveryCountRef.current = 0;
-    decoderRecoveryCountRef.current = 0;
-    if (v.parentElement !== slot) slot.appendChild(v);
-    v.poster = item.thumb_url ?? '';
-    v.muted = muted;
-    v.defaultMuted = true;
-    v.preload = 'metadata';
-    const resumeAt = positionsRef.current.get(item.id) ?? Math.max(0, Number(item.trim_start_seconds ?? 0));
-    if (switchingItem || !v.getAttribute('src')) {
-      try { v.pause(); } catch { /* noop */ }
-      v.src = playbackSrc;
-      try { v.load(); } catch { /* noop */ }
-      const restore = () => {
-        try { if (resumeAt > 0 && Number.isFinite(resumeAt)) v.currentTime = resumeAt; } catch { /* noop */ }
-        if (!paused) safePlay(v);
-      };
-      if (v.readyState >= 1) restore();
-      else v.addEventListener('loadedmetadata', restore, { once: true });
-    } else if (!paused) {
-      safePlay(v);
-    }
-  }, [clearRetry, item, muted, paused, playbackSrc, safePlay, slotRefs]);
-
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    v.muted = muted;
-    if (paused) {
-      try { v.pause(); } catch { /* noop */ }
-    } else {
-      safePlay(v);
-    }
-  }, [muted, paused, safePlay]);
-
-  return null;
 }
