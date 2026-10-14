@@ -2409,10 +2409,11 @@ function UploadModal({
     return isMasterUser ? base : base.filter((k) => !MASTER_ONLY_KINDS.includes(k));
   }, [enabledKinds, isMasterUser]);
   useEffect(() => {
+    if (isMasterRole === undefined) return; // espera saber se é master
     if (!uploadKinds.includes(kind) && uploadKinds.length > 0) {
       setKind(uploadKinds.includes('short_video') ? 'short_video' : uploadKinds[0]);
     }
-  }, [uploadKinds, kind]);
+  }, [uploadKinds, kind, isMasterRole]);
   // Mantém o canal coerente com o tipo (vídeo ↔ áudio nunca se misturam).
   useEffect(() => {
     if (myChannels.length === 0) return;
