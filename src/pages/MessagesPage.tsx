@@ -775,8 +775,13 @@ export default function MessagesPage() {
                       "w-full flex items-center gap-3 p-4 pr-14 transition-all border-b relative min-h-[4rem]",
                       hasSuperDm
                         ? "bg-gradient-to-r from-amber-500/20 via-yellow-400/10 to-amber-500/20 border-amber-400/50"
-                        : "hover:bg-muted/30 border-border/20"
+                        : conv.unread_count > 0
+                          // Mensagem nova não lida: fundo rosado + faixa lateral,
+                          // fácil de achar ao rolar a lista.
+                          ? "bg-primary/10 hover:bg-primary/15 border-border/20 shadow-[inset_4px_0_0_0_hsl(var(--primary))]"
+                          : "hover:bg-muted/30 border-border/20"
                     )}
+                    aria-label={conv.unread_count > 0 ? `Conversa com ${conv.unread_count} mensagem(ns) nova(s)` : undefined}
                   >
                   {hasSuperDm && (
                     <div className="absolute top-1 right-1 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-400/30">
@@ -817,7 +822,10 @@ export default function MessagesPage() {
                           <VerifiedCoupleBadge size="sm" className="ml-1 inline-flex" />
                         )}
                       </p>
-                      <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                      <span className={cn(
+                        "text-[10px] flex-shrink-0",
+                        conv.unread_count > 0 ? "text-primary font-semibold" : "text-muted-foreground",
+                      )}>
                         {conv.last_message ? formatTime(conv.last_message.created_at) : ''}
                       </span>
                     </div>

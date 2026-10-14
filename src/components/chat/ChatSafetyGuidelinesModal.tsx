@@ -20,6 +20,22 @@ interface ChatSafetyGuidelinesModalProps {
 }
 
 const STORAGE_KEY = "chat_safety_dismissed_v1";
+// Escolha "Não exibir novamente" vale para TODAS as conversas (antes era por
+// conversa e o aviso voltava a cada chat novo). Chave sem "cache"/"feed"
+// no nome para não ser apagada pelo "Limpar & reiniciar".
+const GLOBAL_KEY = "chat_safety_guidelines_hide_all";
+
+function isHiddenForAll(): boolean {
+  try {
+    if (localStorage.getItem(GLOBAL_KEY) === "1") return true;
+    // Quem já tinha marcado em alguma conversa (versão antiga) também não vê mais.
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const old = raw ? JSON.parse(raw) : [];
+    return Array.isArray(old) && old.length > 0;
+  } catch {
+    return false;
+  }
+}
 
 function getDismissed(): Set<string> {
   try {
@@ -38,12 +54,18 @@ function persistDismissed(ids: Set<string>) {
   }
 }
 
+void persistDismissed; // mantida para compatibilidade com a chave antiga
+
 export function ChatSafetyGuidelinesModal({ conversationId, recipientName }: ChatSafetyGuidelinesModalProps) {
   const [open, setOpen] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(true);
 
   useEffect(() => {
     if (!conversationId) {
+      setOpen(false);
+      return;
+    }
+    if (isHiddenForAll()) {
       setOpen(false);
       return;
     }
@@ -56,10 +78,10 @@ export function ChatSafetyGuidelinesModal({ conversationId, recipientName }: Cha
   }, [conversationId]);
 
   const handleClose = () => {
-    if (dontShowAgain && conversationId) {
-      const dismissed = getDismissed();
-      dismissed.add(conversationId);
-      persistDismissed(dismissed);
+    // Marcado: não aparece mais em nenhuma conversa. Desmarcado: volta a
+    // aparecer na próxima vez que abrir uma conversa (comportamento original).
+    if (dontShowAgain) {
+      try { localStorage.setItem(GLOBAL_KEY, "1"); } catch { /* noop */ }
     }
     setOpen(false);
   };
@@ -157,7 +179,7 @@ export function ChatSafetyGuidelinesModal({ conversationId, recipientName }: Cha
               onCheckedChange={(v) => setDontShowAgain(v === true)}
             />
             <span className="text-xs sm:text-sm text-muted-foreground">
-              Não exibir novamente nesta conversa
+              Não exibir novamente
             </span>
           </label>
           <Button onClick={handleClose} className="w-full" size="lg">
