@@ -6,7 +6,7 @@
  * (início + duração até 30s) com player de prévia.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, ImagePlus, Play, Pause, Globe, Star, Crown, Flame, X } from 'lucide-react';
+import { Loader2, ImagePlus, Play, Pause, Globe, Star, Crown, Flame, X, Music, Upload, Trash2, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -20,6 +20,8 @@ import { supabase } from '@/lib/supabaseExternal';
 import type { OcultoPlayItem as OPItem } from '@/hooks/useOcultoPlayContent';
 import { upsertOcultoPlayFeedItem } from '@/hooks/useOcultoPlayContent';
 import { uploadOcultoPlayFileProgress } from '@/hooks/useOcultoPlayUpload';
+import { useOcultoPlayConfig } from '@/hooks/useOcultoPlayAccess';
+import { createAudioPreviewClip } from '@/lib/audioPreviewClip';
 import { AudioTagPicker } from './AudioTagPicker';
 import { OcultoPlayLinkComposer, type OcultoPlayLinkComposerValue } from './OcultoPlayLinkComposer';
 import { useOcultoPlayAudioTags, type AudioTag } from '@/hooks/useOcultoPlayAudioTags';
@@ -52,6 +54,48 @@ const VIS_OPTIONS: { id: Visibility; label: string; Icon: typeof Globe }[] = [
   { id: 'premium', label: 'Premium',  Icon: Star },
   { id: 'vip',     label: 'VIP',      Icon: Crown },
 ];
+
+const PLAY_BUCKET_PUBLIC_MARKER = '/storage/v1/object/public/oculto-play-media/';
+
+/** Caminho no bucket a partir da URL pública (null se não for do bucket). */
+function storagePathFromPublicUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const clean = url.split('#')[0].split('?')[0];
+  const i = clean.indexOf(PLAY_BUCKET_PUBLIC_MARKER);
+  if (i < 0) return null;
+  try { return decodeURIComponent(clean.slice(i + PLAY_BUCKET_PUBLIC_MARKER.length)); } catch { return null; }
+}
+
+/** Nome amigável do arquivo de áudio salvo (sem o prefixo de timestamp do upload). */
+function audioFileLabel(url: string | null | undefined): string {
+  const path = storagePathFromPublicUrl(url) ?? (url ? url.split('#')[0].split('?')[0] : '');
+  const name = path.split('/').pop() || 'audio.mp3';
+  return name.replace(/^\d{10,}_[a-z0-9]{4,8}\./i, 'musica.');
+}
+
+function formatSeconds(sec: number): string {
+  if (!sec || !isFinite(sec)) return '—';
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function isMp3File(f: File): boolean {
+  const name = (f.name || '').toLowerCase();
+  const type = (f.type || '').toLowerCase();
+  return name.endsWith('.mp3') && (!type || type === 'audio/mpeg' || type === 'audio/mp3' || type === 'audio/mpeg3' || type === 'audio/x-mpeg-3');
+}
+
+function probeLocalAudioDuration(url: string): Promise<number> {
+  return new Promise((resolve) => {
+    const a = document.createElement('audio');
+    a.preload = 'metadata';
+    const done = (d: number) => { a.removeAttribute('src'); resolve(d); };
+    a.onloadedmetadata = () => done(isFinite(a.duration) ? a.duration : 0);
+    a.onerror = () => done(0);
+    a.src = url;
+  });
+}
 
 export function OcultoPlayEditModal({ item, open, onClose }: Props) {
   const qc = useQueryClient();
@@ -122,6 +166,41 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
   const [linkGenreInput, setLinkGenreInput] = useState('');
   const [isAdult, setIsAdult] = useState(false);
 
+  // Arquivo da música (.mp3): atual, substituição e remoção.
+  const playConfig = useOcultoPlayConfig();
+  const audioMaxMb = playConfig.data?.max_audio_size_mb ?? 35;
+  const audioMaxSec = playConfig.data?.max_audio_duration_seconds ?? 600;
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [originalAudioUrl, setOriginalAudioUrl] = useState<string | null>(null);
+  const [originalPreviewUrl, setOriginalPreviewUrl] = useState<string | null>(null);
+  const [newAudioFile, setNewAudioFile] = useState<File | null>(null);
+  const [newAudioLocalUrl, setNewAudioLocalUrl] = useState<string | null>(null);
+  const [audioRemoved, setAudioRemoved] = useState(false);
+  const [audioChecking, setAudioChecking] = useState(false);
+  const [saveStage, setSaveStage] = useState<string | null>(null);
+  const [savePct, setSavePct] = useState<number | null>(null);
+  const audioFileInputRef = useRef<HTMLInputElement | null>(null);
+  const originalAudioDurationRef = useRef(0);
+  const originalPreviewWindowRef = useRef<{ start: number; len: number }>({ start: 0, len: 30 });
+  const newAudioLocalUrlRef = useRef<string | null>(null);
+  // Enquanto há uma música nova/remoção pendente, recargas do item (ex.: as
+  // tags terminam de carregar e o efeito de preenchimento roda de novo) não
+  // podem sobrescrever a duração nem o trecho escolhidos para o arquivo novo.
+  const audioEditPendingRef = useRef(false);
+  useEffect(() => { audioEditPendingRef.current = !!newAudioFile || audioRemoved; }, [newAudioFile, audioRemoved]);
+  const setLocalAudioUrl = (url: string | null) => {
+    if (newAudioLocalUrlRef.current) {
+      try { URL.revokeObjectURL(newAudioLocalUrlRef.current); } catch { /* noop */ }
+    }
+    newAudioLocalUrlRef.current = url;
+    setNewAudioLocalUrl(url);
+  };
+  useEffect(() => () => {
+    if (newAudioLocalUrlRef.current) {
+      try { URL.revokeObjectURL(newAudioLocalUrlRef.current); } catch { /* noop */ }
+    }
+  }, []);
+
   // Preenche com dados do item + refetch fresh do banco ao abrir
   useEffect(() => {
     if (!item || !open) return;
@@ -141,11 +220,18 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
       setLyricsAutosave('idle');
     }
 
-    setAudioDuration((item as any).duration_sec ?? 0);
     const ps = Number((item as any).preview_start_seconds ?? 0) || 0;
     const pe = Number((item as any).preview_end_seconds ?? 0) || 0;
-    setPreviewStart(ps);
-    setPreviewLength(pe > ps ? Math.min(30, pe - ps) : 30);
+    originalAudioDurationRef.current = Number((item as any).duration_sec ?? 0) || 0;
+    originalPreviewWindowRef.current = { start: ps, len: pe > ps ? Math.min(30, pe - ps) : 30 };
+    setAudioUrl((item as any).audio_url ?? null);
+    setOriginalAudioUrl((item as any).audio_url ?? null);
+    setOriginalPreviewUrl((item as any).audio_preview_url ?? null);
+    if (!audioEditPendingRef.current) {
+      setAudioDuration((item as any).duration_sec ?? 0);
+      setPreviewStart(ps);
+      setPreviewLength(pe > ps ? Math.min(30, pe - ps) : 30);
+    }
     const all = tagsQuery.data ?? [];
     const initial = (item.genre_tags ?? [])
       .map((name) => all.find((t) => t.name === name || t.slug === name))
@@ -180,7 +266,7 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
       try {
         const { data, error } = await supabase
           .from('oculto_play_items')
-          .select('title, caption, composer_name, ai_tool, genre_tags, thumb_url, visibility, preview_start_seconds, preview_end_seconds, duration_sec, audio_url, lyrics, source_url, link_provider, media_url, is_adult')
+          .select('title, caption, composer_name, ai_tool, genre_tags, thumb_url, visibility, preview_start_seconds, preview_end_seconds, duration_sec, audio_url, audio_preview_url, lyrics, source_url, link_provider, media_url, is_adult')
           .eq('id', item.id)
           .maybeSingle();
         if (error) throw error;
@@ -201,11 +287,18 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
             setLyricsAutosave('idle');
           }
 
-          setAudioDuration(d.duration_sec ?? 0);
+          originalAudioDurationRef.current = Number(d.duration_sec ?? 0) || 0;
           const ps2 = Number(d.preview_start_seconds ?? 0) || 0;
           const pe2 = Number(d.preview_end_seconds ?? 0) || 0;
-          setPreviewStart(ps2);
-          setPreviewLength(pe2 > ps2 ? Math.min(30, pe2 - ps2) : 30);
+          if (!audioEditPendingRef.current) {
+            setAudioDuration(d.duration_sec ?? 0);
+            setPreviewStart(ps2);
+            setPreviewLength(pe2 > ps2 ? Math.min(30, pe2 - ps2) : 30);
+          }
+          originalPreviewWindowRef.current = { start: ps2, len: pe2 > ps2 ? Math.min(30, pe2 - ps2) : 30 };
+          setAudioUrl(d.audio_url ?? null);
+          setOriginalAudioUrl(d.audio_url ?? null);
+          setOriginalPreviewUrl(d.audio_preview_url ?? null);
           const allTags = tagsQuery.data ?? [];
           const fresh = (d.genre_tags ?? [])
             .map((name: string) => allTags.find((t) => t.name === name || t.slug === name))
@@ -239,8 +332,24 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
     })();
   }, [item, open, tagsQuery.data, aiQuery.data]);
 
-  // Prepara áudio de prévia (URL remota do item)
-  const audioSrc = useMemo(() => (item as any)?.audio_url ?? null, [item]);
+  // Ao abrir (ou trocar de item), começa sem troca/remoção de música pendente.
+  useEffect(() => {
+    if (!open) return;
+    audioEditPendingRef.current = false;
+    setNewAudioFile(null);
+    setLocalAudioUrl(null);
+    setAudioRemoved(false);
+    setSaveStage(null);
+    setSavePct(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, item?.id]);
+
+  // Prepara áudio de prévia: arquivo novo (local) tem prioridade sobre o salvo.
+  // Assim, ao trocar o MP3, o seletor de trecho passa a usar a música nova.
+  const audioSrc = useMemo(
+    () => newAudioLocalUrl ?? (audioRemoved ? null : audioUrl),
+    [newAudioLocalUrl, audioRemoved, audioUrl],
+  );
   useEffect(() => {
     if (!open || !isAudio || !audioSrc) {
       try { previewAudioRef.current?.pause(); } catch { /* noop */ }
@@ -289,6 +398,72 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
       try { a.currentTime = previewStart; } catch { /* noop */ }
       a.play().then(() => setPreviewPlaying(true)).catch(() => setPreviewPlaying(false));
     }
+  };
+
+  const stopPreview = () => {
+    try { previewAudioRef.current?.pause(); } catch { /* noop */ }
+    setPreviewPlaying(false);
+  };
+
+  const handlePickAudio = () => audioFileInputRef.current?.click();
+
+  const handleAudioFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!isMp3File(file)) {
+      toast.error('Formato não permitido. Envie um arquivo .mp3.');
+      return;
+    }
+    if (file.size > audioMaxMb * 1024 * 1024) {
+      toast.error(`Áudio acima do limite (${audioMaxMb} MB).`);
+      return;
+    }
+    setAudioChecking(true);
+    const localUrl = URL.createObjectURL(file);
+    try {
+      const dur = await probeLocalAudioDuration(localUrl);
+      if (!dur) {
+        URL.revokeObjectURL(localUrl);
+        toast.error('Não foi possível ler este MP3. Verifique se o arquivo não está corrompido.');
+        return;
+      }
+      if (dur > audioMaxSec) {
+        URL.revokeObjectURL(localUrl);
+        toast.error(`Duração acima do limite (${Math.floor(audioMaxSec / 60)} min).`);
+        return;
+      }
+      stopPreview();
+      setNewAudioFile(file);
+      setLocalAudioUrl(localUrl);
+      setAudioRemoved(false);
+      setAudioDuration(dur);
+      // Música nova → recomeça a escolha do trecho de prévia.
+      setPreviewStart(0);
+      setPreviewLength(Math.max(5, Math.min(30, Math.floor(dur))));
+      setErrors((p) => ({ ...p, audio: '' }));
+      toast.success('Música carregada — escolha o trecho da prévia e clique Salvar.');
+    } finally {
+      setAudioChecking(false);
+    }
+  };
+
+  const handleRemoveAudio = () => {
+    stopPreview();
+    setNewAudioFile(null);
+    setLocalAudioUrl(null);
+    setAudioRemoved(true);
+    setAudioDuration(0);
+  };
+
+  const handleRestoreAudio = () => {
+    stopPreview();
+    setNewAudioFile(null);
+    setLocalAudioUrl(null);
+    setAudioRemoved(false);
+    setAudioDuration(originalAudioDurationRef.current);
+    setPreviewStart(originalPreviewWindowRef.current.start);
+    setPreviewLength(originalPreviewWindowRef.current.len);
   };
 
   const handlePickCover = () => fileInputRef.current?.click();
@@ -387,6 +562,7 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
       if (composer.trim().length > 80) next.composer = 'Nome muito longo (máx. 80).';
       if (aiTool.trim().length > 40) next.aiTool = 'Texto muito longo (máx. 40).';
       if (genres.length > 8) next.genres = 'Selecione no máximo 8 estilos.';
+      if (audioRemoved && !newAudioFile) next.audio = 'Envie um novo arquivo .mp3 ou desfaça a remoção.';
     }
     if (isLink) {
       const u = (linkValue.sourceUrl || '').trim();
@@ -420,6 +596,65 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
         } else if (linkValue.coverRemoteUrl) {
           nextThumbUrl = linkValue.coverRemoteUrl;
         }
+      }
+
+      // 2) Áudio: envia o MP3 novo (se houver) e regera o clip da prévia
+      //    quando a música ou o trecho mudaram. O card toca o clip dedicado
+      //    (audio_preview_url); sem regerar, ele continuava tocando o trecho antigo.
+      let nextAudioUrl: string | null = audioUrl;
+      let nextPreviewUrl: string | null = originalPreviewUrl;
+      const audioPatch: Record<string, any> = {};
+      const replacedStoragePaths: string[] = [];
+      if (isAudio) {
+        const { data: u } = await supabase.auth.getUser();
+        const uid = u.user?.id;
+        if (newAudioFile) {
+          if (!uid) throw new Error('Sem sessão para enviar a música.');
+          setSaveStage('Enviando música…');
+          setSavePct(0);
+          const up = await uploadOcultoPlayFileProgress(
+            newAudioFile, uid, 'audio', newAudioFile.name, (pct) => setSavePct(pct),
+          );
+          nextAudioUrl = up.publicUrl;
+          audioPatch.audio_url = nextAudioUrl;
+          audioPatch.duration_sec = Math.max(1, Math.round(audioDuration));
+          const oldAudioPath = storagePathFromPublicUrl(originalAudioUrl);
+          if (oldAudioPath) replacedStoragePaths.push(oldAudioPath);
+        }
+        const orig = originalPreviewWindowRef.current;
+        const windowChanged =
+          Math.abs(previewStart - orig.start) > 0.05 || previewLength !== orig.len;
+        if (newAudioFile || windowChanged || !originalPreviewUrl) {
+          setSaveStage('Gerando prévia de 30s…');
+          setSavePct(null);
+          let clip: Blob | null = null;
+          try {
+            let source: Blob | null = newAudioFile;
+            if (!source && nextAudioUrl) {
+              const resp = await fetch(nextAudioUrl.split('#')[0], { mode: 'cors' });
+              if (resp.ok) source = await resp.blob();
+            }
+            if (source) {
+              const len = Math.max(5, Math.min(30, previewLength));
+              clip = await createAudioPreviewClip(source, previewStart, len);
+            }
+          } catch { clip = null; }
+          if (clip && uid) {
+            const upClip = await uploadOcultoPlayFileProgress(clip, uid, 'audio', `preview_${Date.now()}.wav`);
+            nextPreviewUrl = upClip.publicUrl;
+          } else {
+            // Sem clip novo: os players tocam a janela início/fim direto da
+            // música completa — melhor do que manter um trecho que não confere.
+            nextPreviewUrl = null;
+          }
+          if (nextPreviewUrl !== originalPreviewUrl) {
+            audioPatch.audio_preview_url = nextPreviewUrl;
+            const oldPreviewPath = storagePathFromPublicUrl(originalPreviewUrl);
+            if (oldPreviewPath) replacedStoragePaths.push(oldPreviewPath);
+          }
+        }
+        setSaveStage('Salvando…');
+        setSavePct(null);
       }
 
       const previewEnd = isAudio && audioDuration > 0
@@ -470,12 +705,34 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
         if (linkErr) throw linkErr;
         setOriginalSourceUrl(newUrl);
       } else {
-        // Para áudio/vídeo/meme: persistir somente o toggle +18 (genre_tags do áudio já segue via RPC)
+        // Para áudio/vídeo/meme: toggle +18 e, no áudio, arquivo/prévia novos
+        // (genre_tags do áudio já segue via RPC). O início/fim gravados são o
+        // trecho real da música; com clip dedicado os players tocam o clip do 0.
+        const patch: Record<string, any> = { is_adult: isAdult, ...audioPatch };
+        if (isAudio && previewEnd != null) {
+          patch.preview_start_seconds = Number(previewStart.toFixed(2));
+          patch.preview_end_seconds = Number(previewEnd.toFixed(2));
+        }
         const { error: adultErr } = await supabase
           .from('oculto_play_items')
-          .update({ is_adult: isAdult } as any)
+          .update(patch as any)
           .eq('id', item.id);
         if (adultErr) throw adultErr;
+        if (isAudio) {
+          setAudioUrl(nextAudioUrl);
+          setOriginalAudioUrl(nextAudioUrl);
+          setOriginalPreviewUrl(nextPreviewUrl);
+          originalAudioDurationRef.current = audioDuration;
+          originalPreviewWindowRef.current = { start: previewStart, len: previewLength };
+          setNewAudioFile(null);
+          setLocalAudioUrl(null);
+          setAudioRemoved(false);
+          // Remove do armazenamento os arquivos substituídos (melhor esforço:
+          // se a política do bucket não permitir, o item já está atualizado).
+          if (replacedStoragePaths.length > 0) {
+            void supabase.storage.from('oculto-play-media').remove(replacedStoragePaths).catch(() => null);
+          }
+        }
       }
       if (nextThumbUrl !== thumbUrl) setThumbUrl(nextThumbUrl);
       if (nextThumbUrl !== originalThumbUrl) setOriginalThumbUrl(nextThumbUrl);
@@ -484,6 +741,13 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
           ...(data as any),
           is_adult: isAdult,
           lyrics: isAudio ? (lyrics.trim() ? lyrics : null) : (data as any).lyrics,
+          ...(isAudio ? {
+            audio_url: nextAudioUrl,
+            audio_preview_url: nextPreviewUrl,
+            duration_sec: audioPatch.duration_sec ?? (data as any).duration_sec,
+            preview_start_seconds: Number(previewStart.toFixed(2)),
+            preview_end_seconds: previewEnd != null ? Number(previewEnd.toFixed(2)) : (data as any).preview_end_seconds,
+          } : {}),
           ...(isLink ? {
             source_url: (linkValue.sourceUrl || '').trim() || null,
             media_url: (linkValue.sourceUrl || '').trim() || null,
@@ -501,6 +765,8 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
       toast.error('Falha ao salvar', { description: e?.message });
     } finally {
       setSaving(false);
+      setSaveStage(null);
+      setSavePct(null);
     }
   };
 
@@ -512,6 +778,10 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
     }
     setThumbUrl(originalThumbUrl);
     try { previewAudioRef.current?.pause(); } catch { /* noop */ }
+    // Descarta troca/remoção de música não salva.
+    setNewAudioFile(null);
+    setLocalAudioUrl(null);
+    setAudioRemoved(false);
     onClose();
   };
 
@@ -753,6 +1023,90 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
             {errors.caption && <p className="text-[11px] text-rose-400 mt-1">{errors.caption}</p>}
           </div>
 
+          {/* Arquivo da música (.mp3) — logo abaixo da legenda */}
+          {isAudio && (
+            <div>
+              <Label className="text-xs">Arquivo da música (.mp3)</Label>
+              <input
+                ref={audioFileInputRef}
+                type="file"
+                accept=".mp3,audio/mpeg"
+                className="hidden"
+                onChange={handleAudioFile}
+              />
+              <div
+                className={cn(
+                  'mt-1 rounded-md border p-3 flex items-center gap-3',
+                  errors.audio ? 'border-rose-500 bg-rose-500/5' : 'border-border/50 bg-muted/20',
+                )}
+              >
+                <div className="h-9 w-9 shrink-0 rounded-md bg-fuchsia-500/15 text-fuchsia-300 flex items-center justify-center">
+                  {audioChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Music className="h-4 w-4" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  {audioRemoved && !newAudioFile ? (
+                    <>
+                      <p className="text-xs font-semibold text-rose-300">Música removida</p>
+                      <p className="text-[10px] text-muted-foreground">Envie um novo .mp3 para salvar.</p>
+                    </>
+                  ) : newAudioFile ? (
+                    <>
+                      <p className="text-xs font-semibold truncate" title={newAudioFile.name}>{newAudioFile.name}</p>
+                      <p className="text-[10px] text-emerald-300">
+                        Novo arquivo · {formatSeconds(audioDuration)} · {(newAudioFile.size / (1024 * 1024)).toFixed(1)} MB — será enviado ao salvar
+                      </p>
+                    </>
+                  ) : audioUrl ? (
+                    <>
+                      <p className="text-xs font-semibold truncate" title={audioFileLabel(audioUrl)}>{audioFileLabel(audioUrl)}</p>
+                      <p className="text-[10px] text-muted-foreground">Arquivo salvo · {formatSeconds(audioDuration)}</p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Nenhum arquivo de música salvo.</p>
+                  )}
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handlePickAudio}
+                    disabled={saving || audioChecking}
+                    className="inline-flex items-center gap-1 h-7 px-2.5 rounded-full border border-fuchsia-500/50 text-[11px] font-semibold text-fuchsia-100 hover:bg-fuchsia-500/15 disabled:opacity-50"
+                  >
+                    <Upload className="h-3 w-3" />
+                    {audioUrl || newAudioFile ? 'Trocar' : 'Enviar'}
+                  </button>
+                  {(newAudioFile || audioRemoved) ? (
+                    <button
+                      type="button"
+                      onClick={handleRestoreAudio}
+                      disabled={saving}
+                      title="Desfazer e manter a música salva"
+                      aria-label="Desfazer alteração da música"
+                      className="inline-flex items-center justify-center h-7 w-7 rounded-full border border-border/50 text-muted-foreground hover:text-white disabled:opacity-50"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                    </button>
+                  ) : audioUrl ? (
+                    <button
+                      type="button"
+                      onClick={handleRemoveAudio}
+                      disabled={saving}
+                      title="Remover música"
+                      aria-label="Remover música"
+                      className="inline-flex items-center justify-center h-7 w-7 rounded-full border border-rose-500/40 text-rose-300 hover:bg-rose-500/15 disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              {errors.audio && <p className="text-[11px] text-rose-400 mt-1">{errors.audio}</p>}
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Somente .mp3 · até {audioMaxMb} MB e {Math.floor(audioMaxSec / 60)} min. Ao trocar, escolha de novo o trecho da prévia abaixo.
+              </p>
+            </div>
+          )}
+
           {/* Visibilidade */}
           <div>
             <Label className="text-xs">Visibilidade</Label>
@@ -920,9 +1274,15 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
 
         <DialogFooter className="px-4 sm:px-6 py-3 border-t border-border/40 shrink-0 bg-card flex-row gap-2 sm:gap-2">
           <Button variant="ghost" onClick={handleCancel} disabled={saving} className="flex-1 sm:flex-none">Cancelar</Button>
-          <Button onClick={handleSave} disabled={saving || thumbUploading} className="flex-1 sm:flex-none">
+          {saving && saveStage && (
+            <span className="hidden sm:inline-flex items-center text-[11px] text-muted-foreground mr-auto tabular-nums">
+              {saveStage}{savePct != null ? ` ${Math.round(savePct)}%` : ''}
+            </span>
+          )}
+          <Button onClick={handleSave} disabled={saving || thumbUploading || audioChecking} className="flex-1 sm:flex-none">
             {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-            Salvar
+            {saving && saveStage ? <span className="sm:hidden">{savePct != null ? `${Math.round(savePct)}%` : 'Salvando…'}</span> : null}
+            <span className={saving && saveStage ? 'hidden sm:inline' : ''}>Salvar</span>
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -2778,7 +2778,11 @@ function UploadModal({
           if (genreTags.length > 0) insertPayload.genre_tags = genreTags.map((t) => t.name);
           if (lyrics.trim()) insertPayload.lyrics = lyrics.trim();
           // Preview snippet (até 30s) — tocado automaticamente ao passar pelo card
-          if (audioPreviewUrl) {
+          // Grava o trecho REAL escolhido na música (início/fim). Com clip
+          // dedicado os players tocam o clip do 0 e usam só a duração (fim −
+          // início); assim o modal de edição reabre no trecho certo e o
+          // backfill/voice-bio recortam a mesma janela.
+          if (audioPreviewUrl && audioDuration <= 0) {
             insertPayload.preview_start_seconds = 0;
             insertPayload.preview_end_seconds = Math.max(5, Math.min(30, previewLength));
           } else if (audioDuration > 0) {
