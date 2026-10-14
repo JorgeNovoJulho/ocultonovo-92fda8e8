@@ -83,8 +83,25 @@ export function useMessages(conversationId: string | null) {
 
       const identityPromise = resolveChatIdentity(user.id);
 
-      const [{ data, error }, selfIdentity] = await Promise.all([selectPromise, identityPromise]);
+      const [selectResult, selfIdentity] = await Promise.all([selectPromise, identityPromise]);
+      let data: any[] | null = selectResult.data as any[] | null;
+      let error: any = selectResult.error;
       const selfIds = selfIdentity.selfIds.length > 0 ? selfIdentity.selfIds : [user.id];
+
+      // Leitura direta bloqueada/vazia (regra de acesso da tabela): tenta a
+      // função do banco `chat_conversation_messages`, que confere a
+      // participação do usuário e respeita bloqueios.
+      if (error || (data?.length ?? 0) === 0) {
+        const rpc = await (supabase as any).rpc('chat_conversation_messages', {
+          p_conversation_id: conversationId,
+          p_offset: offset,
+          p_limit: MESSAGES_PAGE_SIZE,
+        });
+        if (!rpc.error && Array.isArray(rpc.data) && rpc.data.length > 0) {
+          data = rpc.data;
+          error = null;
+        }
+      }
 
       if (error) throw error;
 
@@ -197,6 +214,24 @@ export function useMessages(conversationId: string | null) {
       setLoadingMore(false);
     }
   }, [conversationId, user]);
+
+  // Reforço de tempo real: quando chega a notificação de nova mensagem
+  // (evento global disparado pelo sino/useGlobalChatNotifications), recarrega
+  // a conversa aberta. Cobre o caso em que o tempo real da tabela `messages`
+  // não entrega o evento por causa da regra de acesso.
+  useEffect(() => {
+    if (!conversationId || !user) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onForce = () => {
+      if (timer) return;
+      timer = setTimeout(() => { timer = null; void fetchMessages(0); }, 1200);
+    };
+    window.addEventListener('oculto:chat:force-refetch', onForce);
+    return () => {
+      window.removeEventListener('oculto:chat:force-refetch', onForce);
+      if (timer) clearTimeout(timer);
+    };
+  }, [conversationId, user, fetchMessages]);
 
 
   // Load more (older messages)

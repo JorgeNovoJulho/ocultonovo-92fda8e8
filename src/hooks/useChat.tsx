@@ -122,23 +122,18 @@ const isParticipantOnline = (c: Conversation): boolean => {
   return Date.now() - t < ONLINE_WINDOW_MS;
 };
 
-// Ordem da inbox (tiers, do topo p/ baixo):
-//  1. Super DM com alerta de prioridade (mantém topo)
-//  2. Participantes ONLINE agora — sub-ordenados pela última atividade
-//  3. Demais — pela última atividade
+// Ordem da inbox: SEMPRE pela última mensagem, da mais recente para a mais
+// antiga (ordem de chegada, como no WhatsApp). Antes, Super DM e quem
+// estava online subiam para o topo e embaralhavam a lista.
+// (Super DM continua destacado visualmente no item.)
 const sortConversations = (items: Conversation[]) => {
   return [...items].sort((a, b) => {
-    const priorityA = a.has_unread_priority ? (a.total_priority_amount || 0) : 0;
-    const priorityB = b.has_unread_priority ? (b.total_priority_amount || 0) : 0;
-    if (priorityA !== priorityB) return priorityB - priorityA;
-
-    const onlineA = isParticipantOnline(a) ? 1 : 0;
-    const onlineB = isParticipantOnline(b) ? 1 : 0;
-    if (onlineA !== onlineB) return onlineB - onlineA;
-
-    return getConvTimestamp(b) - getConvTimestamp(a);
+    const diff = getConvTimestamp(b) - getConvTimestamp(a);
+    if (diff !== 0) return diff;
+    return String(b.id).localeCompare(String(a.id));
   });
 };
+void isParticipantOnline;
 
 // Deduplica conversas pelo outro participante, mantendo a mais recente.
 const dedupeConversations = (items: Conversation[]) => {
@@ -222,10 +217,35 @@ async function fetchConversationsViaRpc(): Promise<Conversation[] | null> {
   const peerIds = Array.from(new Set(rows.map((r) => r.peer_user_id).filter(Boolean))) as string[];
   const profiles = new Map<string, any>();
   const seedPeers = new Set<string>();
-  if (peerIds.length > 0) {
+  // v2 da função já devolve @usuário/foto/status do outro participante
+  // (lidos direto de `profiles`). Só consulta a visão se vier sem esses dados.
+  const rpcHasPeer = rows.some((r) => 'peer_username' in r);
+  for (const r of rows) {
+    if (!rpcHasPeer || !r.peer_user_id) continue;
+    if (r.peer_is_seed) { seedPeers.add(r.peer_user_id); continue; }
+    if (r.peer_profile_id || r.peer_username) {
+      profiles.set(r.peer_user_id, {
+        id: r.peer_profile_id || '',
+        user_id: r.peer_user_id,
+        name: r.peer_username || 'Usuário',
+        username: r.peer_username || null,
+        avatar_url: r.peer_avatar_url || null,
+        is_online: !!r.peer_is_online,
+        last_seen: r.peer_last_seen || null,
+        show_online_status: r.peer_show_online_status !== false,
+        profile_type: r.peer_profile_type || 'single',
+        is_verified: !!r.peer_is_verified,
+        is_verified_couple: !!r.peer_is_verified_couple,
+        plan_type: r.peer_plan_type || 'free',
+        is_creator: !!r.peer_is_creator,
+      });
+    }
+  }
+  const missingPeers = peerIds.filter((id) => !profiles.has(id) && !seedPeers.has(id));
+  if (missingPeers.length > 0) {
     const [byUserId, byId] = await Promise.all([
-      (supabase as any).from('v_public_profiles').select(PEER_PROFILE_COLUMNS).in('user_id', peerIds),
-      (supabase as any).from('v_public_profiles').select(PEER_PROFILE_COLUMNS).in('id', peerIds),
+      (supabase as any).from('v_public_profiles').select(PEER_PROFILE_COLUMNS).in('user_id', missingPeers),
+      (supabase as any).from('v_public_profiles').select(PEER_PROFILE_COLUMNS).in('id', missingPeers),
     ]);
     for (const p of [...(byUserId.data || []), ...(byId.data || [])]) {
       const keys = [p.user_id, p.id].filter(Boolean);
@@ -238,6 +258,9 @@ async function fetchConversationsViaRpc(): Promise<Conversation[] | null> {
   for (const r of rows) {
     const peer: string | null = r.peer_user_id || null;
     if (peer && seedPeers.has(peer)) continue; // conversas com perfis-robô ficam ocultas (regra existente)
+    // Conversa sem nenhuma mensagem não entra na lista (só aparece quando
+    // aberta pelo perfil/notificação) — evitava linhas "Iniciar conversa".
+    if (!r.last_message_id) continue;
     const profile = (peer && profiles.get(peer)) || {
       id: '', user_id: peer || '', name: 'Usuário', avatar_url: null,
       is_online: false, last_seen: null, show_online_status: true, profile_type: 'single', is_verified: false,

@@ -11,7 +11,14 @@
 -- Esta função roda com permissão do banco (SECURITY DEFINER), mas SÓ
 -- devolve conversas em que o próprio usuário logado (auth.uid() ou um dos
 -- seus perfis) é participante. Respeita bloqueios (is_chat_blocked_pair).
+--
+-- v2: devolve também @usuário, foto e status do outro participante, lidos
+-- direto de `profiles` (antes dependia da visão v_public_profiles; quando
+-- ela não liberava a leitura, a lista mostrava "@..." sem foto).
 -- ============================================================
+
+-- A assinatura mudou (colunas novas): remove a versão anterior.
+DROP FUNCTION IF EXISTS public.chat_my_conversations();
 
 CREATE OR REPLACE FUNCTION public.chat_my_conversations()
 RETURNS TABLE (
@@ -28,7 +35,19 @@ RETURNS TABLE (
   last_message_content   text,
   last_message_is_read   boolean,
   last_message_at        timestamptz,
-  unread_count           integer
+  unread_count           integer,
+  peer_profile_id        uuid,
+  peer_username          text,
+  peer_avatar_url        text,
+  peer_is_online         boolean,
+  peer_last_seen         timestamptz,
+  peer_show_online_status boolean,
+  peer_profile_type      text,
+  peer_is_verified       boolean,
+  peer_is_verified_couple boolean,
+  peer_plan_type         text,
+  peer_is_creator        boolean,
+  peer_is_seed           boolean
 )
 LANGUAGE sql
 STABLE
@@ -85,7 +104,19 @@ AS $$
       WHERE mm.conversation_id = w.conversation_id
         AND mm.sender_id NOT IN (SELECT id FROM me)
         AND (w.last_read_at IS NULL OR mm.created_at > w.last_read_at)
-    )
+    ),
+    pp.id::uuid,
+    pp.username::text,
+    pp.avatar_url::text,
+    COALESCE(pp.is_online, false)::boolean,
+    pp.last_seen::timestamptz,
+    COALESCE(pp.show_online_status, true)::boolean,
+    COALESCE(pp.profile_type::text, 'single')::text,
+    COALESCE(pp.is_verified, false)::boolean,
+    COALESCE(pp.is_verified_couple, false)::boolean,
+    COALESCE(pp.plan_type::text, 'free')::text,
+    COALESCE(pp.is_creator, false)::boolean,
+    COALESCE(pp.is_seed, false)::boolean
   FROM with_peer w
   LEFT JOIN public.conversations c ON c.id = w.conversation_id
   LEFT JOIN LATERAL (
@@ -95,12 +126,62 @@ AS $$
     ORDER BY msg.created_at DESC
     LIMIT 1
   ) lm ON true
+  LEFT JOIN LATERAL (
+    -- O participante pode estar gravado com o auth id OU com o id do perfil.
+    SELECT p.*
+    FROM public.profiles p
+    WHERE p.user_id = w.peer_user_id OR p.id = w.peer_user_id
+    ORDER BY (p.user_id = w.peer_user_id) DESC, p.created_at ASC
+    LIMIT 1
+  ) pp ON true
   WHERE w.peer_user_id IS NULL
      OR NOT public.is_chat_blocked_pair(auth.uid(), w.peer_user_id);
 $$;
 
 REVOKE ALL ON FUNCTION public.chat_my_conversations() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.chat_my_conversations() TO authenticated;
+
+-- ------------------------------------------------------------
+-- Mensagens de UMA conversa (alternativa quando a leitura direta da tabela
+-- é bloqueada pela regra de acesso). Só para quem participa da conversa;
+-- esconde mensagens de usuários bloqueados (menos as próprias).
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.chat_conversation_messages(
+  p_conversation_id uuid,
+  p_offset integer DEFAULT 0,
+  p_limit  integer DEFAULT 50
+)
+RETURNS SETOF public.messages
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  WITH me AS (
+    SELECT auth.uid() AS id
+    UNION
+    SELECT p.id FROM public.profiles p WHERE p.user_id = auth.uid()
+  )
+  SELECT m.*
+  FROM public.messages m
+  WHERE auth.uid() IS NOT NULL
+    AND m.conversation_id = p_conversation_id
+    AND EXISTS (
+      SELECT 1 FROM public.conversation_participants cp
+      WHERE cp.conversation_id = p_conversation_id
+        AND cp.user_id IN (SELECT id FROM me)
+    )
+    AND (
+      m.sender_id IN (SELECT id FROM me)
+      OR NOT public.is_chat_blocked_pair(auth.uid(), m.sender_id)
+    )
+  ORDER BY m.created_at DESC
+  OFFSET GREATEST(0, COALESCE(p_offset, 0))
+  LIMIT LEAST(GREATEST(1, COALESCE(p_limit, 50)), 200);
+$$;
+
+REVOKE ALL ON FUNCTION public.chat_conversation_messages(uuid, integer, integer) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.chat_conversation_messages(uuid, integer, integer) TO authenticated;
 
 -- Índices que deixam a função rápida mesmo com muitas mensagens.
 CREATE INDEX IF NOT EXISTS idx_conversation_participants_user_id
