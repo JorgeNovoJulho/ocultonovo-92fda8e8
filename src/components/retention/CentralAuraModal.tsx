@@ -149,6 +149,7 @@ function CentralAuraBody({ onClose }: { onClose: () => void }) {
   return (
     <Dialog modal={false} open={true} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
+        data-aura-modal=""
         overlayClassName="!z-[40] sm:!z-[80]"
         className="
           !left-0 !top-0 !translate-x-0 !translate-y-0 !z-[50] sm:!z-[81]
@@ -157,7 +158,7 @@ function CentralAuraBody({ onClose }: { onClose: () => void }) {
           sm:!left-1/2 sm:!top-1/2 sm:!-translate-x-1/2 sm:!-translate-y-1/2
           sm:!w-[min(960px,95vw)] sm:!h-[90dvh] sm:!max-h-[90dvh] sm:!max-w-[960px] sm:rounded-2xl
           bg-black
-          shadow-[0_0_0_1px_rgba(34,211,238,0.18),0_40px_120px_-30px_rgba(34,211,238,0.45)]
+          sm:shadow-[0_0_0_1px_rgba(34,211,238,0.18),0_40px_120px_-30px_rgba(34,211,238,0.45)]
           [&>button.absolute]:hidden
         "
       >
@@ -233,8 +234,7 @@ function CentralAuraBody({ onClose }: { onClose: () => void }) {
 
             <div
               ref={scrollRef}
-              className="relative min-h-0 flex-1 touch-pan-y overflow-y-auto overflow-x-hidden overscroll-y-contain px-3 py-4 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:px-5 sm:pb-10 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]"
-              style={{ WebkitOverflowScrolling: 'touch' }}
+              className="relative min-h-0 flex-1 touch-pan-y overflow-y-auto overflow-x-hidden overscroll-y-contain px-3 py-4 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:px-5 sm:pb-10 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
             >
               {/* JORNADA + HISTÓRIA (unificadas) */}
               <TabsContent value="jornada" className="mt-0 space-y-4">

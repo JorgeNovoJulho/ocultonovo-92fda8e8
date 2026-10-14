@@ -1670,3 +1670,23 @@ html:not(.dark) [data-aura-page] [class*="text-"][class*="/90"] {
   }
 
 }
+
+/* Central Aura no celular: dezenas de cards com brilho colorido e selos
+   pulsando dentro de uma área que rola. Cada elemento animado vira uma
+   camada de GPU (e arrasta junto tudo que o sobrepõe) → faixas pixeladas
+   no Chrome Android. No celular: sem pulsos, sem brilhos (bordas/anéis
+   continuam), sem transições. */
+@media (max-width: 820px) and (pointer: coarse) {
+  [data-aura-modal] [class*="animate-"]:not(.animate-spin) {
+    animation: none !important;
+  }
+  [data-aura-modal] [class*="shadow-["],
+  [data-aura-modal] [class*="shadow-lg"],
+  [data-aura-modal] [class*="shadow-xl"],
+  [data-aura-modal] [class*="shadow-2xl"] {
+    box-shadow: none !important;
+  }
+  [data-aura-modal] .transition-all {
+    transition: none !important;
+  }
+}
