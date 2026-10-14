@@ -74,6 +74,10 @@ export const META_ACHIEVEMENT_IDS: readonly string[] = [
   'meta_all',
 ];
 
+// ATENÇÃO: o XP CREDITADO é decidido pelo servidor (tabela em
+// supabase/external_sql/2026_10_14_aura_achievements_xp_server.sql, função
+// aura_achievement_claim_v2). Os valores aqui são só para exibição — ao
+// mudar qualquer XP/tier/threshold, atualize também a tabela do SQL.
 // Overrides explícitos. Apenas conquistas RARAS pagam 10.000 XP.
 // Todas as demais respeitam o teto de 2.000 XP definido em TIER_XP_RANGE.
 export const XP_REWARD_OVERRIDES: Record<string, number> = {
