@@ -254,44 +254,90 @@ export function prefetchPreviewAudio(url: string | null | undefined, startSecond
   try { getOrCreatePreviewAudio(url, startSeconds, endSeconds); } catch { /* noop */ }
 }
 
-export function primePreviewClipBlob(url: string | null | undefined, startSeconds = 0, endSeconds?: number | null): Promise<string | null> {
+// Fila de pré-carregamento dos clips: no máximo 2 downloads ao mesmo tempo.
+// Antes, cada card que entrava na tela disparava o seu fetch em paralelo e o
+// card que o usuário tocava disputava banda com todos os outros — no celular
+// isso virava segundos de espera. Pedidos com `priority` (toque/hover/clique
+// no card) furam a fila.
+const PRIME_MAX_CONCURRENT = 2;
+let primeActive = 0;
+const primeQueue: Array<{ key: string; start: () => void }> = [];
+
+function pumpPrimeQueue() {
+  while (primeActive < PRIME_MAX_CONCURRENT && primeQueue.length > 0) {
+    const next = primeQueue.shift()!;
+    primeActive += 1;
+    next.start();
+  }
+}
+
+export function primePreviewClipBlob(
+  url: string | null | undefined,
+  startSeconds = 0,
+  endSeconds?: number | null,
+  opts?: { priority?: boolean },
+): Promise<string | null> {
   if (!url || typeof window === 'undefined') return Promise.resolve(null);
   const sourceUrl = toPreviewSourceUrl(url, startSeconds, endSeconds);
   const existingBlob = primedBlobUrls.get(sourceUrl);
   if (existingBlob) return Promise.resolve(existingBlob);
   const existingRequest = primedBlobRequests.get(sourceUrl);
-  if (existingRequest) return existingRequest;
+  if (existingRequest) {
+    if (opts?.priority) {
+      const idx = primeQueue.findIndex((q) => q.key === sourceUrl);
+      if (idx > 0) primeQueue.unshift(primeQueue.splice(idx, 1)[0]);
+    }
+    return existingRequest;
+  }
 
-  const controller = new AbortController();
-  previewPrimeControllers.set(sourceUrl.split('#')[0], controller);
-  const req = fetch(sourceUrl.split('#')[0], {
-    mode: 'cors',
-    cache: 'force-cache',
-    credentials: 'omit',
-    signal: controller.signal,
-  })
-    .then(async (res) => {
-      if (!res.ok) return null;
-      const blob = await res.blob();
-      if (!blob.size || blob.size > 6 * 1024 * 1024) return null;
-      const blobUrl = URL.createObjectURL(blob);
-      primedBlobUrls.set(sourceUrl, blobUrl);
-      primedBlobSizes.set(sourceUrl, blob.size);
-      primedBlobBytes += blob.size;
-      evictPrimedBlobs();
-      const audio = cache.get(sourceUrl);
-      if (audio && audio.paused) {
-        try { audio.src = blobUrl; audio.preload = 'auto'; audio.load(); } catch { /* noop */ }
-      }
-      return blobUrl;
-    })
-    .catch(() => null)
-    .finally(() => {
-      primedBlobRequests.delete(sourceUrl);
-      previewPrimeControllers.delete(sourceUrl.split('#')[0]);
-    });
+  const req = new Promise<string | null>((resolve) => {
+    const start = () => {
+      const controller = new AbortController();
+      previewPrimeControllers.set(sourceUrl.split('#')[0], controller);
+      fetch(sourceUrl.split('#')[0], {
+        mode: 'cors',
+        cache: 'force-cache',
+        credentials: 'omit',
+        signal: controller.signal,
+      })
+        .then(async (res) => {
+          if (!res.ok) return null;
+          const blob = await res.blob();
+          if (!blob.size || blob.size > 6 * 1024 * 1024) return null;
+          const blobUrl = URL.createObjectURL(blob);
+          primedBlobUrls.set(sourceUrl, blobUrl);
+          primedBlobSizes.set(sourceUrl, blob.size);
+          primedBlobBytes += blob.size;
+          evictPrimedBlobs();
+          const audio = cache.get(sourceUrl);
+          // Só troca a fonte de um elemento parado e ainda sem buffer útil:
+          // trocar o src de um áudio já carregando reiniciaria o download.
+          if (audio && audio.paused && audio.readyState < 3) {
+            try { audio.src = blobUrl; audio.preload = 'auto'; audio.load(); } catch { /* noop */ }
+          }
+          return blobUrl;
+        })
+        .catch(() => null)
+        .then((result) => {
+          primedBlobRequests.delete(sourceUrl);
+          previewPrimeControllers.delete(sourceUrl.split('#')[0]);
+          primeActive = Math.max(0, primeActive - 1);
+          resolve(result);
+          pumpPrimeQueue();
+        });
+    };
+    if (opts?.priority) primeQueue.unshift({ key: sourceUrl, start });
+    else primeQueue.push({ key: sourceUrl, start });
+    pumpPrimeQueue();
+  });
   primedBlobRequests.set(sourceUrl, req);
   return req;
+}
+
+/** Já existe o clip completo na memória (toca sem rede)? */
+export function hasPrimedPreviewClip(url: string | null | undefined, startSeconds = 0, endSeconds?: number | null): boolean {
+  if (!url) return false;
+  return primedBlobUrls.has(toPreviewSourceUrl(url, startSeconds, endSeconds));
 }
 
 /**

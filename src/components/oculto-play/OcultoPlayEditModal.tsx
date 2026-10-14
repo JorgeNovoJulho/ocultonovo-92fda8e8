@@ -66,11 +66,16 @@ function storagePathFromPublicUrl(url: string | null | undefined): string | null
   try { return decodeURIComponent(clean.slice(i + PLAY_BUCKET_PUBLIC_MARKER.length)); } catch { return null; }
 }
 
-/** Nome amigável do arquivo de áudio salvo (sem o prefixo de timestamp do upload). */
-function audioFileLabel(url: string | null | undefined): string {
+/**
+ * Nome exibido para o arquivo salvo. O bucket guarda o MP3 com nome aleatório
+ * (timestamp), então usamos o título salvo da música + extensão real.
+ */
+function audioFileLabel(url: string | null | undefined, songTitle: string | null | undefined): string {
   const path = storagePathFromPublicUrl(url) ?? (url ? url.split('#')[0].split('?')[0] : '');
-  const name = path.split('/').pop() || 'audio.mp3';
-  return name.replace(/^\d{10,}_[a-z0-9]{4,8}\./i, 'musica.');
+  const ext = (path.split('.').pop() || 'mp3').toLowerCase().slice(0, 4);
+  const t = (songTitle || '').trim().replace(/[\\/:*?"<>|]+/g, '-');
+  if (t) return `${t}.${ext}`;
+  return path.split('/').pop() || `musica.${ext}`;
 }
 
 function formatSeconds(sec: number): string {
@@ -178,6 +183,13 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
   const [audioRemoved, setAudioRemoved] = useState(false);
   const [audioChecking, setAudioChecking] = useState(false);
   const [saveStage, setSaveStage] = useState<string | null>(null);
+  const [savedTitle, setSavedTitle] = useState<string>('');
+  const [audioInfoLoading, setAudioInfoLoading] = useState(false);
+  // Player do arquivo completo (botão de play do campo da música).
+  const fullAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [fullPlaying, setFullPlaying] = useState(false);
+  const [fullLoading, setFullLoading] = useState(false);
+  const [fullTime, setFullTime] = useState(0);
   const [savePct, setSavePct] = useState<number | null>(null);
   const audioFileInputRef = useRef<HTMLInputElement | null>(null);
   const originalAudioDurationRef = useRef(0);
@@ -227,6 +239,7 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
     setAudioUrl((item as any).audio_url ?? null);
     setOriginalAudioUrl((item as any).audio_url ?? null);
     setOriginalPreviewUrl((item as any).audio_preview_url ?? null);
+    setSavedTitle(item.title ?? '');
     if (!audioEditPendingRef.current) {
       setAudioDuration((item as any).duration_sec ?? 0);
       setPreviewStart(ps);
@@ -263,6 +276,7 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
     // Busca o estado mais recente direto do banco
     (async () => {
       setLoadingFresh(true);
+      setAudioInfoLoading(true);
       try {
         const { data, error } = await supabase
           .from('oculto_play_items')
@@ -291,7 +305,9 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
           const ps2 = Number(d.preview_start_seconds ?? 0) || 0;
           const pe2 = Number(d.preview_end_seconds ?? 0) || 0;
           if (!audioEditPendingRef.current) {
-            setAudioDuration(d.duration_sec ?? 0);
+            // Só sobrescreve a duração se o banco tiver um valor: itens antigos
+            // têm duration_sec nulo e a duração real vem do metadata do arquivo.
+            if (Number(d.duration_sec) > 0) setAudioDuration(Number(d.duration_sec));
             setPreviewStart(ps2);
             setPreviewLength(pe2 > ps2 ? Math.min(30, pe2 - ps2) : 30);
           }
@@ -299,6 +315,7 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
           setAudioUrl(d.audio_url ?? null);
           setOriginalAudioUrl(d.audio_url ?? null);
           setOriginalPreviewUrl(d.audio_preview_url ?? null);
+          setSavedTitle(d.title ?? '');
           const allTags = tagsQuery.data ?? [];
           const fresh = (d.genre_tags ?? [])
             .map((name: string) => allTags.find((t) => t.name === name || t.slug === name))
@@ -328,6 +345,7 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
         /* mantém valores do item */
       } finally {
         setLoadingFresh(false);
+        setAudioInfoLoading(false);
       }
     })();
   }, [item, open, tagsQuery.data, aiQuery.data]);
@@ -395,6 +413,7 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
       try { a.pause(); } catch { /* noop */ }
       setPreviewPlaying(false);
     } else {
+      try { fullAudioRef.current?.pause(); } catch { /* noop */ }
       try { a.currentTime = previewStart; } catch { /* noop */ }
       a.play().then(() => setPreviewPlaying(true)).catch(() => setPreviewPlaying(false));
     }
@@ -403,6 +422,63 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
   const stopPreview = () => {
     try { previewAudioRef.current?.pause(); } catch { /* noop */ }
     setPreviewPlaying(false);
+  };
+
+  // Fonte do player completo: arquivo novo escolhido ou o último salvo no banco.
+  const fullAudioSrc = newAudioLocalUrl ?? (audioRemoved ? null : audioUrl);
+  const stopFullAudio = () => {
+    const a = fullAudioRef.current;
+    if (a) { try { a.pause(); } catch { /* noop */ } }
+    setFullPlaying(false);
+    setFullLoading(false);
+  };
+  useEffect(() => {
+    // Troca de arquivo (ou fechar o modal) encerra o player completo.
+    stopFullAudio();
+    setFullTime(0);
+    const a = fullAudioRef.current;
+    if (a) { try { a.removeAttribute('src'); a.load(); } catch { /* noop */ } }
+    fullAudioRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullAudioSrc, open]);
+
+  // Duração real do arquivo salvo (itens antigos não têm duration_sec no banco).
+  useEffect(() => {
+    if (!open || !isAudio || !fullAudioSrc || newAudioLocalUrl) return;
+    if (audioDuration > 0) return;
+    let alive = true;
+    void probeLocalAudioDuration(fullAudioSrc.split('#')[0]).then((d) => {
+      if (alive && d > 0 && !audioEditPendingRef.current) setAudioDuration(d);
+    });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isAudio, fullAudioSrc]);
+
+  const toggleFullAudio = () => {
+    if (!fullAudioSrc) return;
+    if (fullPlaying) { stopFullAudio(); return; }
+    stopPreview();
+    let a = fullAudioRef.current;
+    if (!a) {
+      a = new Audio();
+      a.preload = 'auto';
+      a.src = fullAudioSrc.split('#')[0];
+      a.addEventListener('timeupdate', () => setFullTime(a!.currentTime || 0));
+      a.addEventListener('playing', () => { setFullLoading(false); setFullPlaying(true); });
+      a.addEventListener('waiting', () => setFullLoading(true));
+      a.addEventListener('pause', () => setFullPlaying(false));
+      a.addEventListener('ended', () => { setFullPlaying(false); setFullTime(0); });
+      a.addEventListener('loadedmetadata', () => {
+        if (isFinite(a!.duration) && a!.duration > 0 && !newAudioLocalUrlRef.current && !(audioDuration > 0)) {
+          setAudioDuration(a!.duration);
+        }
+      });
+      fullAudioRef.current = a;
+    }
+    setFullLoading(true);
+    // play() síncrono no clique (exigência do iOS).
+    a.play().then(() => { setFullPlaying(true); setFullLoading(false); })
+      .catch(() => { setFullPlaying(false); setFullLoading(false); toast.error('Não foi possível tocar o arquivo.'); });
   };
 
   const handlePickAudio = () => audioFileInputRef.current?.click();
@@ -434,6 +510,7 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
         return;
       }
       stopPreview();
+      stopFullAudio();
       setNewAudioFile(file);
       setLocalAudioUrl(localUrl);
       setAudioRemoved(false);
@@ -450,6 +527,7 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
 
   const handleRemoveAudio = () => {
     stopPreview();
+    stopFullAudio();
     setNewAudioFile(null);
     setLocalAudioUrl(null);
     setAudioRemoved(true);
@@ -458,6 +536,7 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
 
   const handleRestoreAudio = () => {
     stopPreview();
+    stopFullAudio();
     setNewAudioFile(null);
     setLocalAudioUrl(null);
     setAudioRemoved(false);
@@ -778,6 +857,7 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
     }
     setThumbUrl(originalThumbUrl);
     try { previewAudioRef.current?.pause(); } catch { /* noop */ }
+    stopFullAudio();
     // Descarta troca/remoção de música não salva.
     setNewAudioFile(null);
     setLocalAudioUrl(null);
@@ -1040,9 +1120,24 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
                   errors.audio ? 'border-rose-500 bg-rose-500/5' : 'border-border/50 bg-muted/20',
                 )}
               >
-                <div className="h-9 w-9 shrink-0 rounded-md bg-fuchsia-500/15 text-fuchsia-300 flex items-center justify-center">
-                  {audioChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Music className="h-4 w-4" />}
-                </div>
+                <button
+                  type="button"
+                  onClick={toggleFullAudio}
+                  disabled={!fullAudioSrc || audioChecking || saving}
+                  title={fullPlaying ? 'Pausar música' : 'Ouvir música salva'}
+                  aria-label={fullPlaying ? 'Pausar música' : 'Ouvir música'}
+                  className="h-9 w-9 shrink-0 rounded-full bg-fuchsia-500/90 hover:bg-fuchsia-500 disabled:bg-fuchsia-500/15 disabled:text-fuchsia-300 text-white flex items-center justify-center"
+                >
+                  {audioChecking || fullLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : !fullAudioSrc ? (
+                    <Music className="h-4 w-4" />
+                  ) : fullPlaying ? (
+                    <Pause className="h-4 w-4" />
+                  ) : (
+                    <Play className="h-4 w-4" fill="currentColor" />
+                  )}
+                </button>
                 <div className="min-w-0 flex-1">
                   {audioRemoved && !newAudioFile ? (
                     <>
@@ -1052,14 +1147,23 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
                   ) : newAudioFile ? (
                     <>
                       <p className="text-xs font-semibold truncate" title={newAudioFile.name}>{newAudioFile.name}</p>
-                      <p className="text-[10px] text-emerald-300">
-                        Novo arquivo · {formatSeconds(audioDuration)} · {(newAudioFile.size / (1024 * 1024)).toFixed(1)} MB — será enviado ao salvar
+                      <p className="text-[10px] text-emerald-300 tabular-nums">
+                        Novo arquivo · {fullPlaying || fullTime > 0 ? `${formatSeconds(fullTime)} / ` : ''}{formatSeconds(audioDuration)} · {(newAudioFile.size / (1024 * 1024)).toFixed(1)} MB — será enviado ao salvar
                       </p>
                     </>
+                  ) : audioInfoLoading && !audioUrl ? (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Carregando arquivo salvo…
+                    </p>
                   ) : audioUrl ? (
                     <>
-                      <p className="text-xs font-semibold truncate" title={audioFileLabel(audioUrl)}>{audioFileLabel(audioUrl)}</p>
-                      <p className="text-[10px] text-muted-foreground">Arquivo salvo · {formatSeconds(audioDuration)}</p>
+                      <p className="text-xs font-semibold truncate" title={audioFileLabel(audioUrl, savedTitle)}>
+                        {audioFileLabel(audioUrl, savedTitle)}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground tabular-nums">
+                        Arquivo salvo · {fullPlaying || fullTime > 0 ? `${formatSeconds(fullTime)} / ` : ''}{formatSeconds(audioDuration)}
+                        {audioInfoLoading && <Loader2 className="inline h-2.5 w-2.5 ml-1 animate-spin align-[-1px]" />}
+                      </p>
                     </>
                   ) : (
                     <p className="text-xs text-muted-foreground">Nenhum arquivo de música salvo.</p>

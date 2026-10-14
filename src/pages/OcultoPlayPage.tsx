@@ -246,6 +246,7 @@ export default function OcultoPlayPage() {
   const pageActions = useOcultoPlayActions();
   const qcPage = useQueryClient();
   const previewBackfillRunningRef = useRef(false);
+  const backfillFailedIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => { focusItemRef.current = focusItem; }, [focusItem]);
 
@@ -273,7 +274,28 @@ export default function OcultoPlayPage() {
       previewBackfillRunningRef.current = true;
       try {
         const { data } = await (supabase as any).rpc('oculto_play_audio_preview_backfill_list', { p_limit: Math.max(1, Math.min(3, limit)) });
-        const jobs = Array.isArray(data) ? data : [];
+        let jobs: any[] = Array.isArray(data) ? data : [];
+        // A fila de jobs só foi preenchida uma vez (no SQL de 15/06). Músicas
+        // publicadas depois sem clip não entram nela — busca direto na tabela.
+        if (jobs.length === 0) {
+          const { data: missing } = await supabase
+            .from('oculto_play_items')
+            .select('id, audio_url, preview_start_seconds, preview_end_seconds')
+            .eq('kind', 'audio')
+            .not('audio_url', 'is', null)
+            .is('audio_preview_url', null)
+            .order('created_at', { ascending: false })
+            .limit(10);
+          jobs = ((missing ?? []) as any[])
+            .filter((r) => !backfillFailedIdsRef.current.has(r.id))
+            .slice(0, Math.max(1, Math.min(3, limit)))
+            .map((r) => {
+              const st = Math.max(0, Number(r.preview_start_seconds ?? 0) || 0);
+              const en = Number(r.preview_end_seconds ?? 0) || 0;
+              return { item_id: r.id, audio_url: r.audio_url, start_seconds: st, end_seconds: en > st ? Math.min(en, st + 30) : st + 30 };
+            });
+        }
+        jobs = jobs.filter((j) => !backfillFailedIdsRef.current.has(j.item_id));
         for (const job of jobs) {
           if (cancelled) break;
           try {
@@ -295,7 +317,14 @@ export default function OcultoPlayPage() {
               p_audio_preview_url: up.publicUrl,
               p_error_message: null,
             });
+            // O RPC zera a janela para 0–30s; devolve o trecho real escolhido
+            // (o editor reabre no ponto certo). Melhor esforço.
+            await supabase
+              .from('oculto_play_items')
+              .update({ preview_start_seconds: Number(start.toFixed(2)), preview_end_seconds: Number(Math.min(end, start + 30).toFixed(2)) } as any)
+              .eq('id', job.item_id);
           } catch (err: any) {
+            backfillFailedIdsRef.current.add(job.item_id);
             await (supabase as any).rpc('oculto_play_audio_preview_backfill_done', {
               p_item_id: job.item_id,
               p_audio_preview_url: null,
@@ -313,11 +342,28 @@ export default function OcultoPlayPage() {
       runOnce(ce?.detail?.limit ?? 1);
     };
     window.addEventListener('oculto-play:preview-backfill-run', handler as EventListener);
+
+    // Geração automática e gentil dos clips que faltam (só na conta master,
+    // só no computador): 1 música por vez, começando 20s depois de abrir o
+    // Play e repetindo a cada 60s, apenas com a aba visível e nada tocando.
+    // Sem o clip curto, o botão de prévia do card precisa baixar o MP3
+    // inteiro — é o caso lento que o usuário percebe.
+    let autoRuns = 0;
+    const autoTick = () => {
+      if (cancelled || isMobile || autoRuns >= 30) return;
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      autoRuns += 1;
+      void runOnce(1);
+    };
+    const firstTimer = window.setTimeout(autoTick, 20_000);
+    const interval = window.setInterval(autoTick, 60_000);
     return () => {
       cancelled = true;
+      window.clearTimeout(firstTimer);
+      window.clearInterval(interval);
       window.removeEventListener('oculto-play:preview-backfill-run', handler as EventListener);
     };
-  }, [canAccess, isMaster, user?.id, qcPage]);
+  }, [canAccess, isMaster, user?.id, qcPage, isMobile]);
 
   // Listener global: cards de qualquer strip chamam openPlayItemDeepLink()
   // e nós interceptamos para abrir o focus modal rico, com vídeo/áudio reais.
@@ -1412,7 +1458,7 @@ function AudioPreviewCard({ item, onView, nextAudioUrl }: { item: OcultoPlayItem
 
   const ensurePlayableAudio = useCallback((): HTMLAudioElement | null => {
     if (!previewSrc) return null;
-    if (usingDedicatedPreviewClip) void primePreviewClipBlob(previewSrc, 0, null);
+    if (usingDedicatedPreviewClip) void primePreviewClipBlob(previewSrc, 0, null, { priority: true });
     const a = preparePreviewAudioForPlayback(previewSrc, startRef.current, endRef.current);
     const seekPreviewStart = () => {
       try {
@@ -1653,9 +1699,19 @@ function AudioPreviewCard({ item, onView, nextAudioUrl }: { item: OcultoPlayItem
     <div
       ref={ref}
       className="absolute inset-0"
+      onTouchStart={() => {
+        // Celular: o primeiro toque no card (antes de chegar no play) já
+        // coloca o clip desta música na frente da fila de download.
+        if (usingDedicatedPreviewClip && previewSrc) {
+          try { void primePreviewClipBlob(previewSrc, 0, null, { priority: true }); } catch { /* noop */ }
+        }
+      }}
       onPointerEnter={() => {
         // Desktop: hover sobre o card já dispara o warm-up — quando o
         // usuário chegar ao botão play, o áudio normalmente já está pronto.
+        if (usingDedicatedPreviewClip && previewSrc) {
+          try { void primePreviewClipBlob(previewSrc, 0, null, { priority: true }); } catch { /* noop */ }
+        }
         try {
           const a = ensureAudio();
           if (a) {
