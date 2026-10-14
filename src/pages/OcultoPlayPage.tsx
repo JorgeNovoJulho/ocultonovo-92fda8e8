@@ -265,7 +265,7 @@ export default function OcultoPlayPage() {
     const list = myChannels ?? [];
     const own = list.find((c) => !c.is_official) ?? list[0];
     if (own) navigate(`/play/c/${own.slug}`);
-    else { setCreateChannelKind('video'); setCreateChannelOpen(true); }
+    else navigate('/meus-canais');
   };
   const isMobile = useIsMobile();
   const pageActions = useOcultoPlayActions();

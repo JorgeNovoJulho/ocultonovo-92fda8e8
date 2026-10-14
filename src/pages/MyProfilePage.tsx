@@ -91,6 +91,7 @@ import {
   Play,
   Lock,
   EyeOff,
+  Clapperboard,
 } from "lucide-react";
 import { Link, useLocation as useRouterLocation } from "react-router-dom";
 import { getGenderLabel, formatCidadeUF } from "@/lib/profileFormat";
@@ -352,6 +353,11 @@ export default function MyProfilePage() {
                       className="bg-gradient-to-r from-fuchsia-500 via-pink-500 to-rose-500 text-white shadow-md shadow-fuchsia-500/25 hover:opacity-95 hover:shadow-fuchsia-500/35 border-0 font-semibold"
                     >
                       <Edit className="h-4 w-4 mr-2" />Editar Perfil
+                    </Button>
+                  </Link>
+                  <Link to="/meus-canais">
+                    <Button className="gap-2 bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-500 text-white shadow-md shadow-fuchsia-500/25 hover:opacity-95 border-0 font-semibold">
+                      <Clapperboard className="h-4 w-4" />Criar canais
                     </Button>
                   </Link>
                   <ViewChannelButton userOrProfileId={profile.user_id || profile.id} className="gap-2" />

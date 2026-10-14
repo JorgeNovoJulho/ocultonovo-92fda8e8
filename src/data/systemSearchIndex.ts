@@ -86,6 +86,8 @@ export const SYSTEM_SEARCH_INDEX: SystemSearchEntry[] = [
     keywords: ['marketplace','loja','produtos','itens','comprar','vender','venda','anuncios'] },
   { id: 'vitrine-vip', title: 'Vitrine VIP', section: 'Descobrir', icon: 'Crown', route: '/vitrine-vip',
     keywords: ['vitrine vip','criadores vip','top criadores','destaques','vitrine'] },
+  { id: 'meus-canais', title: 'Meus Canais', section: 'Descobrir', icon: 'Clapperboard', route: '/meus-canais',
+    keywords: ['meus canais','criar canal','canal de video','canal de vídeo','canal de audio','canal de áudio','meu canal','oculto play','youtube','spotify'] },
   { id: 'canal-vip', title: 'Canal VIP', section: 'Descobrir', icon: 'Crown', route: '/canal-vip',
     keywords: ['canal vip','meu canal','conteudo exclusivo','conteúdo exclusivo','canal'] },
   { id: 'novidades', title: 'Novidades', section: 'Descobrir', icon: 'Sparkles', route: '/novidades',

@@ -69,6 +69,10 @@ export default function CanalVipPage() {
               Para criar seu canal pago, configurar planos mensais/anuais, capa, trailer
               e vender conteúdo exclusivo, você precisa do plano <strong>VIP</strong>.
             </p>
+            <p className="text-xs text-muted-foreground">
+              Seus canais gratuitos de <strong>vídeo</strong> e <strong>áudio</strong> ficam em{' '}
+              <Link to="/meus-canais" className="font-semibold text-primary underline-offset-2 hover:underline">Meus Canais</Link>.
+            </p>
             <Button
               asChild
               className="bg-gradient-to-r from-[hsl(45,93%,47%)] to-[hsl(35,80%,40%)] text-[hsl(45,93%,10%)] font-semibold"
@@ -103,6 +107,9 @@ function CanalVipPageInner({
 
   return (
     <div className="container max-w-4xl mx-auto p-4 py-6 space-y-4">
+      <Link to="/meus-canais" className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground">
+        ← Meus Canais (vídeo, áudio e VIP)
+      </Link>
       <div className="flex items-center gap-2">
         <Crown className="h-6 w-6 text-[hsl(45,93%,47%)]" />
         <h1 className="text-2xl font-bold">Meu Canal VIP</h1>

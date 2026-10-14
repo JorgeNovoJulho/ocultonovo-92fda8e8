@@ -1090,6 +1090,7 @@ export default function CreatorProfilePage() {
               <div className="mt-6">
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" onClick={() => navigate('/settings')}>Editar Perfil</Button>
+                  <Button className="gap-2" onClick={() => navigate('/meus-canais')}>Criar canais</Button>
                   <ViewChannelButton userOrProfileId={creator.user_id || creator.id} className="gap-2" />
                 </div>
               </div>

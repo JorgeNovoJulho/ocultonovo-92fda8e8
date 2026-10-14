@@ -81,6 +81,7 @@ import {
   ShieldCheck,
   Trash2,
   GraduationCap,
+  Clapperboard,
 } from "lucide-react";
 import { ActivityTicker } from "@/components/activity";
 import { getPublicHandle, getHandleInitial } from "@/lib/userHandle";
@@ -320,13 +321,12 @@ export function MobileMenuDrawer() {
                   <span className="flex-1">Meu Perfil</span>
                 </Link>
 
-                {/* ── 5. MEU CANAL VIP (exclusivo VIP) ── */}
-                {profile?.plan_type === 'vip' && (
-                  <Link to="/canal-vip" onClick={() => setOpen(false)} className={navLinkClass('/canal-vip')}>
-                    <Crown className={cn("h-5 w-5 shrink-0", isActive('/canal-vip') ? "text-primary" : "text-[hsl(45,93%,47%)]")} />
-                    <span className="flex-1 text-left">Meu Canal VIP</span>
-                  </Link>
-                )}
+                {/* ── 5. MEUS CANAIS (vídeo, áudio e Canal VIP) — para todos ── */}
+                <Link to="/meus-canais" onClick={() => setOpen(false)} className={navLinkClass('/meus-canais')}>
+                  <Clapperboard className={cn("h-5 w-5 shrink-0", isActive('/meus-canais') || isActive('/canal-vip') ? "text-primary" : "text-fuchsia-400")} />
+                  <span className="flex-1 text-left">Meus Canais</span>
+                  {profile?.plan_type === 'vip' && <Crown className="h-4 w-4 shrink-0 text-[hsl(45,93%,47%)]" aria-label="Canal VIP" />}
+                </Link>
 
                 {/* ── OCULTO PLAY (acima de Comunidades) ── */}
                 <OcultoPlayMenuEntry variant="mobile" onClick={() => setOpen(false)} />

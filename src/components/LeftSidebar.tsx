@@ -75,6 +75,7 @@ import {
   NotebookPen,
   Trophy,
   GraduationCap,
+  Clapperboard,
 } from "lucide-react";
 const NotepadModal = lazy(() => import("./notepad/NotepadModal").then(m => ({ default: m.NotepadModal })));
 import { CreateCheckinDialog } from "@/components/safety/CreateCheckinDialog";
@@ -216,6 +217,7 @@ export function LeftSidebar() {
     '/profile': 'menu_profile',
     '/radar': 'menu_radar',
     '/canal-vip': 'menu_canal_vip',
+    '/meus-canais': 'menu_meus_canais',
     '/aura-match': 'menu_aura_match',
     '/perfect-pair': 'menu_perfect_pair',
     '/matches': 'menu_matches',
@@ -374,13 +376,12 @@ export function LeftSidebar() {
               <span className="flex-1">Meu Perfil</span>
             </Link>
 
-            {/* ── 5. MEU CANAL VIP (exclusivo VIP) ── */}
-            {profile?.plan_type === 'vip' && (
-              <Link to="/canal-vip" onClick={e => handleLinkClick(e, '/canal-vip')} className={navLinkClass('/canal-vip')}>
-                <Crown className={cn("h-5 w-5 shrink-0", isActive('/canal-vip') ? "text-primary" : "text-[hsl(45,93%,47%)]")} />
-                <span className="flex-1 text-left">Meu Canal VIP</span>
-              </Link>
-            )}
+            {/* ── 5. MEUS CANAIS (vídeo, áudio e Canal VIP) — para todos ── */}
+            <Link to="/meus-canais" onClick={e => handleLinkClick(e, '/meus-canais')} className={navLinkClass('/meus-canais')}>
+              <Clapperboard className={cn("h-5 w-5 shrink-0", isActive('/meus-canais') || isActive('/canal-vip') ? "text-primary" : "text-fuchsia-400")} />
+              <span className="flex-1 text-left">Meus Canais</span>
+              {profile?.plan_type === 'vip' && <Crown className="h-4 w-4 shrink-0 text-[hsl(45,93%,47%)]" aria-label="Canal VIP" />}
+            </Link>
 
             {/* ── OCULTO PLAY (acima de Comunidades) ── */}
             <OcultoPlayMenuEntry
