@@ -22,6 +22,7 @@ import { upsertOcultoPlayFeedItem } from '@/hooks/useOcultoPlayContent';
 import { uploadOcultoPlayFileProgress } from '@/hooks/useOcultoPlayUpload';
 import { useOcultoPlayConfig } from '@/hooks/useOcultoPlayAccess';
 import { createAudioPreviewClip } from '@/lib/audioPreviewClip';
+import { regenerateServerPreviewClip } from '@/lib/ocultoPlayServerPreview';
 import { AudioTagPicker } from './AudioTagPicker';
 import { OcultoPlayLinkComposer, type OcultoPlayLinkComposerValue } from './OcultoPlayLinkComposer';
 import { useOcultoPlayAudioTags, type AudioTag } from '@/hooks/useOcultoPlayAudioTags';
@@ -683,6 +684,7 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
       let nextAudioUrl: string | null = audioUrl;
       let nextPreviewUrl: string | null = originalPreviewUrl;
       const audioPatch: Record<string, any> = {};
+      let previewNeedsServerClip = false;
       const replacedStoragePaths: string[] = [];
       if (isAudio) {
         const { data: u } = await supabase.auth.getUser();
@@ -704,6 +706,7 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
         const windowChanged =
           Math.abs(previewStart - orig.start) > 0.05 || previewLength !== orig.len;
         if (newAudioFile || windowChanged || !originalPreviewUrl) {
+          previewNeedsServerClip = true;
           setSaveStage('Gerando prévia de 30s…');
           setSavePct(null);
           let clip: Blob | null = null;
@@ -837,6 +840,9 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
         };
         upsertOcultoPlayFeedItem(qc, merged as any);
       }
+      // Troca o clip do navegador (WAV) pelo recorte do servidor (MP3 menor,
+      // toca mais rápido para todos). Não bloqueia o fechamento do modal.
+      if (isAudio && previewNeedsServerClip) void regenerateServerPreviewClip(qc, item.id);
       await qc.invalidateQueries({ queryKey: ['oculto-play'], refetchType: 'active' });
       toast.success('Conteúdo atualizado.');
       onClose();

@@ -79,6 +79,7 @@ import {
 import { SharePlayItemModal } from '@/components/oculto-play/SharePlayItemModal';
 import { ocultoPlayShareUrlWithBust } from '@/lib/ocultoPlayShareUrl';
 import { preparePreviewAudioForPlayback, primePreviewClipBlob, warmPreviewAudioWindow } from '@/lib/ocultoPlayPreviewCache';
+import { requestServerPreviewClip, regenerateServerPreviewClip } from '@/lib/ocultoPlayServerPreview';
 import { prefetchThumb } from '@/lib/ocultoPlayMediaCache';
 
 const PLAY_CAPTION_MAX_CHARS = 15_000;
@@ -343,27 +344,11 @@ export default function OcultoPlayPage() {
     };
     window.addEventListener('oculto-play:preview-backfill-run', handler as EventListener);
 
-    // Geração automática e gentil dos clips que faltam (só na conta master,
-    // só no computador): 1 música por vez, começando 20s depois de abrir o
-    // Play e repetindo a cada 60s, apenas com a aba visível e nada tocando.
-    // Sem o clip curto, o botão de prévia do card precisa baixar o MP3
-    // inteiro — é o caso lento que o usuário percebe.
-    let autoRuns = 0;
-    const autoTick = () => {
-      if (cancelled || isMobile || autoRuns >= 30) return;
-      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-      autoRuns += 1;
-      void runOnce(1);
-    };
-    const firstTimer = window.setTimeout(autoTick, 20_000);
-    const interval = window.setInterval(autoTick, 60_000);
     return () => {
       cancelled = true;
-      window.clearTimeout(firstTimer);
-      window.clearInterval(interval);
       window.removeEventListener('oculto-play:preview-backfill-run', handler as EventListener);
     };
-  }, [canAccess, isMaster, user?.id, qcPage, isMobile]);
+  }, [canAccess, isMaster, user?.id, qcPage]);
 
   // Listener global: cards de qualquer strip chamam openPlayItemDeepLink()
   // e nós interceptamos para abrir o focus modal rico, com vídeo/áudio reais.
@@ -1394,6 +1379,7 @@ function VideoThumb({ src, alt }: { src: string; alt: string }) {
 
 function AudioPreviewCard({ item, onView, nextAudioUrl }: { item: OcultoPlayItem; onView?: () => void; nextAudioUrl?: string | null }) {
   const ref = useRef<HTMLDivElement | null>(null);
+  const qcCard = useQueryClient();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const suppressNextClickRef = useRef(false);
   const [playing, setPlaying] = useState(false);
@@ -1495,6 +1481,11 @@ function AudioPreviewCard({ item, onView, nextAudioUrl }: { item: OcultoPlayItem
       const e = entries[0];
       if (!e) return;
       if (e.isIntersecting) {
+        // Música sem clip curto: pede ao servidor para gerar (vale para todos
+        // os usuários a partir daí). Enquanto isso, o play usa o MP3 completo.
+        if (!usingDedicatedPreviewClip && item.audio_url) {
+          void requestServerPreviewClip(qcCard, item.id);
+        }
         if (usingDedicatedPreviewClip) {
           const run = () => { try { void primePreviewClipBlob(previewSrc, 0, null); ensureAudio(); } catch { /* noop */ } };
           if (typeof (window as any).requestIdleCallback === 'function') (window as any).requestIdleCallback(run, { timeout: 500 });
@@ -1528,7 +1519,7 @@ function AudioPreviewCard({ item, onView, nextAudioUrl }: { item: OcultoPlayItem
       releasePreviewSlot(a);
       audioRef.current = null;
     };
-  }, [previewSrc, item.id, usingDedicatedPreviewClip, ensureAudio]);
+  }, [previewSrc, item.id, item.audio_url, usingDedicatedPreviewClip, ensureAudio, qcCard]);
 
 
 
@@ -1704,6 +1695,8 @@ function AudioPreviewCard({ item, onView, nextAudioUrl }: { item: OcultoPlayItem
         // coloca o clip desta música na frente da fila de download.
         if (usingDedicatedPreviewClip && previewSrc) {
           try { void primePreviewClipBlob(previewSrc, 0, null, { priority: true }); } catch { /* noop */ }
+        } else if (item.audio_url) {
+          void requestServerPreviewClip(qcCard, item.id, { priority: true });
         }
       }}
       onPointerEnter={() => {
@@ -1711,6 +1704,8 @@ function AudioPreviewCard({ item, onView, nextAudioUrl }: { item: OcultoPlayItem
         // usuário chegar ao botão play, o áudio normalmente já está pronto.
         if (usingDedicatedPreviewClip && previewSrc) {
           try { void primePreviewClipBlob(previewSrc, 0, null, { priority: true }); } catch { /* noop */ }
+        } else if (item.audio_url) {
+          void requestServerPreviewClip(qcCard, item.id, { priority: true });
         }
         try {
           const a = ensureAudio();
@@ -2902,6 +2897,8 @@ function UploadModal({
         } as any);
         qc.invalidateQueries({ queryKey: ['oculto-play-derived'] });
         if (kind === 'audio') {
+          // Clip da prévia recortado no servidor (MP3 pequeno) — melhor esforço.
+          void regenerateServerPreviewClip(qc, clientItemId);
           if (genreTags.length) void bumpAudioTagUsage('genre', genreTags.map((t) => t.slug));
           if (aiTags.length) void bumpAudioTagUsage('ai', aiTags.map((t) => t.slug));
         }

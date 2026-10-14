@@ -34,6 +34,7 @@ supabase functions deploy stripe-webhook
 |--------|-----------|
 | `transcode-video` | Transcoding via Cloudflare Stream |
 | `upload-founder-media` | Upload de mídia de fundadores |
+| `oculto-play-audio-preview` | Recorta no servidor o clip de até 30s da prévia das músicas do Oculto Play (MP3 sem recodificar). Deploy com `--no-verify-jwt`. |
 
 ### 🔔 Notificações
 | Função | Descrição |
