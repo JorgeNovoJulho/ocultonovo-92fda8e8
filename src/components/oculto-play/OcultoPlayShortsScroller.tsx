@@ -27,7 +27,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject, type PointerEvent as ReactPointerEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, Volume2, VolumeX, Leaf, Play, Heart, Loader2 } from 'lucide-react';
+import { X, Volume2, VolumeX, Leaf, Play, Heart, Loader2, AlertTriangle } from 'lucide-react';
 import { useDataSaver } from '@/hooks/useDataSaver';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
@@ -38,6 +38,7 @@ import {
   type OcultoPlayItem as OPItem,
 } from '@/hooks/useOcultoPlayContent';
 import { useRegisterOcultoPlayCardView } from '@/hooks/useRegisterOcultoPlayCardView';
+import { useIsMasterAdmin } from '@/hooks/useUserRoles';
 import { useOcultoPlaySessionScoreStore } from '@/store/useOcultoPlaySessionScoreStore';
 import { markOcultoPlayMediaPlaying, markOcultoPlayMediaStopped } from '@/lib/ocultoPlayActivity';
 import { stopOcultoPlayMedia } from '@/lib/ocultoPlayMediaStop';
@@ -48,6 +49,7 @@ const STALL_SKIP_MS = 7_000;
 const BUFFER_HINT_DELAY_MS = 500;
 const DOUBLE_TAP_MS = 280;
 const HOLD_MS = 380;
+const GAP_ITEMS_KEY = 'oculto-play:file-gap-items';
 
 interface Props {
   items: OPItem[];
@@ -89,7 +91,11 @@ interface PoolOptions {
   muted: boolean;
   paused: boolean;
   economic: boolean;
+  /** Celular / aparelho modesto (base: Realme C55): menos vídeos carregados ao mesmo tempo. */
+  lowEnd: boolean;
   onAutoplayBlocked: () => void;
+  /** O ARQUIVO tem buracos de imagem gravados (não é o aparelho). */
+  onFileGaps?: (itemId: string) => void;
   onView: (itemId: string) => void;
   onEnded: () => void;
   onBuffering: (buffering: boolean) => void;
@@ -107,6 +113,13 @@ function useShortsVideoPool(opts: PoolOptions) {
   const lastProgressAtRef = useRef(0);
   const bufferTimerRef = useRef<number | null>(null);
   const bufferingRef = useRef(false);
+  // Aparelho perdendo quadros na decodificação → só o vídeo atual fica carregado.
+  const [lowPower, setLowPower] = useState(false);
+  const lowPowerRef = useRef(false);
+  lowPowerRef.current = lowPower;
+  const nextUpgradedRef = useRef(false);
+  const qualityBaseRef = useRef<{ total: number; dropped: number; at: number } | null>(null);
+  const gapStateRef = useRef<{ id: string | null; token: number; lastMedia: number; lastDropped: number; gaps: number; reported: Set<string> }>({ id: null, token: 0, lastMedia: -1, lastDropped: 0, gaps: 0, reported: new Set() });
 
   const isCurrent = useCallback((e: PoolEntry) => !!e.itemId && e.itemId === currentIdRef.current, []);
 
@@ -221,7 +234,16 @@ function useShortsVideoPool(opts: PoolOptions) {
         }
         const ts = trimStartOf(e.item);
         const te = trimEndOf(e.item);
-        const end = te ?? (Number.isFinite(v.duration) ? v.duration : 0);
+        const fallbackDur = Number(e.item?.duration_sec ?? 0);
+        const end = te ?? (Number.isFinite(v.duration) && v.duration > 0 ? v.duration : (fallbackDur > 0 ? fallbackDur : 0));
+        // O próximo vídeo só começa a baixar de verdade depois que o atual
+        // engrenou (1 s), para não disputar rede/decodificador na largada.
+        if (!nextUpgradedRef.current && t - ts >= 1 && !lowPowerRef.current) {
+          nextUpgradedRef.current = true;
+          for (const other of entries) {
+            if (other !== e && other.itemId && other.v.preload !== 'auto') other.v.preload = 'auto';
+          }
+        }
         if (end > ts) optsRef.current.onProgress(Math.min(1, Math.max(0, (t - ts) / (end - ts))));
         if (te && t >= te) {
           try { v.pause(); } catch { /* noop */ }
@@ -242,6 +264,25 @@ function useShortsVideoPool(opts: PoolOptions) {
     const watch = window.setInterval(() => {
       const cur = entries.find(isCurrent);
       if (!cur || optsRef.current.paused || cur.v.paused || cur.v.ended || document.hidden) return;
+      // Quadros descartados pelo decodificador (aparelho no limite).
+      try {
+        const q = cur.v.getVideoPlaybackQuality?.();
+        if (q && !lowPowerRef.current) {
+          const now = performance.now();
+          const base = qualityBaseRef.current;
+          if (!base) {
+            qualityBaseRef.current = { total: q.totalVideoFrames, dropped: q.droppedVideoFrames, at: now };
+          } else if (now - base.at >= 3000) {
+            const dTotal = q.totalVideoFrames - base.total;
+            const dDropped = q.droppedVideoFrames - base.dropped;
+            qualityBaseRef.current = { total: q.totalVideoFrames, dropped: q.droppedVideoFrames, at: now };
+            if (dTotal >= 30 && dDropped / dTotal > 0.2) {
+              console.warn('[shorts] aparelho perdendo quadros — liberando vídeos pré-carregados');
+              setLowPower(true);
+            }
+          }
+        }
+      } catch { /* noop */ }
       if (performance.now() - lastProgressAtRef.current < STALL_SKIP_MS) return;
       lastProgressAtRef.current = performance.now();
       if (!cur.retried) reloadAt(cur);
@@ -261,7 +302,47 @@ function useShortsVideoPool(opts: PoolOptions) {
     };
   }, [isCurrent, clearBuffer, startBuffer, reloadAt]);
 
-  // Distribui os players: atual + 2 próximos (só 1 próximo no modo econômico).
+  /**
+   * Detecta buracos GRAVADOS no arquivo: a imagem salta >110 ms entre dois
+   * quadros apresentados sem que o decodificador tenha descartado nada.
+   * Acontecia com vídeos gravados no envio por aparelhos que não
+   * acompanhavam o tempo real.
+   */
+  const watchFileGaps = useCallback((e: PoolEntry) => {
+    const v = e.v as HTMLVideoElement & {
+      requestVideoFrameCallback?: (cb: (now: number, meta: { mediaTime: number }) => void) => number;
+    };
+    if (typeof v.requestVideoFrameCallback !== 'function' || !e.itemId) return;
+    const st = gapStateRef.current;
+    if (st.reported.has(e.itemId)) return;
+    st.id = e.itemId;
+    st.token += 1;
+    st.lastMedia = -1;
+    st.gaps = 0;
+    const id = e.itemId;
+    const token = st.token;
+    const loop = (_now: number, meta: { mediaTime: number }) => {
+      if (e.itemId !== id || currentIdRef.current !== id || st.id !== id || st.token !== token) return;
+      const t = Number(meta?.mediaTime ?? 0);
+      let dropped = 0;
+      try { dropped = v.getVideoPlaybackQuality?.().droppedVideoFrames ?? 0; } catch { /* noop */ }
+      if (st.lastMedia >= 0 && v.playbackRate === 1) {
+        const d = t - st.lastMedia;
+        if (d > 0.11 && d < 2 && dropped === st.lastDropped) st.gaps += 1;
+      }
+      st.lastMedia = t;
+      st.lastDropped = dropped;
+      if (st.gaps >= 6 && !st.reported.has(id)) {
+        st.reported.add(id);
+        try { optsRef.current.onFileGaps?.(id); } catch { /* noop */ }
+        return;
+      }
+      try { v.requestVideoFrameCallback!(loop); } catch { /* noop */ }
+    };
+    try { v.requestVideoFrameCallback(loop); } catch { /* noop */ }
+  }, []);
+
+  // Distribui os players: atual + 2 próximos (só 1 próximo no celular / modo econômico).
   const wanted = useMemo(() => {
     const list: OPItem[] = [];
     const add = (it: OPItem | undefined) => {
@@ -269,9 +350,9 @@ function useShortsVideoPool(opts: PoolOptions) {
     };
     add(opts.items[opts.activeIdx]);
     add(opts.items[opts.activeIdx + 1]);
-    if (!opts.economic) add(opts.items[opts.activeIdx + 2]);
+    if (!opts.economic && !opts.lowEnd && !lowPower) add(opts.items[opts.activeIdx + 2]);
     return list;
-  }, [opts.items, opts.activeIdx, opts.economic]);
+  }, [opts.items, opts.activeIdx, opts.economic, opts.lowEnd, lowPower]);
   const wantedKey = wanted.map((w) => `${w.id}|${w.media_url}`).join(',');
   const activeId = opts.items[opts.activeIdx]?.id ?? null;
 
@@ -283,6 +364,8 @@ function useShortsVideoPool(opts: PoolOptions) {
 
     if (currentIdRef.current !== activeId) {
       currentIdRef.current = activeId;
+      nextUpgradedRef.current = false;
+      qualityBaseRef.current = null;
       lastProgressAtRef.current = performance.now();
       clearBuffer();
       o.onProgress(0);
@@ -314,7 +397,8 @@ function useShortsVideoPool(opts: PoolOptions) {
         e.item = it;
         e.retried = false;
         e.v.style.opacity = '0';
-        e.v.preload = rank <= 1 ? 'auto' : 'metadata';
+        // Só o atual baixa tudo de cara; os próximos ficam no cabeçalho até o atual engrenar.
+        e.v.preload = rank === 0 ? 'auto' : 'metadata';
         lastMediaTimeRef.current.delete(e.v);
         try {
           e.v.src = it.media_url as string;
@@ -322,7 +406,7 @@ function useShortsVideoPool(opts: PoolOptions) {
         } catch { /* noop */ }
       } else {
         e.item = it;
-        if (rank <= 1 && e.v.preload !== 'auto') e.v.preload = 'auto';
+        if (rank === 0 && e.v.preload !== 'auto') e.v.preload = 'auto';
       }
       const slot = o.slotRefs.current?.get(it.id);
       if (slot && e.v.parentElement !== slot) slot.appendChild(e.v);
@@ -331,6 +415,7 @@ function useShortsVideoPool(opts: PoolOptions) {
         e.v.muted = o.muted;
         e.v.playbackRate = 1;
         if (!o.paused) safePlay(e);
+        watchFileGaps(e);
       } else {
         if (!e.v.paused) { try { e.v.pause(); } catch { /* noop */ } }
         e.v.muted = true;
@@ -341,7 +426,7 @@ function useShortsVideoPool(opts: PoolOptions) {
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wantedKey, activeId, safePlay, clearBuffer]);
+  }, [wantedKey, activeId, safePlay, clearBuffer, watchFileGaps]);
 
   // Som / pausa do vídeo atual.
   useEffect(() => {
@@ -438,7 +523,18 @@ export function OcultoPlayShortsScroller({
   const [buffering, setBuffering] = useState<boolean>(false);
   const [fastForward, setFastForward] = useState<boolean>(false);
   const [hearts, setHearts] = useState<Array<{ key: number; x: number; y: number }>>([]);
-  const [leanMobile, setLeanMobile] = useState<boolean>(false);
+  const [leanMobile, setLeanMobile] = useState<boolean>(() => {
+    try {
+      const nav = navigator as Navigator & { deviceMemory?: number };
+      return (window.matchMedia?.('(pointer: coarse)').matches ?? false)
+        || window.innerWidth <= 768
+        || (typeof nav.deviceMemory === 'number' && nav.deviceMemory <= 4);
+    } catch { return true; }
+  });
+  const { data: isMaster } = useIsMasterAdmin();
+  const [gapItems, setGapItems] = useState<Set<string>>(() => {
+    try { return new Set<string>(JSON.parse(localStorage.getItem(GAP_ITEMS_KEY) || '[]')); } catch { return new Set<string>(); }
+  });
   const activeIdRef = useRef(seedId);
   const { isDataSaverEnabled, toggleDataSaver, source: ecoSource, qualityLabel, connectionKind } = useDataSaver();
   const isEconomic = isDataSaverEnabled;
@@ -571,7 +667,17 @@ export function OcultoPlayShortsScroller({
     muted: globalMuted,
     paused: isPaused,
     economic: isEconomic,
+    lowEnd: leanMobile,
     onAutoplayBlocked: () => { setGlobalMuted(true); setUserChoseMute(false); },
+    onFileGaps: (itemId) => {
+      console.warn('[shorts] arquivo com quadros faltando:', itemId);
+      setGapItems((prev) => {
+        if (prev.has(itemId)) return prev;
+        const next = new Set(prev).add(itemId);
+        try { localStorage.setItem(GAP_ITEMS_KEY, JSON.stringify([...next].slice(-200))); } catch { /* noop */ }
+        return next;
+      });
+    },
     onView: handleView,
     onEnded: handleEnded,
     onBuffering: setBuffering,
@@ -862,6 +968,18 @@ export function OcultoPlayShortsScroller({
           <Volume2 className="h-6 w-6" />
           Toque para ativar o som
         </button>
+      )}
+
+      {/* Só o master: aviso de arquivo gravado com falhas (precisa reenviar). */}
+      {isMaster === true && activeItem && gapItems.has(activeItem.id) && (
+        <div
+          role="status"
+          className="absolute left-1/2 -translate-x-1/2 z-[66] w-[min(92%,22rem)] rounded-xl bg-amber-500/95 px-3 py-2 text-[12px] font-semibold leading-snug text-black shadow-xl"
+          style={{ top: 'calc(max(0.75rem, env(safe-area-inset-top)) + 3.75rem)' }}
+        >
+          <span className="inline-flex items-center gap-1.5"><AlertTriangle className="h-4 w-4 shrink-0" /> Arquivo gravado com falhas</span>
+          <span className="block font-normal">A imagem deste vídeo foi salva com quadros faltando. Reenvie o vídeo original para ele rodar liso. (só você vê este aviso)</span>
+        </div>
       )}
 
       {/* Scroller vertical snap */}

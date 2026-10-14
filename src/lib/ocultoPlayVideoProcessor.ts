@@ -160,17 +160,64 @@ function drawContainImage(ctx: CanvasRenderingContext2D, img: HTMLImageElement, 
   ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
 }
 
+type RecordProfile = { maxDim: number; fps: number; bppFactor: number; minBps: number; maxBps: number; audioBps: number };
+
+/** Relatório de qualidade da gravação (para log/diagnóstico). */
+export interface OcultoPlayRecordReport {
+  width: number;
+  height: number;
+  fps: number;
+  framesDrawn: number;
+  droppedSlots: number;
+  restarts: number;
+}
+
+type FrameCallbackVideo = HTMLVideoElement & {
+  requestVideoFrameCallback?: (cb: (now: number, meta: { mediaTime: number }) => void) => number;
+  cancelVideoFrameCallback?: (id: number) => void;
+};
+
+/**
+ * Perfis do mais pesado ao mais leve. Se o aparelho de quem envia não
+ * conseguir acompanhar em tempo real (quadros perdidos), a gravação é
+ * reiniciada automaticamente no perfil seguinte — melhor um vídeo 540p/24fps
+ * liso do que um 720p picotado.
+ */
+function buildProfiles(sourceLongEdge: number, preset: OcultoPlayQualityPreset): RecordProfile[] {
+  let base: RecordProfile;
+  if (sourceLongEdge <= 480) {
+    base = { maxDim: Math.min(480, sourceLongEdge), fps: 24, bppFactor: 1.10, minBps: 600_000, maxBps: 1_000_000, audioBps: 80_000 };
+  } else if (sourceLongEdge <= 720) {
+    base = { maxDim: 720, fps: 30, bppFactor: 1.25, minBps: 900_000, maxBps: 1_700_000, audioBps: 96_000 };
+  } else {
+    base = { maxDim: 720, fps: 30, bppFactor: 1.40, minBps: 1_100_000, maxBps: 2_000_000, audioBps: 96_000 };
+  }
+  if (preset === 'smaller') {
+    base = { ...base, maxDim: Math.min(base.maxDim, 540), fps: Math.min(base.fps, 24), bppFactor: base.bppFactor * 0.7, minBps: Math.round(base.minBps * 0.75), maxBps: Math.round(base.maxBps * 0.7), audioBps: Math.max(56_000, Math.round(base.audioBps * 0.85)) };
+  } else if (preset === 'best') {
+    base = { ...base, maxDim: Math.min(1080, Math.max(base.maxDim, sourceLongEdge)), fps: Math.max(base.fps, 30), bppFactor: base.bppFactor * 1.45, minBps: Math.round(base.minBps * 1.3), maxBps: Math.round(base.maxBps * 1.6), audioBps: Math.max(base.audioBps, 128_000) };
+  }
+  const lighter: RecordProfile[] = [
+    { maxDim: 540, fps: 24, bppFactor: 1.0, minBps: 700_000, maxBps: 1_200_000, audioBps: 80_000 },
+    { maxDim: 480, fps: 20, bppFactor: 0.9, minBps: 500_000, maxBps: 900_000, audioBps: 64_000 },
+  ];
+  const list = [base];
+  for (const p of lighter) {
+    if (p.maxDim < list[list.length - 1].maxDim || p.fps < list[list.length - 1].fps) list.push(p);
+  }
+  return list;
+}
+
 export async function processOcultoPlayVideoForUpload(
   file: File,
-  options: ProcessOcultoPlayVideoOptions,
+  options: ProcessOcultoPlayVideoOptions & { onReport?: (r: OcultoPlayRecordReport) => void },
 ): Promise<File> {
   const format = pickRecorderFormat();
   if (!format) throw new Error('Seu navegador não suporta o processamento de vídeo necessário para publicar no Oculto Play.');
 
   const outroSeconds = options.outroSeconds ?? 2;
-  // fps real é decidido adaptivamente abaixo (profile + options.fps).
   const srcUrl = URL.createObjectURL(file);
-  const video = document.createElement('video');
+  const video = document.createElement('video') as FrameCallbackVideo;
   video.preload = 'auto';
   video.playsInline = true;
   video.crossOrigin = 'anonymous';
@@ -179,9 +226,8 @@ export async function processOcultoPlayVideoForUpload(
   video.src = srcUrl;
 
   let audioCtx: AudioContext | null = null;
-  let audioDest: MediaStreamAudioDestinationNode | null = null;
-  let raf = 0;
-  let stream: MediaStream | null = null;
+  let audioTrack: MediaStreamTrack | null = null;
+  const cleanups: Array<() => void> = [];
 
   try {
     options.onProgress?.(2);
@@ -199,103 +245,25 @@ export async function processOcultoPlayVideoForUpload(
     const originalW = video.videoWidth || 720;
     const originalH = video.videoHeight || 1280;
     const sourceLongEdge = Math.max(originalW, originalH);
+    const profiles = buildProfiles(sourceLongEdge, options.qualityPreset ?? 'balanced');
 
-    // ===== Compressão ADAPTATIVA por resolução detectada =====
-    // Escolhe automaticamente maxDimension/fps/bitrate em função da resolução
-    // de origem. Vídeos pequenos não são "esticados" e os grandes são
-    // reduzidos só o suficiente pra rodar fluido em mobile fraco — sem perda
-    // perceptível em feed vertical.
-    type Profile = { maxDim: number; fps: number; bppFactor: number; minBps: number; maxBps: number; audioBps: number };
-    let profile: Profile;
-    if (sourceLongEdge <= 480) {
-      // SD ou inferior: mantém perto da resolução original, bitrate suficiente p/ decoder mobile.
-      profile = { maxDim: Math.min(480, sourceLongEdge), fps: 24, bppFactor: 1.10, minBps: 600_000, maxBps: 1_000_000, audioBps: 80_000 };
-    } else if (sourceLongEdge <= 720) {
-      // HD vertical (até 720p): "sweet spot" — bitrate alto o bastante p/ não engasgar no meio do vídeo.
-      profile = { maxDim: 720, fps: 30, bppFactor: 1.25, minBps: 900_000, maxBps: 1_700_000, audioBps: 96_000 };
-    } else if (sourceLongEdge <= 1080) {
-      // Full HD: reduz pra 720p, mantém fps 30 pra preservar suavidade.
-      profile = { maxDim: 720, fps: 30, bppFactor: 1.40, minBps: 1_100_000, maxBps: 2_000_000, audioBps: 96_000 };
-    } else {
-      // 4K / 1440p+: agressivo no downscale, bitrate enxuto mas estável.
-      profile = { maxDim: 720, fps: 30, bppFactor: 1.50, minBps: 1_200_000, maxBps: 2_200_000, audioBps: 96_000 };
-    }
-    // Aplica preset escolhido pelo usuário (Tamanho menor / Equilibrado / Melhor qualidade).
-    const preset: OcultoPlayQualityPreset = options.qualityPreset ?? 'balanced';
-    if (preset === 'smaller') {
-      profile = {
-        ...profile,
-        maxDim: Math.min(profile.maxDim, 540),
-        fps: Math.min(profile.fps, 24),
-        bppFactor: profile.bppFactor * 0.70,
-        minBps: Math.round(profile.minBps * 0.75),
-        maxBps: Math.round(profile.maxBps * 0.70),
-        audioBps: Math.max(56_000, Math.round(profile.audioBps * 0.85)),
-      };
-    } else if (preset === 'best') {
-      profile = {
-        ...profile,
-        // Permite até 1080p de saída quando o source é >=1080.
-        maxDim: Math.min(1080, Math.max(profile.maxDim, sourceLongEdge)),
-        fps: Math.max(profile.fps, 30),
-        bppFactor: profile.bppFactor * 1.45,
-        minBps: Math.round(profile.minBps * 1.3),
-        maxBps: Math.round(profile.maxBps * 1.6),
-        audioBps: Math.max(profile.audioBps, 128_000),
-      };
-    }
-    // Permite override explícito vindo do caller (opcional).
-    const maxDimension = Math.min(profile.maxDim, options.maxDimension ?? profile.maxDim);
-    const scale = Math.min(1, maxDimension / sourceLongEdge);
-    const width = even(originalW * scale);
-    const height = even(originalH * scale);
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d', { alpha: false });
-    if (!ctx) throw new Error('Canvas indisponível para processar vídeo.');
-
-    const requestedFps = options.fps ?? profile.fps;
-    const captureFps = Math.max(12, Math.min(profile.fps, requestedFps));
-    stream = canvas.captureStream(captureFps);
-    const canvasTrack = stream.getVideoTracks()[0] as (MediaStreamTrack & { requestFrame?: () => void }) | undefined;
+    // Áudio: o elemento só pode ser ligado ao AudioContext UMA vez; a mesma
+    // faixa é reaproveitada em cada tentativa.
     try {
       const AC: typeof AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
       if (AC) {
         audioCtx = new AC();
         const source = audioCtx.createMediaElementSource(video);
-        const gain = audioCtx.createGain();
-        audioDest = audioCtx.createMediaStreamDestination();
-        gain.gain.value = 1;
-        source.connect(gain);
-        gain.connect(audioDest);
-        const track = audioDest.stream.getAudioTracks()[0];
-        if (track) stream?.addTrack(track);
+        const dest = audioCtx.createMediaStreamDestination();
+        source.connect(dest);
+        audioTrack = dest.stream.getAudioTracks()[0] ?? null;
       }
     } catch {
-      // Se o browser bloquear captura de áudio, ainda publica vídeo com corte/outro.
+      // Sem captura de áudio: publica só o vídeo com corte/outro.
     }
 
-    const chunks: Blob[] = [];
-    const pixels = width * height;
-    const videoBitsPerSecond = Math.max(
-      profile.minBps,
-      Math.min(profile.maxBps, Math.round(pixels * profile.bppFactor)),
-    );
-    if (!stream) throw new Error('Falha ao inicializar stream de vídeo.');
-    const recorder = new MediaRecorder(stream, {
-      mimeType: format.mimeType,
-      videoBitsPerSecond,
-      audioBitsPerSecond: profile.audioBps,
-    });
-    recorder.ondataavailable = (ev) => { if (ev.data?.size) chunks.push(ev.data); };
-    const recorderDone = new Promise<void>((resolve) => { recorder.onstop = () => resolve(); });
-
-    // Carrega o outro ANTES de iniciar o MediaRecorder. Antes isso acontecia
-    // com o gravador aberto; qualquer retry/CORS lento inseria dezenas de
-    // segundos de faixa sem frames, gerando áudio andando e imagem congelada.
     let outro: HTMLImageElement | null = null;
-    if (outroSeconds > 0) {
+    if (outroSeconds > 0 && options.outroImageUrl) {
       try {
         options.onProgress?.(5);
         outro = await loadImage(options.outroImageUrl);
@@ -304,92 +272,191 @@ export async function processOcultoPlayVideoForUpload(
       }
     }
 
-    const frameIntervalMs = Math.max(33, Math.round(1000 / captureFps));
-    let frameTimer: number | null = null;
-    let framePumpStopped = false;
-    const drawVideoFrame = () => {
-      try {
-        ctx.drawImage(video, 0, 0, width, height);
-      } catch { /* noop */ }
-      try { canvasTrack?.requestFrame?.(); } catch { /* noop */ }
-    };
-    const pumpVideoFrames = () => {
-      if (framePumpStopped) return;
-      if (!video.paused && !video.ended) drawVideoFrame();
-      frameTimer = window.setTimeout(pumpVideoFrames, frameIntervalMs);
-    };
-    const stopFramePump = () => {
-      framePumpStopped = true;
-      if (frameTimer != null) {
-        window.clearTimeout(frameTimer);
-        frameTimer = null;
+    const hasFrameCallback = typeof video.requestVideoFrameCallback === 'function';
+
+    const recordOnce = async (profile: RecordProfile, canRestart: boolean) => {
+      const scale = Math.min(1, Math.min(profile.maxDim, options.maxDimension ?? profile.maxDim) / sourceLongEdge);
+      const width = even(originalW * scale);
+      const height = even(originalH * scale);
+      const fps = Math.max(12, Math.min(profile.fps, options.fps ?? profile.fps));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d', { alpha: false });
+      if (!ctx) throw new Error('Canvas indisponível para processar vídeo.');
+
+      // Com requestFrame, o gravador só recebe os quadros que desenhamos —
+      // nada de quadro repetido/atrasado por cronômetro.
+      const probeStream = canvas.captureStream(0);
+      const probeTrack = probeStream.getVideoTracks()[0] as (MediaStreamTrack & { requestFrame?: () => void }) | undefined;
+      const manualFrames = hasFrameCallback && typeof probeTrack?.requestFrame === 'function';
+      let stream: MediaStream = probeStream;
+      if (!manualFrames) {
+        probeStream.getTracks().forEach((t) => t.stop());
+        stream = canvas.captureStream(fps);
       }
+      const canvasTrack = stream.getVideoTracks()[0] as (MediaStreamTrack & { requestFrame?: () => void }) | undefined;
+      if (audioTrack) stream.addTrack(audioTrack);
+
+      const videoBitsPerSecond = Math.max(profile.minBps, Math.min(profile.maxBps, Math.round(width * height * profile.bppFactor)));
+      const recorder = new MediaRecorder(stream, { mimeType: format.mimeType, videoBitsPerSecond, audioBitsPerSecond: profile.audioBps });
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (ev) => { if (ev.data?.size) chunks.push(ev.data); };
+      const recorderDone = new Promise<void>((resolve) => { recorder.onstop = () => resolve(); });
+
+      const frameStep = 1 / fps;
+      let lastDrawnMedia = -1;
+      let framesDrawn = 0;
+      let droppedSlots = 0;
+      let finished = false;
+      let aborted = false;
+      let frameCbId: number | null = null;
+      let pumpTimer: number | null = null;
+
+      const draw = () => {
+        try { ctx.drawImage(video, 0, 0, width, height); } catch { /* noop */ }
+        try { canvasTrack?.requestFrame?.(); } catch { /* noop */ }
+        framesDrawn += 1;
+      };
+
+      const pauseRec = () => { if (recorder.state === 'recording') { try { recorder.pause(); } catch { /* noop */ } } };
+      const resumeRec = () => { if (recorder.state === 'paused' && !finished) { try { recorder.resume(); } catch { /* noop */ } } };
+
+      // Engasgo do decodificador ou aba em segundo plano: PAUSA a gravação
+      // (áudio e vídeo juntos) em vez de gravar som com imagem parada.
+      const onWaiting = () => pauseRec();
+      const onPlaying = () => resumeRec();
+      const onVisibility = () => {
+        if (document.hidden) {
+          pauseRec();
+          try { video.pause(); } catch { /* noop */ }
+        } else if (!finished) {
+          try { if (audioCtx?.state === 'suspended') void audioCtx.resume(); } catch { /* noop */ }
+          video.play().catch(() => { /* noop */ });
+        }
+      };
+      video.addEventListener('waiting', onWaiting);
+      video.addEventListener('seeking', onWaiting);
+      video.addEventListener('playing', onPlaying);
+      document.addEventListener('visibilitychange', onVisibility);
+      const detach = () => {
+        video.removeEventListener('waiting', onWaiting);
+        video.removeEventListener('seeking', onWaiting);
+        video.removeEventListener('playing', onPlaying);
+        document.removeEventListener('visibilitychange', onVisibility);
+        if (frameCbId != null) { try { video.cancelVideoFrameCallback?.(frameCbId); } catch { /* noop */ } frameCbId = null; }
+        if (pumpTimer != null) { window.clearTimeout(pumpTimer); pumpTimer = null; }
+      };
+
+      await new Promise<void>((resolve) => {
+        const onSeeked = () => { video.removeEventListener('seeked', onSeeked); resolve(); };
+        video.addEventListener('seeked', onSeeked);
+        video.currentTime = trimStart;
+      });
+
+      const progressBase = 8;
+      const progressSpan = 72;
+      const done = new Promise<void>((resolve) => {
+        const finish = () => {
+          if (finished) return;
+          finished = true;
+          try { video.pause(); } catch { /* noop */ }
+          resolve();
+        };
+        const onFrame = (_now: number, meta: { mediaTime: number }) => {
+          frameCbId = null;
+          if (finished) return;
+          const t = Number(meta?.mediaTime ?? video.currentTime);
+          if (t >= trimEnd - 0.02) { finish(); return; }
+          if (recorder.state === 'recording' && t + 0.002 >= lastDrawnMedia + frameStep) {
+            if (lastDrawnMedia >= 0) {
+              const missed = Math.floor((t - lastDrawnMedia) / frameStep + 0.25) - 1;
+              if (missed > 0) droppedSlots += missed;
+            }
+            lastDrawnMedia = t;
+            draw();
+            options.onProgress?.(Math.max(progressBase, Math.min(80, Math.round(((t - trimStart) / clipSeconds) * progressSpan + progressBase))));
+            // Aparelho não acompanha o tempo real → reinicia num perfil mais leve.
+            const elapsed = t - trimStart;
+            if (canRestart && elapsed > 1.5 && droppedSlots / Math.max(1, framesDrawn + droppedSlots) > 0.1) {
+              aborted = true;
+              finish();
+              return;
+            }
+          }
+          try { frameCbId = video.requestVideoFrameCallback!(onFrame); } catch { finish(); }
+        };
+        const pump = () => {
+          pumpTimer = null;
+          if (finished) return;
+          if (video.currentTime >= trimEnd - 0.035 || video.ended) { finish(); return; }
+          if (recorder.state === 'recording' && !video.paused) draw();
+          options.onProgress?.(Math.max(progressBase, Math.min(80, Math.round(((video.currentTime - trimStart) / clipSeconds) * progressSpan + progressBase))));
+          pumpTimer = window.setTimeout(pump, Math.max(33, Math.round(1000 / fps)));
+        };
+        video.addEventListener('ended', finish, { once: true });
+        if (manualFrames) {
+          frameCbId = video.requestVideoFrameCallback!(onFrame);
+        } else {
+          pump();
+        }
+      });
+
+      try { if (audioCtx?.state === 'suspended') await audioCtx.resume(); } catch { /* noop */ }
+      draw();
+      recorder.start(500);
+      // Até o vídeo realmente tocar, o gravador fica pausado (sem buraco inicial).
+      pauseRec();
+      await video.play();
+      if (!video.paused && video.readyState >= 3) resumeRec();
+      await done;
+      detach();
+
+      if (!aborted && outro) {
+        drawContainImage(ctx, outro, width, height);
+        try { canvasTrack?.requestFrame?.(); } catch { /* noop */ }
+        resumeRec();
+        const outroStart = performance.now();
+        await new Promise<void>((resolve) => {
+          const tick = () => {
+            const elapsed = (performance.now() - outroStart) / 1000;
+            drawContainImage(ctx, outro!, width, height);
+            try { canvasTrack?.requestFrame?.(); } catch { /* noop */ }
+            options.onProgress?.(80 + Math.min(15, Math.round((elapsed / outroSeconds) * 15)));
+            if (elapsed >= outroSeconds) { resolve(); return; }
+            window.setTimeout(tick, 100);
+          };
+          tick();
+        });
+      }
+
+      if (recorder.state !== 'inactive') recorder.stop();
+      await recorderDone;
+      stream.getVideoTracks().forEach((t) => t.stop());
+      return { chunks, aborted, report: { width, height, fps, framesDrawn, droppedSlots, restarts: 0 } };
     };
 
-    await new Promise<void>((resolve) => {
-      const onSeeked = () => { video.removeEventListener('seeked', onSeeked); resolve(); };
-      video.addEventListener('seeked', onSeeked);
-      video.currentTime = trimStart;
-    });
-
-    options.onProgress?.(8);
-    try { if (audioCtx?.state === 'suspended') await audioCtx.resume(); } catch { /* noop */ }
-    drawVideoFrame();
-    // Timeslice curto (500ms) força chunks/keyframes mais frequentes →
-    // playback no feed vertical recupera-se rápido de seeks e não trava no meio.
-    recorder.start(500);
-    await video.play();
-    pumpVideoFrames();
-
-    await new Promise<void>((resolve) => {
-      const tick = () => {
-        if (video.currentTime >= trimEnd - 0.035 || video.ended) {
-          try { video.pause(); } catch { /* noop */ }
-          stopFramePump();
-          cancelAnimationFrame(raf);
-          resolve();
-          return;
-        }
-        const pct = ((video.currentTime - trimStart) / Math.max(0.1, clipSeconds)) * 72 + 8;
-        options.onProgress?.(Math.max(8, Math.min(80, Math.round(pct))));
-        raf = requestAnimationFrame(tick);
-      };
-      raf = requestAnimationFrame(tick);
-    });
-
-    // Outro é opcional — se a imagem falhou no preload acima, seguimos sem
-    // quebrar a publicação inteira nem manter o gravador aberto em espera.
-    if (outro) {
-      const outroStart = performance.now();
-      await new Promise<void>((resolve) => {
-        const drawOutro = () => {
-          const elapsed = (performance.now() - outroStart) / 1000;
-          drawContainImage(ctx, outro!, width, height);
-          canvasTrack?.requestFrame?.();
-          options.onProgress?.(80 + Math.min(15, Math.round((elapsed / outroSeconds) * 15)));
-          if (elapsed >= outroSeconds) { resolve(); return; }
-          frameTimer = window.setTimeout(drawOutro, frameIntervalMs);
-        };
-        drawOutro();
-      });
-    } else {
-      options.onProgress?.(95);
+    let result: Awaited<ReturnType<typeof recordOnce>> | null = null;
+    for (let i = 0; i < profiles.length; i += 1) {
+      const canRestart = i < profiles.length - 1;
+      result = await recordOnce(profiles[i], canRestart);
+      result.report.restarts = i;
+      if (!result.aborted) break;
+      console.warn(`[ocultoPlayVideoProcessor] aparelho não acompanhou ${profiles[i].maxDim}p/${profiles[i].fps}fps — refazendo mais leve`);
     }
-
-    cancelAnimationFrame(raf);
-    recorder.stop();
-    await recorderDone;
+    if (!result) throw new Error('Falha ao gerar vídeo processado.');
+    try { options.onReport?.(result.report); } catch { /* noop */ }
     options.onProgress?.(98);
 
-    const blob = new Blob(chunks, { type: format.mimeType });
+    const blob = new Blob(result.chunks, { type: format.mimeType });
     if (!blob.size) throw new Error('Falha ao gerar vídeo processado.');
     const base = file.name.replace(/\.[^.]+$/, '') || 'oculto-play-video';
     options.onProgress?.(100);
     return new File([blob], `${base}_oculto.${format.extension}`, { type: blob.type || format.mimeType });
   } finally {
+    cleanups.forEach((fn) => { try { fn(); } catch { /* noop */ } });
     try { video.pause(); } catch { /* noop */ }
-    try { cancelAnimationFrame(raf); } catch { /* noop */ }
-    try { stream?.getTracks?.().forEach((track) => track.stop()); } catch { /* noop */ }
+    try { audioTrack?.stop(); } catch { /* noop */ }
     try { await audioCtx?.close(); } catch { /* noop */ }
     URL.revokeObjectURL(srcUrl);
   }
