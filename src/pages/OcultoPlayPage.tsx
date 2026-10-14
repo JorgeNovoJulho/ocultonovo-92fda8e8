@@ -7,7 +7,7 @@
  * - Botão "Enviar" abre modal de upload (vídeo curto, meme, áudio) com visibility.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Play, Loader2, Upload, Heart, Bookmark, Eye, ArrowLeft, MessageCircle,
@@ -37,6 +37,9 @@ import { OcultoPlayLinkPlayer } from '@/components/oculto-play/OcultoPlayLinkPla
 import { useAuth } from '@/hooks/useAuth';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useIsMasterAdmin } from '@/hooks/useUserRoles';
+import { useMyPlayChannels, type PlayChannelKind, type PlayChannelSection } from '@/hooks/usePlayChannels';
+import { CreateChannelDialog } from '@/components/oculto-play/channels/CreateChannelDialog';
+import { PlayChannelsStrip } from '@/components/oculto-play/channels/PlayChannelsStrip';
 import { useOcultoPlayAccess, useOcultoPlayConfig, type OcultoPlayConfig } from '@/hooks/useOcultoPlayAccess';
 import {
   useOcultoPlayFeed, useOcultoPlayActions, uploadOcultoPlayFile,
@@ -242,7 +245,28 @@ export default function OcultoPlayPage() {
   }, []);
   const [settingAudioBio, setSettingAudioBio] = useState(false);
   const { data: isMaster } = useIsMasterAdmin();
-  const canUpload = isMaster === true;
+  // Canais Play: qualquer usuário logado publica no próprio canal.
+  const canUpload = !!user?.id;
+  const { data: myChannels } = useMyPlayChannels();
+  const [createChannelOpen, setCreateChannelOpen] = useState(false);
+  const [createChannelKind, setCreateChannelKind] = useState<PlayChannelKind>('video');
+  const [uploadChannelId, setUploadChannelId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // /oculto-play?upload=1&channel=<id> (vindo da página do canal) abre o envio.
+  useEffect(() => {
+    if (searchParams.get('upload') !== '1' || !user?.id) return;
+    setUploadChannelId(searchParams.get('channel'));
+    setUploadOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('upload'); next.delete('channel');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, user?.id]);
+  const openMyChannel = () => {
+    const list = myChannels ?? [];
+    const own = list.find((c) => !c.is_official) ?? list[0];
+    if (own) navigate(`/play/c/${own.slug}`);
+    else { setCreateChannelKind('video'); setCreateChannelOpen(true); }
+  };
   const isMobile = useIsMobile();
   const pageActions = useOcultoPlayActions();
   const qcPage = useQueryClient();
@@ -913,9 +937,20 @@ export default function OcultoPlayPage() {
         )}
         <button
           type="button"
-          onClick={() => setUploadOpen(true)}
+          onClick={openMyChannel}
+          disabled={!user?.id}
+          title={(myChannels ?? []).length ? 'Abrir meu canal' : 'Criar meu canal'}
+          aria-label="Meu canal"
+          className="min-w-0 shrink-0 inline-flex items-center justify-center gap-1 h-8 px-3 rounded-full text-[11px] font-bold bg-white/10 text-white ring-1 ring-white/20 hover:bg-white/15 disabled:opacity-40"
+        >
+          <Clapperboard className="h-3.5 w-3.5" />
+          <span>{(myChannels ?? []).length ? 'Meu canal' : 'Criar canal'}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => { setUploadChannelId(null); setUploadOpen(true); }}
           disabled={!canUpload}
-          title={canUpload ? 'Enviar conteúdo' : 'Disponível apenas para o administrador master'}
+          title={canUpload ? 'Enviar conteúdo' : 'Entre na sua conta para publicar'}
           aria-label="Enviar"
           className="min-w-0 flex-1 inline-flex items-center justify-center gap-1 h-8 px-3 rounded-full text-[11px] font-bold bg-gradient-to-r from-fuchsia-500 to-primary text-white shadow hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
         >
@@ -985,6 +1020,7 @@ export default function OcultoPlayPage() {
       {viewMode === 'grid' && section === 'normal' && !kindFilter && !tagFilter && (
         <PlayKindLargeCardsSection
           kind="audio"
+          channelSection="audio"
           title="Áudios"
           icon={<span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-purple-300/15 ring-1 ring-purple-200/30"><Headphones className="h-7 w-7 text-purple-50 drop-shadow" strokeWidth={2.6} /></span>}
           onOpenFocus={(it) => setFocusItem(it)}
@@ -999,6 +1035,7 @@ export default function OcultoPlayPage() {
       {viewMode === 'grid' && section === 'normal' && !kindFilter && !tagFilter && (
         <PlayKindLargeCardsSection
           kinds={['short_video', 'vip_teaser']}
+          channelSection="shorts"
           title="Vídeos"
           icon={<span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-yellow-950/15 ring-1 ring-yellow-950/25"><Clapperboard className="h-7 w-7 text-yellow-950 drop-shadow" strokeWidth={2.6} /></span>}
           onOpenFocus={(it) => setFocusItem(it)}
@@ -1012,6 +1049,7 @@ export default function OcultoPlayPage() {
       {viewMode === 'grid' && section === 'normal' && !kindFilter && !tagFilter && (
         <PlayLinksSection
           title="Filmes"
+          channelSection="links"
           icon={<span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-cyan-300/15 ring-1 ring-cyan-200/30"><Film className="h-7 w-7 text-cyan-50 drop-shadow" strokeWidth={2.6} /></span>}
           onOpenFocus={(it) => setFocusItem(it)}
           storageKey="links"
@@ -1026,6 +1064,7 @@ export default function OcultoPlayPage() {
       {viewMode === 'grid' && section === 'normal' && !kindFilter && !tagFilter && (
         <PlayLinksSection
           title="Filmes +18"
+          channelSection="links_adult"
           icon={<span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-red-300/15 ring-1 ring-red-200/30"><ShieldAlert className="h-7 w-7 text-red-50 drop-shadow" strokeWidth={2.6} /></span>}
           onOpenFocus={(it) => setFocusItem(it)}
           storageKey="links_adult"
@@ -1040,6 +1079,7 @@ export default function OcultoPlayPage() {
       {viewMode === 'grid' && section === 'normal' && !kindFilter && !tagFilter && (
         <PlayKindLargeCardsSection
           kind="meme"
+          channelSection="memes"
           title="Memes"
           icon={<ImageIcon className="h-4 w-4 text-amber-300" />}
           onOpenFocus={(it) => setFocusItem(it)}
@@ -1190,8 +1230,20 @@ export default function OcultoPlayPage() {
         onClose={() => setUploadOpen(false)}
         enabledKinds={enabledKinds}
         config={config.data}
+        initialChannelId={uploadChannelId}
+        onCreateChannel={(k) => { setCreateChannelKind(k); setCreateChannelOpen(true); }}
         onDone={() => {
           setUploadOpen(false);
+        }}
+      />
+
+      <CreateChannelDialog
+        open={createChannelOpen}
+        onOpenChange={setCreateChannelOpen}
+        defaultKind={createChannelKind}
+        onCreated={(ch) => {
+          setUploadChannelId(ch.id);
+          if (!uploadOpen) navigate(`/play/c/${ch.slug}`);
         }}
       />
 
@@ -2296,17 +2348,36 @@ function PlayCard({ item, onPlayQueue, nextAudioUrl }: { item: OcultoPlayItem; o
 
 /* ---------------- Upload modal ---------------- */
 
+const channelKindForItem = (k: OcultoPlayKind): PlayChannelKind => (k === 'audio' ? 'audio' : 'video');
+const MASTER_ONLY_KINDS: OcultoPlayKind[] = ['challenge', 'community_post', 'vip_teaser'];
+type ContentOrigin = '' | 'original' | 'ai' | 'licensed';
+
 function UploadModal({
-  open, onClose, enabledKinds, onDone, config,
+  open, onClose, enabledKinds, onDone, config, initialChannelId, onCreateChannel,
 }: {
   open: boolean;
   onClose: () => void;
   enabledKinds: OcultoPlayKind[];
   onDone: () => void;
   config?: OcultoPlayConfig | null;
+  initialChannelId?: string | null;
+  onCreateChannel?: (kind: PlayChannelKind) => void;
 }) {
   const { user } = useAuth();
   const { profile } = useProfile();
+  // ---- Canais Play: publicar sempre num canal do próprio usuário ----
+  const { data: myChannelsData, isLoading: channelsLoading } = useMyPlayChannels();
+  const { data: isMasterRole } = useIsMasterAdmin();
+  const isMasterUser = isMasterRole === true;
+  const viewerVerified = isMasterUser || !!(profile as any)?.is_verified || !!(profile as any)?.is_verified_couple;
+  const myChannels = myChannelsData ?? [];
+  const [channelId, setChannelId] = useState<string | null>(initialChannelId ?? null);
+  const [origin, setOrigin] = useState<ContentOrigin>('');
+  const [originTool, setOriginTool] = useState('');
+  useEffect(() => {
+    if (open && initialChannelId) setChannelId(initialChannelId);
+  }, [open, initialChannelId]);
+  const selectedChannel = myChannels.find((c) => c.id === channelId) ?? null;
   const qc = useQueryClient();
   const { grant } = useOcultoPlayXpActions();
   const DRAFT_KEY = 'ocultoplay:upload-modal:v1';
@@ -2333,6 +2404,33 @@ function UploadModal({
   const persisted = useRef<Partial<PersistShape>>(loadPersisted()).current;
 
   const [kind, setKind] = useState<OcultoPlayKind>(persisted.kind ?? 'meme');
+  const uploadKinds = useMemo(() => {
+    const base = enabledKinds.length > 0 ? enabledKinds : (Object.keys(KIND_META) as OcultoPlayKind[]);
+    return isMasterUser ? base : base.filter((k) => !MASTER_ONLY_KINDS.includes(k));
+  }, [enabledKinds, isMasterUser]);
+  useEffect(() => {
+    if (!uploadKinds.includes(kind) && uploadKinds.length > 0) {
+      setKind(uploadKinds.includes('short_video') ? 'short_video' : uploadKinds[0]);
+    }
+  }, [uploadKinds, kind]);
+  // Mantém o canal coerente com o tipo (vídeo ↔ áudio nunca se misturam).
+  useEffect(() => {
+    if (myChannels.length === 0) return;
+    const need = channelKindForItem(kind);
+    if (selectedChannel && selectedChannel.kind === need) return;
+    const compat = myChannels.find((c) => c.kind === need && !c.is_official) ?? myChannels.find((c) => c.kind === need);
+    if (compat) setChannelId(compat.id);
+    else if (!selectedChannel) setChannelId(myChannels[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myChannels, kind]);
+  const channelMismatch = !!selectedChannel && selectedChannel.kind !== channelKindForItem(kind);
+  // Visibilidade paga e seções de curadoria são só do master (Fase 1).
+  useEffect(() => {
+    if (isMasterRole === undefined || isMasterUser) return;
+    if (visibility !== 'public') setVisibility('public');
+    if (section !== 'normal') setSection('normal');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMasterRole, isMasterUser]);
   const [visibility, setVisibility] = useState<OcultoPlayVisibility>(persisted.visibility ?? 'public');
   const [section, setSection] = useState<OcultoPlaySection>(persisted.section ?? 'normal');
   const [title, setTitle] = useState(persisted.title ?? '');
@@ -2453,6 +2551,7 @@ function UploadModal({
     setCoverStatus('pending'); setCoverPct(0);
     setFinalizeStatus('pending');
     setRightsConfirmed(false); setBusy(false); setMode('now');
+    setOrigin(''); setOriginTool('');
     try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
   };
 
@@ -2552,6 +2651,24 @@ function UploadModal({
     }
     if (!profile?.id) {
       toast.error('Perfil ainda carregando, tente em 1s.');
+      return;
+    }
+    if (!isMasterUser) {
+      if (!selectedChannel) {
+        toast.error('Crie seu canal antes de publicar.');
+        return;
+      }
+      if (channelMismatch) {
+        toast.error(`Este conteúdo vai num canal de ${channelKindForItem(kind) === 'audio' ? 'áudio' : 'vídeo'}.`);
+        return;
+      }
+      if (!origin) {
+        toast.error('Informe a origem do conteúdo (original, criado com IA ou licenciado).');
+        return;
+      }
+    }
+    if (isAdult && !viewerVerified) {
+      toast.error('Conteúdo +18 só pode ser publicado por perfis verificados.');
       return;
     }
     if (!file && kind !== 'challenge' && kind !== 'link' && mode !== 'draft') {
@@ -2812,6 +2929,9 @@ function UploadModal({
           media_url: kind === 'link' ? linkComposer.sourceUrl : mediaUrl,
           audio_url: audioUrl,
         };
+        if (selectedChannel && !channelMismatch) insertPayload.channel_id = selectedChannel.id;
+        if (origin) insertPayload.content_origin = origin;
+        if (origin === 'ai' && originTool.trim() && kind !== 'audio') insertPayload.ai_tool = originTool.trim().slice(0, 80);
         if (kind === 'link') {
           insertPayload.source_url = linkComposer.sourceUrl;
           insertPayload.link_provider = linkComposer.provider;
@@ -2825,7 +2945,10 @@ function UploadModal({
         if (kind === 'audio') {
           insertPayload.rights_confirmed = rightsConfirmed;
           if (composerName.trim()) insertPayload.composer_name = composerName.trim();
-          if (aiTags.length > 0) insertPayload.ai_tool = aiTags.map((t) => t.name).join(', ');
+          {
+            const tools = [...aiTags.map((t) => t.name), ...(origin === 'ai' && originTool.trim() ? [originTool.trim()] : [])];
+            if (tools.length > 0) insertPayload.ai_tool = tools.join(', ').slice(0, 200);
+          }
           if (genreTags.length > 0) insertPayload.genre_tags = genreTags.map((t) => t.name);
           if (lyrics.trim()) insertPayload.lyrics = lyrics.trim();
           // Preview snippet (até 30s) — tocado automaticamente ao passar pelo card
@@ -2919,6 +3042,9 @@ function UploadModal({
           is_published: false,
           scheduled_for: scheduledFor,
         };
+        if (selectedChannel && !channelMismatch) draftPayload.channel_id = selectedChannel.id;
+        if (origin) draftPayload.content_origin = origin;
+        if (origin === 'ai' && originTool.trim()) draftPayload.ai_tool = originTool.trim().slice(0, 80);
         if (thumbUrl) draftPayload.thumb_url = thumbUrl;
         if (kind === 'link') {
           draftPayload.source_url = linkComposer.sourceUrl;
@@ -2990,18 +3116,112 @@ function UploadModal({
         <div
           className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-6 py-3 space-y-3 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
+          {/* Publicar em — canal do próprio usuário */}
+          {!channelsLoading && myChannels.length === 0 ? (
+            <div className="rounded-xl border border-primary/40 bg-primary/10 p-3 space-y-2">
+              <p className="text-sm font-semibold">Para publicar, crie seu canal</p>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Você pode ter 1 canal de vídeo e 1 de áudio gratuitamente.
+                {isMasterUser ? ' (Master: sem canal, o envio vai para o Oculto Oficial.)' : ''}
+              </p>
+              <div className="flex gap-2">
+                <Button type="button" size="sm" variant="secondary" onClick={() => onCreateChannel?.('video')}>Canal de vídeo</Button>
+                <Button type="button" size="sm" variant="secondary" onClick={() => onCreateChannel?.('audio')}>Canal de áudio</Button>
+              </div>
+            </div>
+          ) : myChannels.length > 0 ? (
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Publicar em</label>
+              <Select
+                value={selectedChannel?.id ?? ''}
+                onValueChange={(v) => {
+                  setChannelId(v);
+                  const ch = myChannels.find((c) => c.id === v);
+                  if (ch && channelKindForItem(kind) !== ch.kind) {
+                    const next = ch.kind === 'audio'
+                      ? 'audio'
+                      : (uploadKinds.includes('short_video') ? 'short_video' : uploadKinds.find((k) => k !== 'audio'));
+                    if (next) setKind(next as OcultoPlayKind);
+                  }
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Escolha o canal" /></SelectTrigger>
+                <SelectContent className="z-[200] bg-popover text-popover-foreground">
+                  {myChannels.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.kind === 'audio' ? '🎵 ' : '🎬 '}{c.name}{c.is_official ? ' (oficial)' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {channelMismatch && (
+                <div className="mt-1.5 flex items-center justify-between gap-2 rounded-md bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-200">
+                  <span>Este tipo vai num canal de {channelKindForItem(kind) === 'audio' ? 'áudio' : 'vídeo'}.</span>
+                  {!myChannels.some((c) => c.kind === channelKindForItem(kind)) && (
+                    <button type="button" className="font-semibold underline" onClick={() => onCreateChannel?.(channelKindForItem(kind))}>
+                      Criar canal
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : null}
+
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Tipo</label>
             <Select value={kind} onValueChange={(v) => setKind(v as OcultoPlayKind)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent className="z-[200] bg-popover text-popover-foreground">
-                {(enabledKinds.length > 0 ? enabledKinds : (Object.keys(KIND_META) as OcultoPlayKind[])).map((k) => (
+                {uploadKinds.map((k) => (
                   <SelectItem key={k} value={k}>{KIND_META[k].label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
+          {/* Origem do conteúdo — prioridade a conteúdo próprio e criado com IA */}
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Origem do conteúdo{isMasterUser ? ' (opcional)' : ''}</label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {([
+                { id: 'original', label: 'Original meu' },
+                { id: 'ai', label: 'Criado com IA' },
+                { id: 'licensed', label: 'Terceiros c/ licença' },
+              ] as const).map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => setOrigin(origin === o.id ? '' : o.id)}
+                  className={cn(
+                    'rounded-lg border px-2 py-2 text-[11px] font-semibold leading-tight transition',
+                    origin === o.id ? 'border-primary bg-primary/15 text-foreground' : 'border-border/60 text-muted-foreground',
+                  )}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            {origin === 'ai' && kind !== 'audio' && (
+              <Input
+                className="mt-1.5 h-9 text-xs"
+                value={originTool}
+                onChange={(e) => setOriginTool(e.target.value.slice(0, 80))}
+                placeholder="Ferramenta usada (opcional): Sora, Runway, Suno…"
+              />
+            )}
+            {origin === 'licensed' && (
+              <p className="mt-1 text-[10.5px] text-amber-200/90 leading-snug">
+                Publique só o que você tem licença para usar. Músicas e filmes de terceiros sem autorização serão removidos.
+              </p>
+            )}
+            {origin === 'ai' && (
+              <p className="mt-1 text-[10.5px] text-muted-foreground leading-snug">
+                Proibido imitar pessoas reais sem consentimento ou qualquer conteúdo que aparente envolver menores.
+              </p>
+            )}
+          </div>
+
+          {isMasterUser && (
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Visibilidade</label>
@@ -3026,6 +3246,7 @@ function UploadModal({
               </Select>
             </div>
           </div>
+          )}
 
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Título (opcional)</label>
@@ -4008,6 +4229,7 @@ function useAllOcultoPlayLinks(limit = 500) {
 function PlayKindLargeCardsSection({
   kind,
   kinds,
+  channelSection,
   title,
   icon,
   onOpenFocus,
@@ -4021,6 +4243,7 @@ function PlayKindLargeCardsSection({
 }: {
   kind?: OcultoPlayKind;
   kinds?: OcultoPlayKind[];
+  channelSection?: PlayChannelSection;
   title: string;
   icon?: React.ReactNode;
   onOpenFocus: (it: OcultoPlayItem) => void;
@@ -4090,6 +4313,7 @@ function PlayKindLargeCardsSection({
         <div className="overflow-hidden min-h-0">
           {open && (
             <>
+              {channelSection && <PlayChannelsStrip section={channelSection} />}
               {items.length > 0 && (
                 <PlayKindSectionFilters items={items} state={filters} onChange={setFilters} />
               )}
@@ -4140,6 +4364,7 @@ function PlayKindLargeCardsSection({
  */
 function PlayLinksSection({
   title,
+  channelSection,
   icon,
   onOpenFocus,
   collapsible = true,
@@ -4151,6 +4376,7 @@ function PlayLinksSection({
   wrapperStyle,
 }: {
   title: string;
+  channelSection?: PlayChannelSection;
   icon?: React.ReactNode;
   onOpenFocus: (it: OcultoPlayItem) => void;
   collapsible?: boolean;
@@ -4223,6 +4449,7 @@ function PlayLinksSection({
         <div className="overflow-hidden min-h-0">
           {open && (
             <>
+              {channelSection && <PlayChannelsStrip section={channelSection} />}
               {items.length > 0 && (
                 <PlayKindSectionFilters items={items} state={filters} onChange={setFilters} defaultTagsOpen />
 

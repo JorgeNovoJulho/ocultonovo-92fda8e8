@@ -142,6 +142,7 @@ const MadrinhaAnalyticsPage = lazy(() => import("./pages/MadrinhaAnalyticsPage")
 const CouponsManagementPage = lazy(() => import("./pages/CouponsManagementPage"));
 const MyMediaPage = lazy(() => import("./pages/MyMediaPage"));
 const CanalVipPage = lazy(() => import("./pages/CanalVipPage"));
+const PlayChannelPage = lazy(() => import("./pages/PlayChannelPage"));
 const VipDownloadsPage = lazy(() => import("./pages/VipDownloadsPage"));
 const AffiliatesPage = lazy(() => import("./pages/AffiliatesPage"));
 const IndicacoesPage = lazy(() => import("./pages/IndicacoesPage"));
@@ -572,6 +573,7 @@ const App = () => {
                   <Route path="/monetizacao" element={<ProtectedRoute><Suspense fallback={<PageFallback />}><MonetizationOnboardingPage /></Suspense></ProtectedRoute>} />
                   <Route path="/play/party/:id" element={<SafeSuspense fallback={<PageFallback />}><OcultoPlayWatchPartyPage /></SafeSuspense>} />
                   <Route path="/play/downloads" element={<SafeSuspense fallback={<PageFallback />}><OcultoPlayDownloadsPage /></SafeSuspense>} />
+                  <Route path="/play/c/:slug" element={<ProtectedRoute><SafeSuspense fallback={<PageFallback />}><PlayChannelPage /></SafeSuspense></ProtectedRoute>} />
                 </Route>
 
                 {/* ── Admin routes ──

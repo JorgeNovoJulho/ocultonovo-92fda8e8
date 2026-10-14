@@ -59,6 +59,7 @@ import { PrestigeBadge } from "@/components/social-score/PrestigeBadge";
 import { PrestigeHistoryCard } from "@/components/social-score/PrestigeHistoryCard";
 import { VoiceBioRecorder } from "@/components/VoiceBioRecorder";
 import { useProfile } from "@/hooks/useProfile";
+import { ViewChannelButton } from "@/components/oculto-play/channels/ViewChannelButton";
 import { useAuth } from "@/hooks/useAuth";
 import { ProfileMediaTabs } from "@/components/profile/ProfileMediaTabs";
 import { MySubscriptionsHistorySection } from "@/components/subscriptions/MySubscriptionsHistorySection";
@@ -353,6 +354,7 @@ export default function MyProfilePage() {
                       <Edit className="h-4 w-4 mr-2" />Editar Perfil
                     </Button>
                   </Link>
+                  <ViewChannelButton userOrProfileId={profile.user_id || profile.id} className="gap-2" />
                   <CreateCheckinDialog
                     trigger={
                       <Button

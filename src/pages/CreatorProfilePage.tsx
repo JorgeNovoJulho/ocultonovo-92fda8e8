@@ -5,6 +5,7 @@ import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useProfile } from "@/hooks/useProfile";
+import { ViewChannelButton } from "@/components/oculto-play/channels/ViewChannelButton";
 import { useBannerUpload as useBannerUploadHook } from "@/hooks/useBannerUpload";
 import { 
   useCreatorProfile, 
@@ -1081,12 +1082,16 @@ export default function CreatorProfilePage() {
                   {messageLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
                   Mensagem
                 </Button>
+                <ViewChannelButton userOrProfileId={creator.user_id || creator.id} />
               </div>
             )}
 
             {isOwnProfile && (
               <div className="mt-6">
-                <Button variant="outline" onClick={() => navigate('/settings')}>Editar Perfil</Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={() => navigate('/settings')}>Editar Perfil</Button>
+                  <ViewChannelButton userOrProfileId={creator.user_id || creator.id} className="gap-2" />
+                </div>
               </div>
             )}
           </CardContent>
