@@ -13,7 +13,7 @@ import {
   Play, Loader2, Upload, Heart, Bookmark, Eye, ArrowLeft, MessageCircle,
   Video, Image as ImageIcon, Music, Crown, Users, Trophy, CalendarClock, FileText,
   Library, RotateCcw, CheckCircle2, ListVideo, LayoutGrid, Rows3, Trash2, Pause, WifiOff, Link2,
-  ChevronDown, X, Flame, Headphones, Clapperboard, Film, ShieldAlert,
+  ChevronDown, X, Flame, Headphones, Clapperboard, Film, ShieldAlert, Maximize2,
 } from 'lucide-react';
 import { usePlayLinkViews, formatViewsCompact } from '@/hooks/usePlayLinkViews';
 import { OcultoPlayShortsScroller } from '@/components/oculto-play/OcultoPlayShortsScroller';
@@ -40,6 +40,8 @@ import { useIsMasterAdmin } from '@/hooks/useUserRoles';
 import { useMyPlayChannels, useSetPlayItemFrozen, type PlayChannelKind, type PlayChannelSection } from '@/hooks/usePlayChannels';
 import { usePlayRealtimeSync } from '@/hooks/usePlayRealtimeSync';
 import { HScroll, useDesktopDragScroll } from '@/components/oculto-play/HScroll';
+import { MoviesHeroCarousel } from '@/components/oculto-play/MoviesHeroCarousel';
+import { AudioExpandViewer } from '@/components/oculto-play/AudioExpandViewer';
 import { CreateChannelDialog } from '@/components/oculto-play/channels/CreateChannelDialog';
 import { PlayChannelsStrip } from '@/components/oculto-play/channels/PlayChannelsStrip';
 import { useOcultoPlayAccess, useOcultoPlayConfig, type OcultoPlayConfig } from '@/hooks/useOcultoPlayAccess';
@@ -4888,15 +4890,62 @@ function topGenres(items: OcultoPlayItem[], max: number, minItems: number) {
     .map(([name, list]) => ({ name, items: list.slice(0, 12) }));
 }
 
+/** Card de música enxuto: capa, título e nome do usuário. "Mais" expande o card completo. */
+function AudioCompactCard({ item, onOpenFocus, onExpand }: {
+  item: OcultoPlayItem;
+  onOpenFocus: () => void;
+  onExpand: () => void;
+}) {
+  const registerCardView = useRegisterOcultoPlayCardView();
+  const who = item.channel_name || item.author_display_name || (item.author_username ? `@${item.author_username}` : '');
+  const play = () => {
+    onOpenFocus();
+    seekSharedAudio(item.id, 0);
+    playSharedAudio(item.id, item.audio_url ?? undefined, ocultoPlayMetaFromItem(item)).catch(() => { /* noop */ });
+    window.setTimeout(() => { try { pauseAllPreviews(); } catch { /* noop */ } }, 0);
+    registerCardView(item.id);
+  };
+  const warm = () => { try { if (item.audio_url) prewarmAudio(item.id, item.audio_url); } catch { /* noop */ } };
+  return (
+    <div className="group">
+      <div className="relative aspect-square w-full overflow-hidden rounded-lg bg-black/30 shadow-md">
+        <button type="button" onClick={play} onPointerEnter={warm} aria-label={`Tocar ${item.title || 'música'}`} className="absolute inset-0">
+          {item.thumb_url
+            ? <img src={item.thumb_url} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+            : <span className="grid h-full w-full place-items-center"><Headphones className="h-8 w-8 opacity-60" /></span>}
+          <span className="absolute bottom-2 right-2 grid h-10 w-10 place-items-center rounded-full bg-emerald-500 text-black shadow-lg transition sm:translate-y-1 sm:opacity-0 sm:group-hover:translate-y-0 sm:group-hover:opacity-100">
+            <Play className="h-5 w-5 translate-x-0.5 fill-current" />
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={onExpand}
+          aria-label="Mais informações"
+          className="absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-black/65 px-2 py-1 text-[10.5px] font-bold text-white ring-1 ring-white/20 hover:bg-black/85 active:scale-95"
+        >
+          <Maximize2 className="h-3 w-3" /> Mais
+        </button>
+      </div>
+      <p className="mt-1.5 line-clamp-2 text-[13px] font-semibold leading-snug">{item.title || 'Sem título'}</p>
+      {who && <p className="truncate text-[11px] opacity-70">{who}</p>}
+    </div>
+  );
+}
+
 function SpotifyAudioLayout({ items, onOpenFocus }: { items: OcultoPlayItem[]; onOpenFocus: (it: OcultoPlayItem) => void }) {
   const [showAll, setShowAll] = useState(false);
   const newest = useMemo(() => items.slice(0, 12), [items]);
   const mostPlayed = useMemo(() => [...items].sort((a, b) => (b.view_count ?? 0) - (a.view_count ?? 0)).slice(0, 8), [items]);
   const genres = useMemo(() => topGenres(items, 3, 3), [items]);
   const trackList = showAll ? items : mostPlayed;
-  const card = (it: OcultoPlayItem) => (
-    <AudioGridCard item={it} onOpenFocus={() => onOpenFocus(it)} />
-  );
+  // Card expandido: lista da fileira + posição do card tocado.
+  const [expanded, setExpanded] = useState<{ list: OcultoPlayItem[]; index: number } | null>(null);
+  const closeExpanded = useCallback(() => setExpanded(null), []);
+  const rowCards = (list: OcultoPlayItem[]) => list.map((it, i) => (
+    <Fragment key={it.id}>
+      <AudioCompactCard item={it} onOpenFocus={() => onOpenFocus(it)} onExpand={() => setExpanded({ list, index: i })} />
+    </Fragment>
+  ));
 
   return (
     <div className="space-y-5">
@@ -4915,7 +4964,7 @@ function SpotifyAudioLayout({ items, onOpenFocus }: { items: OcultoPlayItem[]; o
         </div>
       </div>
 
-      <PlayHRow title="Novidades">{newest.map((it) => <Fragment key={it.id}>{card(it)}</Fragment>)}</PlayHRow>
+      <PlayHRow title="Novidades" itemWidth="w-[38vw] max-w-[160px]">{rowCards(newest)}</PlayHRow>
 
       <section>
         <h3 className="mb-1.5 px-0.5 text-[15px] font-extrabold">{showAll ? 'Todas as faixas' : 'Mais ouvidas'}</h3>
@@ -4953,14 +5002,24 @@ function SpotifyAudioLayout({ items, onOpenFocus }: { items: OcultoPlayItem[]; o
       </section>
 
       {genres.map((g) => (
-        <PlayHRow key={g.name} title={g.name}>{g.items.map((it) => <Fragment key={it.id}>{card(it)}</Fragment>)}</PlayHRow>
+        <PlayHRow key={g.name} title={g.name} itemWidth="w-[38vw] max-w-[160px]">{rowCards(g.items)}</PlayHRow>
       ))}
+
+      {expanded && (
+        <AudioExpandViewer
+          items={expanded.list}
+          startIndex={expanded.index}
+          onClose={closeExpanded}
+          renderCard={(it, close) => (
+            <AudioGridCard item={it} onOpenFocus={() => { close(); onOpenFocus(it); }} />
+          )}
+        />
+      )}
     </div>
   );
 }
 
 function NetflixMoviesLayout({ items, onOpenFocus }: { items: OcultoPlayItem[]; onOpenFocus: (it: OcultoPlayItem) => void }) {
-  const hero = items[0];
   const newest = useMemo(() => items.slice(0, 12), [items]);
   const mostWatched = useMemo(() => [...items].sort((a, b) => (b.view_count ?? 0) - (a.view_count ?? 0)).slice(0, 12), [items]);
   const genres = useMemo(() => topGenres(items, 4, 2), [items]);
@@ -4968,26 +5027,7 @@ function NetflixMoviesLayout({ items, onOpenFocus }: { items: OcultoPlayItem[]; 
 
   return (
     <div className="space-y-5">
-      {hero && (
-        <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black">
-          {hero.thumb_url && (
-            <img src={hero.thumb_url} alt="" decoding="async" className="absolute inset-0 h-full w-full object-cover" />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
-          <div className="absolute inset-x-0 bottom-0 p-3 sm:p-5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-red-400">Em destaque</p>
-            <p className="mt-0.5 line-clamp-2 text-lg font-extrabold text-white sm:text-2xl">{hero.title || 'Filme'}</p>
-            {hero.caption && <p className="mt-1 line-clamp-2 max-w-xl text-xs text-white/80">{hero.caption}</p>}
-            <button
-              type="button"
-              onClick={() => onOpenFocus(hero)}
-              className="mt-2.5 inline-flex items-center gap-1.5 rounded-md bg-white px-4 py-2 text-sm font-bold text-black active:scale-95 transition"
-            >
-              <Play className="h-4 w-4 fill-current" /> Assistir
-            </button>
-          </div>
-        </div>
-      )}
+      <MoviesHeroCarousel items={items} onOpen={onOpenFocus} />
       <PlayHRow title="Lançamentos" itemWidth="w-[64vw] max-w-[280px]">{newest.map((it) => <Fragment key={it.id}>{card(it)}</Fragment>)}</PlayHRow>
       {items.length > 4 && (
         <PlayHRow title="Mais assistidos" itemWidth="w-[64vw] max-w-[280px]">{mostWatched.map((it) => <Fragment key={it.id}>{card(it)}</Fragment>)}</PlayHRow>
