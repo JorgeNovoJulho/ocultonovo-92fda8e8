@@ -4,6 +4,7 @@ import { useAuth } from './useAuth';
 import { toast } from 'sonner';
 import { AURA_QUEST_EVENT } from '@/lib/auraQuests';
 import { subscribeTable } from '@/lib/realtimeBus';
+import { useQueryClient } from '@tanstack/react-query';
 
 
 export interface AuraMetrics {
@@ -453,6 +454,22 @@ const SEEN_KEY = (uid: string) => `aura.achievements.seen.${uid}`;
 
 export function useAuraAchievements() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Aplica na hora o saldo devolvido pelo servidor após um resgate: barra
+  // lateral, menu, selos de XP e demais telas que leem o perfil.
+  const applyServerXp = useCallback((row: any) => {
+    const xp = Number(row?.xp_total);
+    if (!user?.id || !Number.isFinite(xp)) return;
+    const level = Number(row?.level);
+    const patch = (old: any) => (old && typeof old === 'object'
+      ? { ...old, aura_xp: xp, ...(Number.isFinite(level) ? { aura_level: level } : {}) }
+      : old);
+    try { queryClient.setQueryData(['profile', user.id], patch); } catch { /* noop */ }
+    try { queryClient.invalidateQueries({ queryKey: ['aura-xp-profile'] }); } catch { /* noop */ }
+    try { queryClient.invalidateQueries({ queryKey: ['profile', user.id] }); } catch { /* noop */ }
+    try { window.dispatchEvent(new CustomEvent('oculto:aura-xp-changed', { detail: { xp, level } })); } catch { /* noop */ }
+  }, [user?.id, queryClient]);
   const [metrics, setMetrics] = useState<AuraMetrics>(FALLBACK);
   const [claimedSet, setClaimedSet] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -642,6 +659,7 @@ export function useAuraAchievements() {
           }
           if (row?.awarded) {
             didAward = true;
+            applyServerXp(row);
             toast.success(`🏆 ${a.isRare ? 'Conquista RARA: ' : 'Conquista desbloqueada: '}${a.title}`, {
               description: `+${a.xpReward.toLocaleString('pt-BR')} XP creditados no seu saldo.`,
               duration: 6000,
@@ -660,7 +678,7 @@ export function useAuraAchievements() {
         refresh();
       }
     })();
-  }, [achievements, user?.id, refresh]);
+  }, [achievements, user?.id, refresh, applyServerXp]);
 
   // Resgate manual (botão "Resgatar" nos cards "Concluída"). Idempotente —
   // UNIQUE(user, achievement) garante crédito único no servidor.
@@ -692,6 +710,7 @@ export function useAuraAchievements() {
       }
       const row = Array.isArray(data) ? data[0] : data;
       if (row?.awarded) {
+        applyServerXp(row);
         setClaimedSet((prev) => new Set(prev).add(a.id));
         toast.success(`🏆 ${a.isRare ? 'Conquista RARA: ' : 'Conquista resgatada: '}${a.title}`, {
           description: `+${a.xpReward.toLocaleString('pt-BR')} XP creditados no seu saldo.`,
@@ -713,7 +732,7 @@ export function useAuraAchievements() {
       toast.error('Falha ao resgatar.', { description: e?.message });
       return false;
     }
-  }, [achievements, user?.id, refresh]);
+  }, [achievements, user?.id, refresh, applyServerXp]);
 
   // Resgata em lote todas as conquistas desbloqueadas e ainda não creditadas.
   const claimAll = useCallback(async () => {
@@ -739,6 +758,7 @@ export function useAuraAchievements() {
         if (error) continue;
         const row = Array.isArray(data) ? data[0] : data;
         if (row?.awarded) {
+          applyServerXp(row);
           claimed += 1;
           totalXp += a.xpReward;
           resolved += 1;
@@ -766,7 +786,7 @@ export function useAuraAchievements() {
       toast.error('Nenhuma conquista foi resgatada (verifique elegibilidade).');
     }
     return claimed;
-  }, [achievements, user?.id, refresh]);
+  }, [achievements, user?.id, refresh, applyServerXp]);
 
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
   const claimedCount = achievements.filter((a) => a.claimed).length;
