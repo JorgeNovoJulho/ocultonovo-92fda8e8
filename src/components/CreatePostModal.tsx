@@ -1302,6 +1302,47 @@ export function CreatePostModal({ open, onOpenChange, editPost }: CreatePostModa
 
 
 
+            {/* +18 — Blur padrão na mídia (autor define). Logo abaixo de Foto/Vídeo/Enquete, acima do "Estilo do texto". */}
+            <label
+              htmlFor="adult-toggle"
+              className={cn(
+                "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all",
+                isAdult
+                  ? "border-rose-500/60 bg-rose-500/5"
+                  : "border-border/50 bg-muted/20 hover:border-rose-500/40"
+              )}
+            >
+              <div className={cn(
+                "p-2 rounded-full shrink-0",
+                isAdult ? "bg-rose-500/20 text-rose-400" : "bg-muted/30 text-muted-foreground"
+              )}>
+                <EyeOff className="h-4 w-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <p className={cn(
+                    "font-medium text-sm",
+                    isAdult ? "text-foreground" : "text-muted-foreground"
+                  )}>
+                    Conteúdo +18
+                  </p>
+                  <Switch
+                    id="adult-toggle"
+                    checked={isAdult}
+                    onCheckedChange={setIsAdult}
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-snug mt-1">
+                  {isAdult
+                    ? "Por padrão, sua foto/vídeo aparecerá no feed com blur. Quem quiser ver toca em \"Mostrar\". Desative se a mídia não for adulta."
+                    : "Sua mídia será exibida sem blur no feed. Use apenas se o conteúdo não for adulto."}
+                </p>
+                <p className="text-[10px] text-muted-foreground/70 mt-1">
+                  Não se aplica a enquetes.
+                </p>
+              </div>
+            </label>
+
             {/* Barra de estilização (apenas para posts somente-texto) */}
             {!mediaFile && !mediaPreview && extraImageFiles.length === 0 && (
               <div className="rounded-lg border border-border/50 bg-muted/20 p-2.5 space-y-2">
@@ -1631,46 +1672,6 @@ export function CreatePostModal({ open, onOpenChange, editPost }: CreatePostModa
 
 
 
-            {/* +18 — Blur padrão na mídia (autor define). Posicionado ACIMA do Flash Story. */}
-            <label
-              htmlFor="adult-toggle"
-              className={cn(
-                "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all",
-                isAdult
-                  ? "border-rose-500/60 bg-rose-500/5"
-                  : "border-border/50 bg-muted/20 hover:border-rose-500/40"
-              )}
-            >
-              <div className={cn(
-                "p-2 rounded-full shrink-0",
-                isAdult ? "bg-rose-500/20 text-rose-400" : "bg-muted/30 text-muted-foreground"
-              )}>
-                <EyeOff className="h-4 w-4" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <p className={cn(
-                    "font-medium text-sm",
-                    isAdult ? "text-foreground" : "text-muted-foreground"
-                  )}>
-                    Conteúdo +18
-                  </p>
-                  <Switch
-                    id="adult-toggle"
-                    checked={isAdult}
-                    onCheckedChange={setIsAdult}
-                  />
-                </div>
-                <p className="text-[11px] text-muted-foreground leading-snug mt-1">
-                  {isAdult
-                    ? "Por padrão, sua foto/vídeo aparecerá no feed com blur. Quem quiser ver toca em \"Mostrar\". Desative se a mídia não for adulta."
-                    : "Sua mídia será exibida sem blur no feed. Use apenas se o conteúdo não for adulto."}
-                </p>
-                <p className="text-[10px] text-muted-foreground/70 mt-1">
-                  Não se aplica a enquetes.
-                </p>
-              </div>
-            </label>
 
             {/* Toggle Flash Story */}
             <div 
