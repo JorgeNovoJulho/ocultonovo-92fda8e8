@@ -39,6 +39,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useIsMasterAdmin } from '@/hooks/useUserRoles';
 import { useMyPlayChannels, useSetPlayItemFrozen, type PlayChannelKind, type PlayChannelSection } from '@/hooks/usePlayChannels';
 import { usePlayRealtimeSync } from '@/hooks/usePlayRealtimeSync';
+import { HScroll, useDesktopDragScroll } from '@/components/oculto-play/HScroll';
 import { CreateChannelDialog } from '@/components/oculto-play/channels/CreateChannelDialog';
 import { PlayChannelsStrip } from '@/components/oculto-play/channels/PlayChannelsStrip';
 import { useOcultoPlayAccess, useOcultoPlayConfig, type OcultoPlayConfig } from '@/hooks/useOcultoPlayAccess';
@@ -251,6 +252,9 @@ export default function OcultoPlayPage() {
   const { data: myChannels } = useMyPlayChannels();
   // Canais e envios novos aparecem sozinhos (sem recarregar a página).
   usePlayRealtimeSync(!!user?.id);
+  // Computador: arrastar com o mouse qualquer fileira lateral do Play.
+  const [playRootEl, setPlayRootEl] = useState<HTMLDivElement | null>(null);
+  useDesktopDragScroll(playRootEl);
   const [createChannelOpen, setCreateChannelOpen] = useState(false);
   const [createChannelKind, setCreateChannelKind] = useState<PlayChannelKind>('video');
   const [uploadChannelId, setUploadChannelId] = useState<string | null>(null);
@@ -847,6 +851,7 @@ export default function OcultoPlayPage() {
   return (
     <>
     <div
+      ref={setPlayRootEl}
       className="container max-w-5xl py-3 md:py-6 overflow-x-hidden pb-[calc(env(safe-area-inset-bottom)+5rem)] md:pb-6"
       style={{
         paddingLeft: 'max(0.75rem, env(safe-area-inset-left))',
@@ -4854,11 +4859,11 @@ function PlayHRow({ title, children, itemWidth = 'w-[42vw] max-w-[176px]' }: {
     <LazyVisible minHeight={220} rootMargin="300px 0px">
       <section>
         <h3 className="mb-2 px-0.5 text-[15px] font-extrabold text-current">{title}</h3>
-        <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <HScroll className="-mx-1" innerClassName="snap-x gap-3 px-1 pb-2">
           {children.map((child, i) => (
             <div key={i} className={cn('shrink-0 snap-start contain-paint', itemWidth)}>{child}</div>
           ))}
-        </div>
+        </HScroll>
       </section>
     </LazyVisible>
   );

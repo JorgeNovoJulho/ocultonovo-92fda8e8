@@ -44,6 +44,9 @@ import { useIsMasterAdmin } from '@/hooks/useUserRoles';
 import { PLAY_CHANNELS_KEY, useMyPlayChannels } from '@/hooks/usePlayChannels';
 import { processOcultoPlayVideoForUpload, OCULTO_PLAY_MAX_SHORT_VIDEO_SECONDS } from '@/lib/ocultoPlayVideoProcessor';
 import outroAsset from '@/assets/oculto-play-outro.png.asset.json';
+import { VideoTrimAndCoverPicker, type VideoCoverResult } from './VideoTrimAndCoverPicker';
+import { PlayTrailerComposer, TRAILER_MAX_SECONDS, type TrailerValue } from './PlayTrailerComposer';
+import { normalizeSubtitleFileToVtt } from '@/hooks/useOcultoPlayTracks';
 
 
 interface Props {
@@ -122,6 +125,26 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
   const [channelFieldsReady, setChannelFieldsReady] = useState(false);
   const [newVideoFile, setNewVideoFile] = useState<File | null>(null);
   const videoFileInputRef = useRef<HTMLInputElement | null>(null);
+  // Corte + capa por quadro + qualidade (mesmo componente do envio). A fonte
+  // é o arquivo novo OU o vídeo atual baixado para recortar.
+  const [currentMediaUrl, setCurrentMediaUrl] = useState<string | null>(null);
+  const [trimSource, setTrimSource] = useState<File | null>(null);
+  const [trimSourceIsCurrent, setTrimSourceIsCurrent] = useState(false);
+  const [loadingCurrentVideo, setLoadingCurrentVideo] = useState(false);
+  const [videoMeta, setVideoMeta] = useState<VideoCoverResult | null>(null);
+  const [outroFile, setOutroFile] = useState<File | null>(null);
+  const outroPreviewUrl = useMemo(() => (outroFile ? URL.createObjectURL(outroFile) : null), [outroFile]);
+  useEffect(() => () => { if (outroPreviewUrl) URL.revokeObjectURL(outroPreviewUrl); }, [outroPreviewUrl]);
+  // Trailer
+  const [trailer, setTrailer] = useState<TrailerValue | null>(null);
+  const [trailerSaved, setTrailerSaved] = useState<{ url: string | null; start: number | null; end: number | null } | null>(null);
+  const [removeTrailer, setRemoveTrailer] = useState(false);
+  // Publicação
+  const [pubState, setPubState] = useState<{ published: boolean; draft: boolean; scheduledFor: string | null }>({ published: true, draft: false, scheduledFor: null });
+  const [pubMode, setPubMode] = useState<'keep' | 'publish' | 'draft' | 'schedule'>('keep');
+  const [scheduleAt, setScheduleAt] = useState('');
+  // Legenda SRT/VTT (links)
+  const [srtFile, setSrtFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
   const [caption, setCaption] = useState('');
   const [composer, setComposer] = useState('');
@@ -182,6 +205,25 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
     let cancelled = false;
     setChannelFieldsReady(false);
     setNewVideoFile(null);
+    setTrimSource(null); setTrimSourceIsCurrent(false); setVideoMeta(null); setOutroFile(null);
+    setTrailer(null); setRemoveTrailer(false); setPubMode('keep'); setScheduleAt(''); setSrtFile(null);
+    (async () => {
+      try {
+        const { data } = await (supabase as any)
+          .from('oculto_play_items')
+          .select('media_url, trailer_url, trailer_trim_start_seconds, trailer_trim_end_seconds, is_published, is_draft, scheduled_for')
+          .eq('id', item.id)
+          .maybeSingle();
+        if (cancelled || !data) return;
+        setCurrentMediaUrl(data.media_url ?? null);
+        setTrailerSaved({
+          url: data.trailer_url ?? null,
+          start: data.trailer_trim_start_seconds != null ? Number(data.trailer_trim_start_seconds) : null,
+          end: data.trailer_trim_end_seconds != null ? Number(data.trailer_trim_end_seconds) : null,
+        });
+        setPubState({ published: data.is_published !== false, draft: data.is_draft === true, scheduledFor: data.scheduled_for ?? null });
+      } catch { /* noop */ }
+    })();
     (async () => {
       try {
         const { data, error } = await (supabase as any)
@@ -786,36 +828,98 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
         setSavePct(null);
       }
 
-      // ---- Trocar arquivo de vídeo (mesmo processamento do envio) ----
+      // ---- Vídeo: trocar arquivo e/ou cortar, capa por quadro, qualidade, imagem final ----
       let videoPatch: Record<string, any> = {};
-      if (isVideo && newVideoFile) {
-        const { data: u } = await supabase.auth.getUser();
-        const uid = u?.user?.id;
-        if (!uid) throw new Error('Faça login novamente.');
-        const probe = await new Promise<number>((resolve) => {
+      const { data: authData } = await supabase.auth.getUser();
+      const editorUid = authData?.user?.id ?? null;
+      if (isVideo && trimSource) {
+        if (!editorUid) throw new Error('Faça login novamente.');
+        const dur = videoMeta?.duration || await new Promise<number>((resolve) => {
           const v = document.createElement('video');
-          const url = URL.createObjectURL(newVideoFile);
+          const url = URL.createObjectURL(trimSource);
           v.preload = 'metadata';
           v.onloadedmetadata = () => { const d = v.duration || 0; URL.revokeObjectURL(url); resolve(Number.isFinite(d) ? d : 0); };
           v.onerror = () => { URL.revokeObjectURL(url); resolve(0); };
           v.src = url;
         });
-        if (!probe) throw new Error('Não foi possível ler o vídeo escolhido.');
-        const clipEnd = Math.min(probe, OCULTO_PLAY_MAX_SHORT_VIDEO_SECONDS);
-        setSaveStage('Preparando vídeo…');
-        const processed = await processOcultoPlayVideoForUpload(newVideoFile, {
-          trimStart: 0,
-          trimEnd: clipEnd,
-          duration: probe,
-          outroImageUrl: (outroAsset as any).url,
-          outroSeconds: 2,
-          onProgress: (pct) => setSavePct(Math.round(pct * 0.5)),
-        });
-        setSaveStage('Enviando vídeo…');
-        const up = await uploadOcultoPlayFileProgress(processed, uid, 'video', processed.name, (pct) => setSavePct(50 + Math.round(pct * 0.5)));
-        videoPatch = { media_url: up.publicUrl, duration_sec: Math.max(1, Math.round(clipEnd + 2)), trim_start_seconds: null, trim_end_seconds: null };
+        if (!dur) throw new Error('Não foi possível ler o vídeo.');
+        const ts = Math.max(0, videoMeta?.trimStart ?? 0);
+        let te = videoMeta?.trimEnd && videoMeta.trimEnd > ts ? videoMeta.trimEnd : dur;
+        // O vídeo atual já tem 2 s de tela final: não duplicar.
+        if (trimSourceIsCurrent) te = Math.min(te, Math.max(ts + 0.5, dur - 2));
+        te = Math.min(te, ts + OCULTO_PLAY_MAX_SHORT_VIDEO_SECONDS);
+        const preset = videoMeta?.qualityPreset ?? 'balanced';
+        const unchangedCut = trimSourceIsCurrent && ts <= 0.05 && te >= dur - 2.05 && !outroFile && preset === 'balanced';
+        if (!unchangedCut) {
+          setSaveStage('Preparando vídeo…');
+          const outroUrl = outroFile ? URL.createObjectURL(outroFile) : (outroAsset as any).url;
+          try {
+            const processed = await processOcultoPlayVideoForUpload(trimSource, {
+              trimStart: ts,
+              trimEnd: te,
+              duration: dur,
+              outroImageUrl: outroUrl,
+              outroSeconds: 2,
+              qualityPreset: preset,
+              onProgress: (pct) => setSavePct(Math.round(pct * 0.5)),
+            });
+            setSaveStage('Enviando vídeo…');
+            const up = await uploadOcultoPlayFileProgress(processed, editorUid, 'video', processed.name, (pct) => setSavePct(50 + Math.round(pct * 0.5)));
+            videoPatch = { media_url: up.publicUrl, duration_sec: Math.max(1, Math.round((te - ts) + 2)), trim_start_seconds: null, trim_end_seconds: null };
+          } finally {
+            if (outroFile) URL.revokeObjectURL(outroUrl);
+          }
+        }
+        if (videoMeta?.coverBlob) {
+          setSaveStage('Enviando capa…');
+          const coverFile = new File([videoMeta.coverBlob], `cover_${Date.now()}.jpg`, { type: 'image/jpeg' });
+          const upCover = await uploadOcultoPlayFileProgress(coverFile, editorUid, 'image', coverFile.name);
+          videoPatch.thumb_url = upCover.publicUrl;
+        }
         setSaveStage('Salvando…');
         setSavePct(null);
+      }
+
+      // ---- Trailer (vídeo e link) ----
+      if ((isVideo || isLink) && (trailer || removeTrailer)) {
+        if (trailer?.reusedFromPrimary) {
+          if (trailer.trimEnd - trailer.trimStart > TRAILER_MAX_SECONDS + 0.01) throw new Error('O trailer pode ter no máximo 1m30s.');
+          videoPatch.trailer_url = null;
+          videoPatch.trailer_trim_start_seconds = Number(trailer.trimStart.toFixed(2));
+          videoPatch.trailer_trim_end_seconds = Number(trailer.trimEnd.toFixed(2));
+        } else if (trailer?.file) {
+          if (!editorUid) throw new Error('Faça login novamente.');
+          if (trailer.duration > TRAILER_MAX_SECONDS + 0.01) throw new Error('O trailer enviado precisa ter no máximo 1m30s.');
+          setSaveStage('Enviando trailer…');
+          const upT = await uploadOcultoPlayFileProgress(
+            trailer.file, editorUid, 'video',
+            `trailer_${Date.now()}.${(trailer.file.name.split('.').pop() || 'mp4').toLowerCase()}`,
+            (pct) => setSavePct(pct),
+          );
+          videoPatch.trailer_url = upT.publicUrl;
+          videoPatch.trailer_trim_start_seconds = 0;
+          videoPatch.trailer_trim_end_seconds = Number(Math.min(TRAILER_MAX_SECONDS, trailer.duration || TRAILER_MAX_SECONDS).toFixed(2));
+          setSavePct(null);
+        } else if (trailer?.sourceUrl) {
+          videoPatch.trailer_url = trailer.sourceUrl;
+          videoPatch.trailer_trim_start_seconds = null;
+          videoPatch.trailer_trim_end_seconds = null;
+        } else if (removeTrailer) {
+          videoPatch.trailer_url = null;
+          videoPatch.trailer_trim_start_seconds = null;
+          videoPatch.trailer_trim_end_seconds = null;
+        }
+      }
+
+      // ---- Publicação ----
+      if (pubMode === 'publish') {
+        Object.assign(videoPatch, { is_published: true, is_draft: false, scheduled_for: null, published_at: new Date().toISOString() });
+      } else if (pubMode === 'draft') {
+        Object.assign(videoPatch, { is_published: false, is_draft: true, scheduled_for: null });
+      } else if (pubMode === 'schedule') {
+        const when = new Date(scheduleAt);
+        if (Number.isNaN(when.getTime()) || when <= new Date()) throw new Error('Escolha uma data e hora futuras para agendar.');
+        Object.assign(videoPatch, { is_published: false, is_draft: false, scheduled_for: when.toISOString() });
       }
 
       const previewEnd = isAudio && audioDuration > 0
@@ -910,7 +1014,29 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
           .eq('id', item.id);
         if (chErr) throw chErr;
         if (channelPatch.channel_id) setOriginalChannelId(channelPatch.channel_id);
+        if (channelPatch.media_url) setCurrentMediaUrl(channelPatch.media_url);
         setNewVideoFile(null);
+        setTrimSource(null);
+        setVideoMeta(null);
+        setOutroFile(null);
+        setTrailer(null);
+        setRemoveTrailer(false);
+        setPubMode('keep');
+      }
+      // ---- Legenda SRT/VTT (links) ----
+      if (isLink && srtFile && editorUid) {
+        setSaveStage('Enviando legenda…');
+        const vttFile = await normalizeSubtitleFileToVtt(srtFile);
+        const path = `${editorUid}/tracks/${item.id}_${Date.now()}.vtt`;
+        const { error: stErr } = await supabase.storage.from('oculto-play-media').upload(path, vttFile, { upsert: false, contentType: 'text/vtt' });
+        if (stErr) throw stErr;
+        const { data: pub } = supabase.storage.from('oculto-play-media').getPublicUrl(path);
+        const { error: trErr } = await (supabase as any).rpc('oculto_play_track_upsert', {
+          p_id: null, p_item_id: item.id, p_kind: 'subtitles', p_lang: 'pt-BR', p_label: 'Português',
+          p_vtt_url: pub.publicUrl, p_is_default: true,
+        });
+        if (trErr) throw trErr;
+        setSrtFile(null);
       }
       const chosenChannel = compatibleChannels.find((c) => c.id === (channelPatch.channel_id ?? channelId));
       if (nextThumbUrl !== thumbUrl) setThumbUrl(nextThumbUrl);
@@ -942,7 +1068,12 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
             thumb_url: nextThumbUrl,
           } : {}),
         };
-        upsertOcultoPlayFeedItem(qc, merged as any);
+        if (merged.is_published === false) {
+          qc.setQueriesData<any[] | undefined>({ queryKey: ['oculto-play'] }, (old) =>
+            Array.isArray(old) ? old.filter((x) => x?.id !== item.id) : old);
+        } else {
+          upsertOcultoPlayFeedItem(qc, merged as any);
+        }
       }
       // Troca o clip do navegador (WAV) pelo recorte do servidor (MP3 menor,
       // toca mais rápido para todos). Não bloqueia o fechamento do modal.
@@ -1287,33 +1418,131 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
             {errors.caption && <p className="text-[11px] text-rose-400 mt-1">{errors.caption}</p>}
           </div>
 
-          {/* Arquivo de vídeo — trocar (passa pelo mesmo processamento do envio) */}
+          {/* Vídeo — trocar arquivo, cortar, capa por quadro, qualidade e imagem final */}
           {isVideo && (
-            <div>
+            <div className="space-y-2 rounded-xl border border-border/50 p-3">
               <Label className="text-xs">Arquivo do vídeo</Label>
               <input
                 ref={videoFileInputRef}
                 type="file"
                 accept="video/*"
                 className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0] ?? null; setNewVideoFile(f); e.target.value = ''; }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  e.target.value = '';
+                  if (!f) return;
+                  setNewVideoFile(f);
+                  setTrimSource(f);
+                  setTrimSourceIsCurrent(false);
+                  setVideoMeta(null);
+                }}
               />
-              <div className="mt-1 flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" size="sm" variant="secondary" onClick={() => videoFileInputRef.current?.click()} disabled={saving}>
-                  <Upload className="mr-1.5 h-3.5 w-3.5" /> {newVideoFile ? 'Escolher outro' : 'Trocar vídeo'}
+                  <Upload className="mr-1.5 h-3.5 w-3.5" /> {newVideoFile ? 'Escolher outro vídeo' : 'Trocar vídeo'}
                 </Button>
-                {newVideoFile && (
-                  <>
-                    <span className="max-w-[200px] truncate text-[11px] text-muted-foreground">{newVideoFile.name}</span>
-                    <Button type="button" size="sm" variant="ghost" onClick={() => setNewVideoFile(null)} disabled={saving}>
-                      <RotateCcw className="mr-1 h-3.5 w-3.5" /> Manter o atual
-                    </Button>
-                  </>
+                {!trimSource && currentMediaUrl && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={saving || loadingCurrentVideo}
+                    onClick={async () => {
+                      setLoadingCurrentVideo(true);
+                      try {
+                        const res = await fetch(currentMediaUrl);
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        const blob = await res.blob();
+                        const ext = (blob.type.split('/')[1] || 'webm').split(';')[0];
+                        setTrimSource(new File([blob], `video_atual.${ext}`, { type: blob.type || 'video/webm' }));
+                        setTrimSourceIsCurrent(true);
+                        setVideoMeta(null);
+                      } catch (err: any) {
+                        toast.error('Não foi possível carregar o vídeo atual.', { description: err?.message });
+                      } finally {
+                        setLoadingCurrentVideo(false);
+                      }
+                    }}
+                  >
+                    {loadingCurrentVideo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                    Cortar / capa pelo vídeo atual
+                  </Button>
+                )}
+                {trimSource && (
+                  <Button type="button" size="sm" variant="ghost" disabled={saving} onClick={() => { setTrimSource(null); setNewVideoFile(null); setVideoMeta(null); setOutroFile(null); }}>
+                    <RotateCcw className="mr-1 h-3.5 w-3.5" /> Manter o vídeo como está
+                  </Button>
                 )}
               </div>
-              <p className="mt-1 text-[10.5px] text-muted-foreground">
-                O novo vídeo é otimizado (até {Math.floor(OCULTO_PLAY_MAX_SHORT_VIDEO_SECONDS / 60)} min) e recebe a tela final do OCULTO, como no envio.
+              {trimSource && (
+                <>
+                  {trimSourceIsCurrent && (
+                    <p className="text-[10.5px] text-amber-200/90 leading-snug">
+                      Vídeo atual carregado. A tela final antiga (2 s) é retirada automaticamente e uma nova é colocada ao salvar.
+                    </p>
+                  )}
+                  <VideoTrimAndCoverPicker file={trimSource} onChange={setVideoMeta} />
+                  <div>
+                    <Label className="text-xs">Imagem final (opcional)</Label>
+                    <div className="mt-1 flex items-center gap-2">
+                      <img
+                        src={outroPreviewUrl ?? (outroAsset as any).url}
+                        alt=""
+                        className="h-12 w-12 rounded-md object-cover bg-muted"
+                      />
+                      <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold">
+                        <ImagePlus className="h-3.5 w-3.5" /> {outroFile ? 'Trocar imagem' : 'Escolher imagem'}
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => setOutroFile(e.target.files?.[0] ?? null)} />
+                      </label>
+                      {outroFile && (
+                        <button type="button" className="text-[11px] underline text-muted-foreground" onClick={() => setOutroFile(null)}>usar logo OCULTO</button>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+              <p className="text-[10.5px] text-muted-foreground">
+                Ao salvar, o vídeo é otimizado (até {Math.floor(OCULTO_PLAY_MAX_SHORT_VIDEO_SECONDS / 60)} min) como no envio.
               </p>
+            </div>
+          )}
+
+          {/* Trailer — vídeo e link (mesmo componente do envio) */}
+          {(isVideo || isLink) && (
+            <div className="space-y-2 rounded-xl border border-border/50 p-3">
+              <Label className="text-xs">Trailer (opcional)</Label>
+              {trailerSaved && (trailerSaved.url || trailerSaved.start != null) && !removeTrailer && !trailer && (
+                <p className="text-[11px] text-muted-foreground">
+                  Trailer atual: {trailerSaved.url ? 'arquivo/link próprio' : `trecho de ${Math.round(trailerSaved.start ?? 0)}s a ${Math.round(trailerSaved.end ?? 0)}s`}.
+                  {' '}<button type="button" className="underline" onClick={() => setRemoveTrailer(true)}>Remover trailer</button>
+                </p>
+              )}
+              {removeTrailer && (
+                <p className="text-[11px] text-amber-200/90">
+                  O trailer será removido ao salvar. <button type="button" className="underline" onClick={() => setRemoveTrailer(false)}>Desfazer</button>
+                </p>
+              )}
+              <PlayTrailerComposer
+                primaryVideoFile={isVideo ? trimSource : null}
+                primaryLinkUrl={isLink ? (linkValue.sourceUrl || null) : null}
+                allowReuseFromPrimary
+                value={trailer}
+                onChange={(v) => { setTrailer(v); if (v) setRemoveTrailer(false); }}
+              />
+            </div>
+          )}
+
+          {/* Legenda SRT/VTT — links (como no envio) */}
+          {isLink && (
+            <div className="space-y-1.5 rounded-xl border border-sky-500/30 bg-sky-500/5 p-3">
+              <Label className="text-xs">Legenda SRT/VTT sincronizada (opcional)</Label>
+              <Input
+                type="file"
+                accept=".srt,.vtt,text/vtt,application/x-subrip,text/plain"
+                onChange={(e) => setSrtFile(e.target.files?.[0] ?? null)}
+                className="h-9 text-[11px] file:text-[11px]"
+              />
+              <p className="text-[10.5px] text-muted-foreground">Uma legenda nova substitui a padrão em português.</p>
             </div>
           )}
 
@@ -1424,6 +1653,27 @@ export function OcultoPlayEditModal({ item, open, onClose }: Props) {
               </p>
             </div>
           )}
+
+          {/* Publicação — como no envio (agora / rascunho / agendar) */}
+          <div className="space-y-1.5 rounded-xl border border-border/50 p-3">
+            <Label className="text-xs">Publicação</Label>
+            <p className="text-[11px] text-muted-foreground">
+              Agora: {pubState.published ? 'publicado' : pubState.scheduledFor ? `agendado para ${new Date(pubState.scheduledFor).toLocaleString('pt-BR')}` : pubState.draft ? 'rascunho' : 'fora do ar'}
+            </p>
+            <select
+              value={pubMode}
+              onChange={(e) => setPubMode(e.target.value as any)}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="keep">Manter como está</option>
+              {!pubState.published && <option value="publish">Publicar agora</option>}
+              <option value="draft">Voltar para rascunho</option>
+              <option value="schedule">{pubState.scheduledFor ? 'Mudar o agendamento' : 'Agendar publicação'}</option>
+            </select>
+            {pubMode === 'schedule' && (
+              <Input type="datetime-local" value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)} className="h-9" />
+            )}
+          </div>
 
           {/* Visibilidade */}
           {canChangeVisibility && (

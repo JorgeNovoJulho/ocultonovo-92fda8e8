@@ -6,6 +6,7 @@
 import { useNavigate } from 'react-router-dom';
 import { BadgeCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { HScroll } from '@/components/oculto-play/HScroll';
 import { usePlayChannelsStrip, type PlayChannelSection } from '@/hooks/usePlayChannels';
 
 export function PlayChannelsStrip({ section, className }: { section: PlayChannelSection; className?: string }) {
@@ -17,7 +18,7 @@ export function PlayChannelsStrip({ section, className }: { section: PlayChannel
   return (
     <div className={cn('mb-2', className)}>
       <p className="mb-1.5 px-0.5 text-[11px] font-bold uppercase tracking-wide opacity-80">Canais</p>
-      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <HScroll className="-mx-1" innerClassName="gap-3 px-1 pb-1">
         {channels.map((c) => (
           <button
             key={c.id}
@@ -42,7 +43,7 @@ export function PlayChannelsStrip({ section, className }: { section: PlayChannel
             <span className="text-[9.5px] leading-none opacity-70">{c.item_count}</span>
           </button>
         ))}
-      </div>
+      </HScroll>
     </div>
   );
 }
